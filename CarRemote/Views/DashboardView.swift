@@ -50,6 +50,8 @@ struct DashboardView: View {
     }
 
     @State private var showWallpaperSheet = false
+    @State private var showNameEditor = false
+    @State private var nameDraft = ""
 
     private var settings: AppSettings { SharedStore.loadSettings() }
 
@@ -82,24 +84,50 @@ struct DashboardView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
                 }
-                .refreshable {
+            .refreshable {
+                await appState.refreshStatus()
+                viewModel.loadLocation()
+            }
+            .task {
+                viewModel.loadLocation()
+                if viewModel.acMode == .new {
+                    await viewModel.loadACRemainingDays()
+                }
+                // 实时状态轮询：每 30 秒自动刷新车况（开锁/闭锁后状态自动跟随，无需手动刷新）
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 30_000_000_000)
+                    if Task.isCancelled { break }
                     await appState.refreshStatus()
                     viewModel.loadLocation()
                 }
-                .task {
-                    viewModel.loadLocation()
-                    if viewModel.acMode == .new {
-                        await viewModel.loadACRemainingDays()
-                    }
-                }
+            }
             }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    HStack(spacing: 6) {
-                        Text(appState.carName)
-                            .font(.system(size: 17, weight: .bold))
-                            .foregroundStyle(WebTheme.txt)
+                    // 网页版车名长方形：点击可 DIY 自定义名称
+                    Button {
+                        showNameEditor = true
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(appState.carName)
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundStyle(WebTheme.txt)
+                                .lineLimit(1)
+                            Image(systemName: "pencil")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(WebTheme.faint)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(WebTheme.card2)
+                        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .strokeBorder(WebTheme.border, lineWidth: 1)
+                        )
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("编辑车辆名称")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     // 网页版 .icon-round 圆形刷新钮
@@ -108,7 +136,7 @@ struct DashboardView: View {
                     } label: {
                         ZStack {
                             Circle()
-                                .fill(WebTheme.card)
+                                .fill(WebTheme.card.opacity(0.65))
                                 .frame(width: 34, height: 34)
                             Circle()
                                 .strokeBorder(WebTheme.border, lineWidth: 1)
@@ -119,8 +147,8 @@ struct DashboardView: View {
                                     .tint(WebTheme.muted)
                             } else {
                                 Image(systemName: "arrow.clockwise")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(WebTheme.muted)
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(WebTheme.txt)
                             }
                         }
                     }
@@ -130,6 +158,15 @@ struct DashboardView: View {
             }
             .toolbarBackground(.automatic, for: .navigationBar)
             .navigationBarTitleDisplayMode(.inline)
+            .alert("车辆名称", isPresented: $showNameEditor) {
+                TextField("给爱车起个名字", text: $nameDraft)
+                Button("保存") {
+                    appState.customCarName = nameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                Button("取消", role: .cancel) {}
+            } message: {
+                Text("留空则显示官网车辆原名")
+            }
             .toast(viewModel.toast)
             .onChange(of: viewModel.toast) { _, newValue in
                 if newValue != nil {
@@ -222,20 +259,25 @@ struct DashboardView: View {
                 .padding(.top, -4)
                 .opacity(0.9)
 
-            // 车况标签（网页版 carStateTags）
-            let flags = status.stateFlags.flags
-            if !flags.isEmpty {
-                HStack(spacing: 10) {
-                    ForEach(Array(flags.enumerated()), id: \.offset) { _, flag in
-                        FlagChip(
-                            text: flag.text,
-                            systemImage: flagSystemImage(key: flag.key),
-                            color: flagColor(key: flag.key)
-                        )
-                    }
-                }
-                .padding(.top, 8)
+            // 车况状态徽章（网页版 carStateTags）：正常=绿色「车辆正常」，异常时跟随实时状态
+            let badge = status.stateFlags.statusBadge
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(flagColor(key: badge.key))
+                    .frame(width: 7, height: 7)
+                Text(badge.text)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(flagColor(key: badge.key))
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(flagColor(key: badge.key).opacity(0.09))
+            .clipShape(Capsule())
+            .overlay(
+                Capsule().strokeBorder(flagColor(key: badge.key).opacity(0.28), lineWidth: 1)
+            )
+            .padding(.top, 10)
+            .accessibilityLabel("车辆状态：\(badge.text)")
         }
         .padding(.top, 4)
     }
@@ -265,7 +307,7 @@ struct DashboardView: View {
         SectionCard(sakura: false) {
             HStack(alignment: .top, spacing: 12) {
                 // 左列：油量/续航/里程/温度/电瓶（网页版 card 左列）
-                VStack(spacing: 10) {
+                VStack(spacing: 7) {
                     // 第一行：油量 + 续航
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         Image(systemName: "fuelpump.fill")
@@ -295,7 +337,7 @@ struct DashboardView: View {
                     WebTrack(
                         fraction: (status.fuelLeftLiters ?? 0) / tankCapacityL,
                         fill: LinearGradient(colors: [WebTheme.amber, WebTheme.amber.opacity(0.7)], startPoint: .leading, endPoint: .trailing),
-                        height: 5
+                        height: 4
                     )
                     // 总里程
                     HStack(spacing: 4) {
@@ -360,7 +402,7 @@ struct DashboardView: View {
                     WebTrack(
                         fraction: ((status.batteryVoltage ?? 11) - 10.5) / 4.5,
                         fill: LinearGradient(colors: [voltageColor(status.batteryVoltage)], startPoint: .leading, endPoint: .trailing),
-                        height: 4
+                        height: 3
                     )
                     // 空调设定
                     if status.acTempC != nil {
@@ -445,53 +487,58 @@ struct DashboardView: View {
     // MARK: - 更多指令（网页版 ctrlCard / moreGrid：5 列网格）
 
     private var moreControlsCard: some View {
-        SectionCard(title: "更多控车", sakura: false) {
-            VStack(alignment: .leading, spacing: 10) {
-                // 空调模式分段切换（网页版 setAcMode：新版 = 开放平台需扫码开通；官方版 = 直连链路）
-                HStack(spacing: 8) {
-                    Text("空调控制")
-                        .font(.system(size: 10))
-                        .foregroundStyle(WebTheme.faint)
-                    Picker("空调模式", selection: Binding(
-                        get: { viewModel.acMode },
-                        set: { viewModel.setACMode($0) }
-                    )) {
-                        ForEach(ACMode.allCases, id: \.self) { mode in
-                            Text(mode.rawValue).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(maxWidth: 150)
-                    if viewModel.acMode == .new {
-                        // 开通剩余日期（已开通才显示）
-                        if let days = viewModel.acRemainingDays {
-                            Text("剩余 \(days) 天")
-                                .font(.system(size: 9, weight: .semibold))
-                                .foregroundStyle(days <= 1 ? WebTheme.red : WebTheme.green)
-                        } else {
-                            Text("需扫码开通")
-                                .font(.system(size: 9))
-                                .foregroundStyle(WebTheme.amber)
-                        }
-                    }
-                    Spacer()
-                }
-                LazyVGrid(
-                    columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 5),
-                    spacing: 14
-                ) {
-                    ForEach(Array(CarCommand.extraCommands.enumerated()), id: \.element) { _, command in
-                        CompactControlButton(
-                            command: command,
-                            isExecuting: viewModel.executingCommand == command
-                        ) {
-                            viewModel.execute(command)
-                        }
+        VStack(alignment: .leading, spacing: 10) {
+            // 标题行：更多控车 + 空调控制（新版/官方版切换）与标题同行对齐
+            HStack(spacing: 8) {
+                Text("更多控车")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(WebTheme.txt)
+                Spacer(minLength: 8)
+                Text("空调")
+                    .font(.system(size: 10))
+                    .foregroundStyle(WebTheme.faint)
+                Picker("空调模式", selection: Binding(
+                    get: { viewModel.acMode },
+                    set: { viewModel.setACMode($0) }
+                )) {
+                    ForEach(ACMode.allCases, id: \.self) { mode in
+                        Text(mode.rawValue).tag(mode)
                     }
                 }
-                .padding(.top, 4)
+                .pickerStyle(.menu)
+                .tint(WebTheme.blue)
+                .frame(width: 78)
+                if viewModel.acMode == .new {
+                    // 开通剩余日期（已开通才显示）
+                    if let days = viewModel.acRemainingDays {
+                        Text("剩余 \(days) 天")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(days <= 1 ? WebTheme.red : WebTheme.green)
+                    } else {
+                        Text("需开通")
+                            .font(.system(size: 9))
+                            .foregroundStyle(WebTheme.amber)
+                    }
+                }
             }
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 5),
+                spacing: 14
+            ) {
+                ForEach(Array(CarCommand.extraCommands.enumerated()), id: \.element) { _, command in
+                    CompactControlButton(
+                        command: command,
+                        isExecuting: viewModel.executingCommand == command
+                    ) {
+                        viewModel.execute(command)
+                    }
+                }
+            }
+            .padding(.top, 2)
         }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .webCard()
     }
 
     // MARK: - 定位卡（网页版 locCard：具体地址 + 城市 + 定位时间 + 紫蓝渐变导航按钮）

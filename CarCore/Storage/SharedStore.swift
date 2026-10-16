@@ -309,6 +309,7 @@ public enum SharedStore {
         static let sakuraEnabled = "carremote.sakuraEnabled"
         static let acActivationExpire = "carremote.acActivationExpire"
         static let mythTheme = "carremote.mythTheme"
+        static let customCarName = "carremote.customCarName"
     }
 
     private static var defaults: UserDefaults? {
@@ -412,6 +413,15 @@ public enum SharedStore {
 
     public static func saveACActivationExpire(_ date: Date?) {
         defaults?.set(date, forKey: Key.acActivationExpire)
+    }
+
+    /// 用户自定义车辆名称（左上角 DIY，空串表示跟随官网原名）
+    public static func loadCustomCarName() -> String {
+        defaults?.string(forKey: Key.customCarName) ?? ""
+    }
+
+    public static func saveCustomCarName(_ name: String) {
+        defaults?.set(name, forKey: Key.customCarName)
     }
 
     public static func loadAppTheme() -> AppTheme {

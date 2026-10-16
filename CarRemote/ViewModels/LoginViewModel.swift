@@ -46,6 +46,10 @@ final class LoginViewModel: ObservableObject {
                     errorMessage = check.message ?? "该手机号已被限制使用"
                     return
                 }
+                if check.unauthorized {
+                    errorMessage = check.message ?? "该手机号未授权，请联系站长开通"
+                    return
+                }
                 let credentials = try await AuthService.login(phone: phone, pin: pin)
                 appState.loginCompleted(credentials)
             } catch {

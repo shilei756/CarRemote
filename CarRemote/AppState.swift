@@ -16,7 +16,16 @@ final class AppState: ObservableObject {
     @Published var phase: Phase = .loading
     @Published var credentials: Credentials?
     @Published var cardStatus: CardService.CardStatus?
+    /// 左上角展示名：DIY 名优先，其次官网车名
     @Published var carName: String = APIConfig.defaultCarName
+    /// 用户 DIY 车辆名称（左上角长方形可点击编辑；空串 = 跟随官网原名）
+    @Published var customCarName: String = SharedStore.loadCustomCarName() {
+        didSet {
+            guard customCarName != oldValue else { return }
+            SharedStore.saveCustomCarName(customCarName)
+            applyCarName()
+        }
+    }
     @Published var status: CarStatus?
     @Published var statusUpdatedAt: Date?
     @Published var isRefreshing = false
@@ -33,6 +42,19 @@ final class AppState: ObservableObject {
     init() {
         restore()
         mythTheme = SharedStore.loadMythTheme()
+        applyCarName()
+    }
+
+    /// carName = DIY 名（非空）→ 官网原名 → 默认名
+    private func applyCarName() {
+        let custom = customCarName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !custom.isEmpty {
+            carName = custom
+        } else if let snapshotName = SharedStore.loadStatusSnapshot()?.carName, !snapshotName.isEmpty {
+            carName = snapshotName
+        } else {
+            carName = APIConfig.defaultCarName
+        }
     }
 
     // MARK: - 会话恢复
@@ -121,9 +143,9 @@ final class AppState: ObservableObject {
             let (status, car, updatedCredentials) = try await CarService.refresh(credentials: credentials)
             SharedStore.saveCredentials(updatedCredentials)
             self.status = status
-            self.carName = car.displayName
             self.statusUpdatedAt = Date()
             SharedStore.saveStatusSnapshot(StatusSnapshot(carName: car.displayName, status: status))
+            applyCarName()
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription

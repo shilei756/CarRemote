@@ -134,11 +134,17 @@ public struct CarStateFlags: Sendable, Equatable {
 
     public var flags: [(text: String, key: String)] {
         var result: [(text: String, key: String)] = []
-        if doorUnlocked { result.append(("车门已解锁", "door")) }
+        if doorUnlocked { result.append(("车辆已开锁", "door")) }
         if windowOpen { result.append(("车窗未关", "win")) }
         if sunroofOpen { result.append(("天窗未关", "win")) }
         if engineRunning { result.append(("发动机已启动", "engine")) }
         return result
+    }
+
+    /// 车下单一状态徽章：无异常 = 绿色「车辆正常」，否则显示首个异常（随实时刷新跟随变化）
+    public var statusBadge: (text: String, key: String) {
+        if let first = flags.first { return first }
+        return ("车辆正常", "ok")
     }
 
     public var summaryText: String {
