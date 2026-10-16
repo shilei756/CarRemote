@@ -68,7 +68,7 @@ struct MaintenanceView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(record.item)
                                 .font(.subheadline.bold())
-                            reminderText(record)
+                            Text(reminderText(record))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
