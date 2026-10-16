@@ -148,6 +148,9 @@ final class AppState: ObservableObject {
             applyCarName()
             errorMessage = nil
         } catch {
+            // 任务被系统取消（切标签页/重复下拉/轮询重启）不视为网络故障，静默忽略
+            if Task.isCancelled { return }
+            if let urlError = error as? URLError, urlError.code == .cancelled { return }
             errorMessage = error.localizedDescription
         }
     }
