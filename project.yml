@@ -81,7 +81,8 @@ targets:
         # TARGETED_DEVICE_FAMILY="1,2"，目标级会覆盖工程级，必须在这里显式声明
         CODE_SIGN_IDENTITY: "iPhone Distribution: Akbahri Naquibullah (7NSH43RT4Z)"
         TARGETED_DEVICE_FAMILY: "1"
-        GENERATE_INFOPLIST_FILES: NO
+        # 主 App 有自己的 Info.plist 源文件，不自动生成（设置名为单数）
+        GENERATE_INFOPLIST_FILE: NO
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         LD_RUNPATH_SEARCH_PATHS:
@@ -106,7 +107,10 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: app.copper1249.chipmunk6639.CarCore
         PRODUCT_MODULE_NAME: CarCore
         DEFINES_MODULE: YES
-        GENERATE_INFOPLIST_FILES: YES
+        # 注意设置名是单数 GENERATE_INFOPLIST_FILE（Xcode 真实构建设置）。
+        # XcodeGen 对设置原样透传，写成复数 FILES 会被当成未知设置忽略，
+        # 框架签名时就会报 "does not have an Info.plist file"。
+        GENERATE_INFOPLIST_FILE: YES
         CODE_SIGN_ENTITLEMENTS: CarCore/CarCore.entitlements
         # 框架目标不使用描述文件：框架随 App 一起签名，自身没有
         # Provisioning Profile 概念。工程级 PROVISIONING_PROFILE_SPECIFIER

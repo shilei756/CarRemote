@@ -38,7 +38,8 @@ targets:
         # CODE_SIGN_IDENTITY 虽然 app-extension 预设不注入，也显式声明保持一致
         CODE_SIGN_IDENTITY: "iPhone Distribution: Akbahri Naquibullah (7NSH43RT4Z)"
         TARGETED_DEVICE_FAMILY: "1"
-        GENERATE_INFOPLIST_FILES: NO
+        # 小组件有自己的 Info.plist 源文件，不自动生成（设置名为单数）
+        GENERATE_INFOPLIST_FILE: NO
         SKIP_INSTALL: YES
         # 小组件描述文件 UUID：由 CI 从 PROVISIONING_PROFILE_WIDGET_BASE64
         # 动态提取后通过环境变量注入；本地开发时需自行 export。
