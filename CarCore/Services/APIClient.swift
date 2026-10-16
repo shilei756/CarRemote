@@ -117,14 +117,25 @@ public enum APIClient {
         )
     }
 
+    /// application/x-www-form-urlencoded 严格编码。
+    /// 关键点：base64 密文含 `+` 字符，而 `.urlQueryAllowed` 不编码 `+`，
+    /// 服务端按 form 规范会把 `+` 还原成空格 → RSA 密文损坏 →「解密失败」。
+    /// 网页版用 encodeURIComponent（`+`→`%2B`）所以正常，这里对齐该行为。
     public static func formData(_ params: [(String, String)]) -> String {
-        params.map { "\($0.0)=\($0.1.urlQueryEncoded)" }.joined(separator: "&")
+        params.map { "\($0.0.urlFormEncoded)=\($0.1.urlFormEncoded)" }.joined(separator: "&")
     }
 }
 
 extension String {
     var urlQueryEncoded: String {
         addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? self
+    }
+
+    /// form 体严格编码：把 + / & = % # ? / ; 空格等全部百分号编码（对齐 encodeURIComponent）
+    var urlFormEncoded: String {
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove(charactersIn: "+/=&?#%;!$'()*,~@[]")
+        return addingPercentEncoding(withAllowedCharacters: allowed) ?? self
     }
 }
 

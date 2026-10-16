@@ -1,9 +1,9 @@
 import Foundation
 
-/// 空调控制模式（与网页版 setAcMode 一致）
+/// 空调控制模式（与网页版 setAcMode 完全一致）
 public enum ACMode: String, Codable, CaseIterable, Sendable {
-    case new = "新版"        // 站内代理链路（默认，网页版公测版）
-    case official = "官方版" // 长安开放平台正版链路，需扫码开通
+    case new = "新版"        // 网页版默认：开放平台链路（newAC），需扫码开通
+    case official = "官方版" // 网页版 performAction：直连长安链路
 }
 
 /// 空调开通二维码
@@ -104,6 +104,51 @@ public enum ACService {
     }
 
     // MARK: - 官方正版指令
+
+    /// 空调开通剩余天数（网页版 open_refresh_expire：refresh_token_expire_in 换算）。
+    /// 链路：授权码 → 站内 /api/open/token 换 refresh_token → 开放平台 oauth 拿剩余秒数。
+    /// 未开通 / 网络异常返回 nil（界面隐藏剩余天数）。
+    public static func activationRemainingDays(credentials: Credentials) async -> Int? {
+        // 优先本地缓存的到期时间，避免每次打开都走完整链路
+        if let cached = SharedStore.loadACActivationExpire(), cached > Date() {
+            return max(0, Int(cached.timeIntervalSinceNow / 86400))
+        }
+        // 1. 授权码（inCall access_token）
+        let (authorizeToken, updated) = try? await AuthService.validAccessToken(for: credentials)
+        if let updated { SharedStore.saveCredentials(updated) }
+        guard let authorizeToken else { return nil }
+
+        // 2. 站内换取开放平台 refresh_token（未开通时服务端返回失败）
+        guard let tokenURL = URL(string: APIConfig.siteBaseURL + "/api/open/token") else { return nil }
+        guard let tokenObject = try? await APIClient.postJSON(tokenURL, json: [
+            "phone": credentials.phone,
+            "authorize_token": authorizeToken
+        ]), let tokenDict = tokenObject as? [String: Any],
+            tokenDict.bool("success") == true,
+            let refreshToken = tokenDict.string("refresh_token"), !refreshToken.isEmpty else { return nil }
+
+        // 3. 开放平台刷新，取 refresh_token_expire_in（剩余秒数）
+        guard var oauthComponents = URLComponents(string: "https://open.iov.changan.com.cn/oauth/token") else { return nil }
+        oauthComponents.queryItems = []
+        let formBody = APIClient.formData([
+            ("redict_uri", ""),
+            ("refresh_token", refreshToken),
+            ("grant_type", "refresh_token"),
+            ("client_secret", "YjIzNWFmZDMxMzAwNDc4NQ=="),
+            ("client_id", "b235afd313004785bfde580c188c47bb")
+        ])
+        guard let oauthObject = try? await APIClient.request(
+            oauthComponents.url!,
+            method: "POST",
+            headers: ["Content-Type": "application/x-www-form-urlencoded"],
+            body: formBody.data(using: .utf8)
+        ), let oauthDict = oauthObject as? [String: Any],
+            let expireIn = oauthDict.int("refresh_token_expire_in") else { return nil }
+
+        let expireDate = Date().addingTimeInterval(TimeInterval(expireIn))
+        SharedStore.saveACActivationExpire(expireDate)
+        return max(0, expireIn / 86400)
+    }
 
     /// 通过长安开放平台执行空调指令（网页版 newAC）
     public static func executeOfficial(command: CarCommand, credentials: Credentials) async throws -> CommandResult {

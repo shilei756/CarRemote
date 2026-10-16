@@ -8,6 +8,9 @@ struct ACQRScanSheet: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
 
+    /// 开通成功回调（供外部刷新剩余天数）
+    var onActivated: () -> Void = {}
+
     @State private var qrImage: UIImage?
     @State private var qrURL: URL?
     @State private var statusText = "正在生成二维码…"
@@ -22,10 +25,10 @@ struct ACQRScanSheet: View {
             ZStack {
                 WebConsoleBackground()
                 VStack(spacing: 16) {
-                    Text("空调开通（官方正版）")
+                    Text("空调开通（新版）")
                         .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(WebTheme.txt)
-                    Text("官方版空调指令通过长安开放平台下发，需先用「长安汽车」App 扫码授权")
+                    Text("新版空调指令通过长安开放平台下发，需先用「长安汽车」App 扫码授权")
                         .font(.system(size: 11))
                         .foregroundStyle(WebTheme.muted)
                         .multilineTextAlignment(.center)
@@ -81,7 +84,7 @@ struct ACQRScanSheet: View {
                         .clipShape(Capsule())
 
                         if appState.credentials != nil {
-                            Button("已开通，去用官方版") {
+                            Button("已开通，去用新版") {
                                 dismiss()
                             }
                             .font(.system(size: 13, weight: .semibold))
@@ -164,6 +167,7 @@ struct ACQRScanSheet: View {
                     case .authorized:
                         statusText = "✅ 开通成功！空调已可用"
                         statusColor = WebTheme.green
+                        onActivated()
                         return
                     }
                 } catch {
@@ -509,32 +513,47 @@ struct EmbedWebSheet: View {
 
 struct WallpaperSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appState: AppState
     @State private var sakuraEnabled = SharedStore.loadSakuraEnabled()
+    /// 神兽主题授权（网页版 /myth/check）
+    @State private var mythAllowed = false
+    @State private var mythChecked = false
+
+    /// 当前神兽主题（AppState 持久化发布属性，变化时整树换色）
+    private var myth: MythTheme? {
+        get { appState.mythTheme }
+        nonmutating set { appState.mythTheme = newValue }
+    }
 
     var body: some View {
         NavigationStack {
             ZStack {
                 WebConsoleBackground()
-                VStack(spacing: 14) {
-                    wallpaperOption(
-                        title: "樱花飘落",
-                        subtitle: "卡片顶部花瓣缓缓飘落（网页版默认）",
-                        symbol: "snowflake",
-                        selected: sakuraEnabled
-                    ) {
-                        sakuraEnabled = true
+                ScrollView {
+                    VStack(spacing: 14) {
+                        wallpaperOption(
+                            title: "樱花飘落",
+                            subtitle: "卡片顶部花瓣缓缓飘落（网页版默认）",
+                            symbol: "snowflake",
+                            selected: sakuraEnabled
+                        ) {
+                            sakuraEnabled = true
+                        }
+                        wallpaperOption(
+                            title: "纯净背景",
+                            subtitle: "仅保留浅色背景与光晕，无花瓣动画",
+                            symbol: "circle",
+                            selected: !sakuraEnabled
+                        ) {
+                            sakuraEnabled = false
+                        }
+                        if mythAllowed {
+                            mythSection
+                        }
+                        Spacer(minLength: 32)
                     }
-                    wallpaperOption(
-                        title: "纯净背景",
-                        subtitle: "仅保留浅色背景与光晕，无花瓣动画",
-                        symbol: "circle",
-                        selected: !sakuraEnabled
-                    ) {
-                        sakuraEnabled = false
-                    }
-                    Spacer()
+                    .padding(16)
                 }
-                .padding(16)
             }
             .navigationTitle("背景壁纸")
             .navigationBarTitleDisplayMode(.inline)
@@ -547,7 +566,130 @@ struct WallpaperSheet: View {
                     .foregroundStyle(WebTheme.blue)
                 }
             }
+            .task {
+                // 网页版 mythEntry：服务端授权判定后才显示神兽主题区
+                guard !mythChecked, let phone = appState.credentials?.phone else { return }
+                mythChecked = true
+                let access = await MythService.check(phone: phone)
+                mythAllowed = access.allowed
+            }
         }
+    }
+
+    /// 神兽主题区（网页版 mythPage：四张主题卡 + 恢复经典默认）
+    private var mythSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(WebTheme.blue)
+                Text("神兽主题")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(WebTheme.txt)
+                Spacer()
+                Text("整套界面换装")
+                    .font(.system(size: 10))
+                    .foregroundStyle(WebTheme.faint)
+            }
+            Text("背景、卡片、按键、图标、顶底栏全部随神兽换色（网页版同款）")
+                .font(.system(size: 10.5))
+                .foregroundStyle(WebTheme.muted)
+
+            ForEach(MythTheme.allCases, id: \.self) { theme in
+                mythOption(theme)
+            }
+
+            Button {
+                myth = nil
+            } label: {
+                HStack {
+                    Spacer()
+                    Text("恢复经典默认")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(WebTheme.muted)
+                    Spacer()
+                }
+                .padding(.vertical, 11)
+                .background(WebTheme.card2)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(WebTheme.border, lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(14)
+        .background(WebTheme.card)
+        .clipShape(RoundedRectangle(cornerRadius: WebTheme.cardRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: WebTheme.cardRadius, style: .continuous)
+                .strokeBorder(WebTheme.border, lineWidth: 1)
+        )
+    }
+
+    /// 单个神兽主题卡（网页版 mythList 行）
+    private func mythOption(_ theme: MythTheme) -> some View {
+        let selected = myth == theme
+        return Button {
+            myth = theme
+        } label: {
+            HStack(spacing: 12) {
+                // 渐变预览块 + 神兽图标
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: theme.previewHexes.map { Color(hex: $0) },
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                    Image(theme.imageName)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .padding(6)
+                        .opacity(0.85)
+                }
+                .frame(width: 54, height: 54)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 5) {
+                        Text(theme.name)
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(WebTheme.txt)
+                        if selected {
+                            Text("使用中")
+                                .font(.system(size: 9, weight: .bold))
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1.5)
+                                .background(WebTheme.green.opacity(0.12))
+                                .foregroundStyle(WebTheme.green)
+                                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                        }
+                    }
+                    Text(theme.subtitle)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Color(hex: theme.mainHex))
+                    Text(theme.desc)
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(WebTheme.faint)
+                        .lineLimit(2)
+                }
+                Spacer()
+                if selected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(Color(hex: theme.mainHex))
+                }
+            }
+            .padding(10)
+            .background(WebTheme.card2)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(selected ? Color(hex: theme.mainHex) : WebTheme.border, lineWidth: selected ? 2 : 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private func wallpaperOption(title: String, subtitle: String, symbol: String, selected: Bool, action: @escaping () -> Void) -> some View {

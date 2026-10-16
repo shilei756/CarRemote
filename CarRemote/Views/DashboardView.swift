@@ -88,19 +88,17 @@ struct DashboardView: View {
                 }
                 .task {
                     viewModel.loadLocation()
+                    if viewModel.acMode == .new {
+                        await viewModel.loadACRemainingDays()
+                    }
                 }
             }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    // 网页版 app-header：车名 + 在线状态点
                     HStack(spacing: 6) {
                         Text(appState.carName)
                             .font(.system(size: 17, weight: .bold))
                             .foregroundStyle(WebTheme.txt)
-                        Circle()
-                            .fill(WebTheme.green)
-                            .frame(width: 6, height: 6)
-                            .pulseDot()
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -145,8 +143,11 @@ struct DashboardView: View {
                 MoreControlsSheet(viewModel: viewModel)
             }
             .sheet(isPresented: $viewModel.showACQR) {
-                ACQRScanSheet()
-                    .environmentObject(appState)
+                ACQRScanSheet {
+                    // 开通成功：刷新剩余天数展示
+                    Task { await viewModel.loadACRemainingDays() }
+                }
+                .environmentObject(appState)
             }
             .sheet(isPresented: $viewModel.showHistoryActions) {
                 ControlHistorySheet()
@@ -239,27 +240,23 @@ struct DashboardView: View {
         .padding(.top, 4)
     }
 
-    /// 胎压小标签（网页版 .tpv：白底圆角小签 + 等宽数字）
+    /// 胎压小标签（网页版 .tpv：白底圆角小签 + 等宽数字，min-width 27px）
     private func tireBadge(_ tire: TirePressure, label: String) -> some View {
-        VStack(spacing: 1) {
-            Text(tire.valueKPa.map { "\(Int($0.rounded()))" } ?? "--")
-                .font(.system(size: 10.5, weight: .bold))
-                .monospacedDigit()
-                .foregroundStyle(tire.isLow ? WebTheme.red : WebTheme.txt)
-            Text(label)
-                .font(.system(size: 8))
-                .foregroundStyle(WebTheme.faint)
-        }
-        .padding(.horizontal, 4)
-        .padding(.vertical, 2)
-        .background(WebTheme.card)
-        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .strokeBorder(tire.isLow ? WebTheme.red.opacity(0.5) : WebTheme.border, lineWidth: 1)
-        )
-        .shadow(color: Color(red: 15/255, green: 23/255, blue: 42/255).opacity(0.1), radius: 4, x: 0, y: 1)
-        .accessibilityLabel("\(label)胎压 \(tire.valueKPa.map { "\(Int($0.rounded())) 千帕" } ?? "无数据")")
+        Text(tire.valueKPa.map { "\(Int($0.rounded()))" } ?? "--")
+            .font(.system(size: 10.5, weight: .bold))
+            .monospacedDigit()
+            .foregroundStyle(tire.isLow ? WebTheme.red : WebTheme.txt)
+            .frame(minWidth: 27)
+            .padding(.horizontal, 3)
+            .padding(.vertical, 2)
+            .background(tire.isLow ? WebTheme.red.opacity(0.06) : WebTheme.card)
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .strokeBorder(tire.isLow ? WebTheme.red.opacity(0.45) : WebTheme.border, lineWidth: 1)
+            )
+            .shadow(color: Color(red: 15/255, green: 23/255, blue: 42/255).opacity(0.1), radius: 4, x: 0, y: 1)
+            .accessibilityLabel("\(label)胎压 \(tire.valueKPa.map { "\(Int($0.rounded())) 千帕" } ?? "无数据")")
     }
 
     // MARK: - 车况卡（网页版 user-info-container：油量条 + 续航 + 里程 + 温度 + 电瓶条）
@@ -310,6 +307,32 @@ struct DashboardView: View {
                             .monospacedDigit()
                             .foregroundStyle(WebTheme.txt)
                         Spacer()
+                    }
+                    // 上次行程里程 / 油耗（网页版 igniteCumulativeMileage / igniteCumulativeOil）
+                    if status.lastTripKm != nil || status.lastTripOilLiters != nil {
+                        HStack(spacing: 4) {
+                            Image(systemName: "road.lanes")
+                                .font(.system(size: 11))
+                                .foregroundStyle(WebTheme.purple)
+                            Text("上次行程")
+                                .font(.system(size: 11))
+                                .foregroundStyle(WebTheme.muted)
+                            Text(CarStatus.format(status.lastTripKm) + " km")
+                                .font(.system(size: 11, weight: .semibold))
+                                .monospacedDigit()
+                                .foregroundStyle(WebTheme.txt)
+                            Text("·")
+                                .font(.system(size: 11))
+                                .foregroundStyle(WebTheme.faint)
+                            Text("油耗")
+                                .font(.system(size: 11))
+                                .foregroundStyle(WebTheme.muted)
+                            Text(CarStatus.format(status.lastTripOilLiters) + " L")
+                                .font(.system(size: 11, weight: .semibold))
+                                .monospacedDigit()
+                                .foregroundStyle(WebTheme.txt)
+                            Spacer()
+                        }
                     }
                     // 第二行：温度 + 电瓶
                     HStack(spacing: 12) {
@@ -362,23 +385,27 @@ struct DashboardView: View {
                     }
                 }
 
-                // 右列：俯视小车图 + 四角胎压签（网页版 car_top_real + .tpv）
+                // 右列：俯视小车图 + 四角胎压签（网页版 car_top_real 40x97 居中 + .tpv 四角）
                 ZStack {
                     Image("car_car_top")
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                        .frame(width: 58, height: 118)
+                        .frame(width: 40, height: 97)
                         .opacity(0.9)
-                    tireBadge(status.tirePressures[0], label: "左前")
-                        .position(x: 8, y: 14)
-                    tireBadge(status.tirePressures[1], label: "右前")
-                        .position(x: 50, y: 14)
-                    tireBadge(status.tirePressures[2], label: "左后")
-                        .position(x: 8, y: 104)
-                    tireBadge(status.tirePressures[3], label: "右后")
-                        .position(x: 50, y: 104)
                 }
-                .frame(width: 58, height: 118)
+                .frame(width: 84, height: 104)
+                .overlay(alignment: .topLeading) {
+                    tireBadge(status.tirePressures[0], label: "左前")
+                }
+                .overlay(alignment: .topTrailing) {
+                    tireBadge(status.tirePressures[1], label: "右前")
+                }
+                .overlay(alignment: .bottomLeading) {
+                    tireBadge(status.tirePressures[2], label: "左后")
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    tireBadge(status.tirePressures[3], label: "右后")
+                }
             }
         }
     }
@@ -420,7 +447,7 @@ struct DashboardView: View {
     private var moreControlsCard: some View {
         SectionCard(title: "更多控车", sakura: false) {
             VStack(alignment: .leading, spacing: 10) {
-                // 空调模式分段切换（网页版 setAcMode：新版 = 站内代理；官方版 = 开放平台需扫码开通）
+                // 空调模式分段切换（网页版 setAcMode：新版 = 开放平台需扫码开通；官方版 = 直连链路）
                 HStack(spacing: 8) {
                     Text("空调控制")
                         .font(.system(size: 10))
@@ -435,10 +462,17 @@ struct DashboardView: View {
                     }
                     .pickerStyle(.segmented)
                     .frame(maxWidth: 150)
-                    if viewModel.acMode == .official {
-                        Text("需扫码开通")
-                            .font(.system(size: 9))
-                            .foregroundStyle(WebTheme.amber)
+                    if viewModel.acMode == .new {
+                        // 开通剩余日期（已开通才显示）
+                        if let days = viewModel.acRemainingDays {
+                            Text("剩余 \(days) 天")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(days <= 1 ? WebTheme.red : WebTheme.green)
+                        } else {
+                            Text("需扫码开通")
+                                .font(.system(size: 9))
+                                .foregroundStyle(WebTheme.amber)
+                        }
                     }
                     Spacer()
                 }
@@ -587,27 +621,21 @@ struct DashboardView: View {
                 moreToolTile(name: "智能维保", symbol: "wrench.and.screwdriver", color: Color(hex: 0xea580c)) {
                     TabRouter.shared.select(.maintenance)
                 }
-                moreToolTile(
-                    name: ThemeManager.shared.isDark ? "退出夜间" : "夜间模式",
-                    symbol: ThemeManager.shared.isDark ? "sun.max" : "moon",
-                    color: WebTheme.muted
-                ) {
-                    ThemeManager.shared.toggle()
-                }
-                moreToolTile(name: "经典模式", symbol: "sparkles", color: Color(hex: 0x5b8fd6)) {
-                    ThemeManager.shared.set(.light)
-                }
                 moreToolTile(name: "背景壁纸", symbol: "photo.on.rectangle.angled", color: Color(hex: 0xdb2777)) {
                     showWallpaperSheet = true
                 }
-                moreToolTile(name: "白名单管理", symbol: "person.2.shield", color: WebTheme.red) {
-                    viewModel.showWhitelist = true
+                // 网页版 applyAdminEntry：仅管理员可见管理入口
+                if appState.isAdminUser {
+                    moreToolTile(name: "白名单管理", symbol: "person.2.shield", color: WebTheme.red) {
+                        viewModel.showWhitelist = true
+                    }
                 }
             }
             .padding(.top, 4)
         }
         .sheet(isPresented: $showWallpaperSheet) {
             WallpaperSheet()
+                .environmentObject(appState)
         }
     }
 

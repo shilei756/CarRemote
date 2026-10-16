@@ -14,6 +14,9 @@ public enum APIConfig {
     /// 卡密获取联系方式（展示在体验网关页面）
     public static let ownerContactQQ = "2317665079"
 
+    /// 站主手机号（神兽主题等内测功能的本地快速预判）
+    public static let ownerPhone = "18595464954"
+
     // MARK: - 长安车联网开放平台
 
     /// OAuth client_id（与官网 App 一致）

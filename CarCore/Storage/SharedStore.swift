@@ -23,29 +23,173 @@ public enum AppTheme: String, Codable, CaseIterable, Sendable {
     case dark = "夜间"
 }
 
+/// 神兽主题（网页版 MYTH_THEMES：整套界面换装，白名单授权用户可用）
+/// 配色与网页版 html.glass.myth-* CSS 变量一一对应
+public enum MythTheme: String, Codable, CaseIterable, Sendable {
+    case qinglong = "qinglong"
+    case zhuque = "zhuque"
+    case qilin = "qilin"
+    case baihu = "baihu"
+
+    /// 名称（网页版 name）
+    public var name: String {
+        switch self {
+        case .qinglong: return "青龙"
+        case .zhuque: return "朱雀"
+        case .qilin: return "麒麟"
+        case .baihu: return "白虎"
+        }
+    }
+
+    /// 副标题（网页版 sub）
+    public var subtitle: String {
+        switch self {
+        case .qinglong: return "苍岚·青碧鎏金"
+        case .zhuque: return "丹霞·赤金羽焰"
+        case .qilin: return "鎏金·瑞兽献祥"
+        case .baihu: return "玄墨·银霜"
+        }
+    }
+
+    /// 描述（网页版 desc）
+    public var desc: String {
+        switch self {
+        case .qinglong: return "青碧山水为底、鎏金为纹，按键与图标染青碧色，寓意东方青龙守行"
+        case .zhuque: return "赤霞羽焰为底、丹金为纹，按键与图标染朱赤色，寓意南方朱雀护佑"
+        case .qilin: return "鎏金祥云为底、琥珀为纹，按键与图标染鎏金色，寓意金麒麟踏云献瑞"
+        case .baihu: return "玄铁墨灰为底、水墨为纹，按键与图标染墨灰色，寓意西方白虎镇煞辟邪"
+        }
+    }
+
+    /// 主色（--myth-main）
+    public var mainHex: UInt {
+        switch self {
+        case .qinglong: return 0x0d9488
+        case .zhuque: return 0xdc2626
+        case .qilin: return 0xb8860b
+        case .baihu: return 0x4a4f57
+        }
+    }
+
+    /// 深色（--myth-deep）
+    public var deepHex: UInt {
+        switch self {
+        case .qinglong: return 0x115e59
+        case .zhuque: return 0x991b1b
+        case .qilin: return 0x7a5a06
+        case .baihu: return 0x23272e
+        }
+    }
+
+    /// 鎏金（--myth-gold）
+    public var goldHex: UInt {
+        switch self {
+        case .qinglong: return 0xb8860b
+        case .zhuque: return 0xd97706
+        case .qilin: return 0xe3b23c
+        case .baihu: return 0x8a8f98
+        }
+    }
+
+    /// 背景底色（--bg0）
+    public var bgHex: UInt {
+        switch self {
+        case .qinglong: return 0xe6f2ee
+        case .zhuque: return 0xf9ede6
+        case .qilin: return 0xfdf8ec
+        case .baihu: return 0xececee
+        }
+    }
+
+    /// 正文色（--txt）
+    public var txtHex: UInt {
+        switch self {
+        case .qinglong: return 0x12352c
+        case .zhuque: return 0x3d1a10
+        case .qilin: return 0x3a2a08
+        case .baihu: return 0x23262b
+        }
+    }
+
+    /// 次级文字（--muted）
+    public var mutedHex: UInt {
+        switch self {
+        case .qinglong: return 0x3d6459
+        case .zhuque: return 0x7c4a38
+        case .qilin: return 0x7a5a1e
+        case .baihu: return 0x4c5058
+        }
+    }
+
+    /// 弱文字（--faint）
+    public var faintHex: UInt {
+        switch self {
+        case .qinglong: return 0x6d9188
+        case .zhuque: return 0xa5705e
+        case .qilin: return 0xa8834a
+        case .baihu: return 0x9a9da4
+        }
+    }
+
+    /// 图腾插画资源名（网页版 /static/vendor/myth/{key}.webp）
+    public var imageName: String { "myth_\(rawValue)" }
+
+    /// 预览渐变四色（网页版 openMythPage 的 grad）
+    public var previewHexes: [UInt] {
+        switch self {
+        case .qinglong: return [0xeef7f3, 0x9ed8c8, 0x0d9488, 0xb8860b]
+        case .zhuque: return [0xfdf3ec, 0xf5b891, 0xdc2626, 0xd97706]
+        case .qilin: return [0xfdf6e6, 0xf0d896, 0xb8860b, 0x7a5a06]
+        case .baihu: return [0xf4f8fd, 0xc3d2e6, 0x5b6b83, 0x2b3949]
+        }
+    }
+}
+
 /// App 本地设置（防误触、语音命令开关、车型外观、圈子资料）
 public struct AppSettings: Codable, Equatable, Sendable {
     public var confirmGateCommands: Set<String>
     public var siriEnabledCommands: Set<String>
+    /// Siri / 快捷指令总开关（重新设计后：一个总闸替代逐条开关）
+    public var siriMasterEnabled: Bool
     public var carModelStyle: CarModelStyle
     public var clubNick: String
     public var clubAvatar: String
 
+    private enum CodingKeys: String, CodingKey {
+        case confirmGateCommands, siriEnabledCommands, siriMasterEnabled,
+             carModelStyle, clubNick, clubAvatar
+    }
+
     public init(confirmGateCommands: Set<String>,
                 siriEnabledCommands: Set<String>,
+                siriMasterEnabled: Bool = true,
                 carModelStyle: CarModelStyle,
                 clubNick: String,
                 clubAvatar: String) {
         self.confirmGateCommands = confirmGateCommands
         self.siriEnabledCommands = siriEnabledCommands
+        self.siriMasterEnabled = siriMasterEnabled
         self.carModelStyle = carModelStyle
         self.clubNick = clubNick
         self.clubAvatar = clubAvatar
     }
 
+    /// 旧数据兼容解码：新增字段缺省时给默认值，避免老用户设置丢失
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        confirmGateCommands = try container.decodeIfPresent(Set<String>.self, forKey: .confirmGateCommands) ?? []
+        siriEnabledCommands = try container.decodeIfPresent(Set<String>.self, forKey: .siriEnabledCommands)
+            ?? Set(CarCommand.allCases.map { $0.rawValue })
+        siriMasterEnabled = try container.decodeIfPresent(Bool.self, forKey: .siriMasterEnabled) ?? true
+        carModelStyle = try container.decodeIfPresent(CarModelStyle.self, forKey: .carModelStyle) ?? .sedan
+        clubNick = try container.decodeIfPresent(String.self, forKey: .clubNick) ?? ""
+        clubAvatar = try container.decodeIfPresent(String.self, forKey: .clubAvatar) ?? ""
+    }
+
     public static let `default` = AppSettings(
         confirmGateCommands: ["UnLockDoor", "LockDoor", "OpenEngine", "CloseEngine"],
         siriEnabledCommands: Set(CarCommand.allCases.map { $0.rawValue }),
+        siriMasterEnabled: true,
         carModelStyle: .sedan,
         clubNick: "",
         clubAvatar: ""
@@ -56,7 +200,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     }
 
     public func siriAllows(command: CarCommand) -> Bool {
-        siriEnabledCommands.contains(command.rawValue)
+        siriMasterEnabled && siriEnabledCommands.contains(command.rawValue)
     }
 
     public mutating func toggleConfirm(command: CarCommand) {
@@ -163,6 +307,8 @@ public enum SharedStore {
         static let acMode = "carremote.acMode"
         static let appTheme = "carremote.appTheme"
         static let sakuraEnabled = "carremote.sakuraEnabled"
+        static let acActivationExpire = "carremote.acActivationExpire"
+        static let mythTheme = "carremote.mythTheme"
     }
 
     private static var defaults: UserDefaults? {
@@ -259,6 +405,15 @@ public enum SharedStore {
         defaults?.set(mode.rawValue, forKey: Key.acMode)
     }
 
+    /// 空调开通到期时间（刷新 token 剩余有效期换算，用于「剩余 X 天」展示）
+    public static func loadACActivationExpire() -> Date? {
+        defaults?.object(forKey: Key.acActivationExpire) as? Date
+    }
+
+    public static func saveACActivationExpire(_ date: Date?) {
+        defaults?.set(date, forKey: Key.acActivationExpire)
+    }
+
     public static func loadAppTheme() -> AppTheme {
         guard let raw = defaults?.string(forKey: Key.appTheme),
               let theme = AppTheme(rawValue: raw) else { return .light }
@@ -277,6 +432,17 @@ public enum SharedStore {
 
     public static func saveSakuraEnabled(_ enabled: Bool) {
         defaults?.set(enabled, forKey: Key.sakuraEnabled)
+    }
+
+    /// 当前神兽主题（nil = 经典默认；网页版 localStorage myth_theme）
+    public static func loadMythTheme() -> MythTheme? {
+        guard let raw = defaults?.string(forKey: Key.mythTheme),
+              let theme = MythTheme(rawValue: raw) else { return nil }
+        return theme
+    }
+
+    public static func saveMythTheme(_ theme: MythTheme?) {
+        defaults?.set(theme?.rawValue, forKey: Key.mythTheme)
     }
 
     // MARK: 维保记录（本地）

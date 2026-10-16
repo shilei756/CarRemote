@@ -5,36 +5,82 @@ import CarCore
 
 /// 控制台浅色主题（与网页版 /user_info 的 :root CSS 变量一一对应）
 /// 夜间模式取值来自网页版 `html.dark` 规则块（--bg0:#101318 等）
+/// 神兽主题激活时整套配色切换为神兽调色板（网页版 html.glass.myth-* 规则块）
 enum WebTheme {
     /// 当前主题：读持久化键（ThemeManager.set 时同步写入，与 @Published theme 同源）
     /// 直接读 UserDefaults 而非 ThemeManager.shared，避免 @MainActor 隔离传播到全部静态色值
-    static var isDark: Bool { SharedStore.loadAppTheme() == .dark }
+    static var isDark: Bool { SharedStore.loadAppTheme() == .dark && myth == nil }
+
+    /// 当前神兽主题（nil = 经典默认）
+    static var myth: MythTheme? { SharedStore.loadMythTheme() }
 
     // 背景与卡片
-    static var bg0: Color { isDark ? Color(hex: 0x101318) : Color(hex: 0xedf0f4) }
-    static var card: Color { isDark ? Color(hex: 0x181c23) : Color(hex: 0xffffff) }
-    static var card2: Color { isDark ? Color(hex: 0x20252e) : Color(hex: 0xf1f4f8) }
-    static var border: Color { isDark ? Color(hex: 0x2a3038) : Color(hex: 0xe4e9f0) }
-    static var track: Color { isDark ? Color(hex: 0x2a3038) : Color(hex: 0xe8edf3) }
+    static var bg0: Color {
+        if let myth { return Color(hex: myth.bgHex) }
+        return isDark ? Color(hex: 0x101318) : Color(hex: 0xedf0f4)
+    }
+    static var card: Color {
+        if myth != nil { return Color(hex: 0xffffff) }
+        return isDark ? Color(hex: 0x181c23) : Color(hex: 0xffffff)
+    }
+    static var card2: Color {
+        if let myth { return Color(hex: myth.bgHex).opacity(0.55) }
+        return isDark ? Color(hex: 0x20252e) : Color(hex: 0xf1f4f8)
+    }
+    static var border: Color {
+        if let myth { return Color(hex: myth.mainHex).opacity(0.22) }
+        return isDark ? Color(hex: 0x2a3038) : Color(hex: 0xe4e9f0)
+    }
+    static var track: Color {
+        if let myth { return Color(hex: myth.mainHex).opacity(0.15) }
+        return isDark ? Color(hex: 0x2a3038) : Color(hex: 0xe8edf3)
+    }
 
     // 文字
-    static var txt: Color { isDark ? Color(hex: 0xe7eaef) : Color(hex: 0x1e293b) }
-    static var muted: Color { isDark ? Color(hex: 0x9aa3b2) : Color(hex: 0x64748b) }
-    static var faint: Color { isDark ? Color(hex: 0x64748b) : Color(hex: 0x94a3b8) }
+    static var txt: Color {
+        if let myth { return Color(hex: myth.txtHex) }
+        return isDark ? Color(hex: 0xe7eaef) : Color(hex: 0x1e293b)
+    }
+    static var muted: Color {
+        if let myth { return Color(hex: myth.mutedHex) }
+        return isDark ? Color(hex: 0x9aa3b2) : Color(hex: 0x64748b)
+    }
+    static var faint: Color {
+        if let myth { return Color(hex: myth.faintHex) }
+        return isDark ? Color(hex: 0x64748b) : Color(hex: 0x94a3b8)
+    }
 
     // 语义色（网页版 --blue/--green/--amber/--red/--purple）
-    static let blue = Color(hex: 0x3b82f6)
+    // 神兽主题下主色染主题色（网页版：按键与图标随神兽换色）
+    static var blue: Color {
+        if let myth { return Color(hex: myth.mainHex) }
+        return Color(hex: 0x3b82f6)
+    }
     static let green = Color(hex: 0x22c55e)
     static let amber = Color(hex: 0xf59e0b)
     static let red = Color(hex: 0xef4444)
-    static let purple = Color(hex: 0x7c3aed)
+    static var purple: Color {
+        if let myth { return Color(hex: myth.deepHex) }
+        return Color(hex: 0x7c3aed)
+    }
 
     // 大按钮描边色（.cbig.lock / .cbig.unlock）
-    static var lockBorder: Color { isDark ? Color(hex: 0x3a424d) : Color(hex: 0xcbd5e1) }
+    static var lockBorder: Color {
+        if let myth { return Color(hex: myth.mainHex).opacity(0.45) }
+        return isDark ? Color(hex: 0x3a424d) : Color(hex: 0xcbd5e1)
+    }
 
     // 导航胶囊渐变（.nav-btn：linear-gradient(135deg,#8b5cf6,#6366f1)）
+    // 神兽主题下换为 深→主 的主题渐变
     static var navGradient: LinearGradient {
-        LinearGradient(
+        if let myth {
+            return LinearGradient(
+                colors: [Color(hex: myth.deepHex), Color(hex: myth.mainHex)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+        return LinearGradient(
             colors: [Color(hex: 0x8b5cf6), Color(hex: 0x6366f1)],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
@@ -152,25 +198,6 @@ extension View {
     }
 }
 
-/// 状态圆点脉冲（pulse-dot 2s infinite）
-struct PulseDotModifier: ViewModifier {
-    @State private var pulse = false
-
-    func body(content: Content) -> some View {
-        content
-            .opacity(pulse ? 0.35 : 1.0)
-            .scaleEffect(pulse ? 1.35 : 1.0)
-            .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: pulse)
-            .onAppear { pulse = true }
-    }
-}
-
-extension View {
-    func pulseDot() -> some View {
-        modifier(PulseDotModifier())
-    }
-}
-
 /// 樱花花瓣飘落（网页版 card-snow petalSnow 15s linear infinite 的轻量版）
 struct SakuraPetal: Identifiable {
     let id = UUID()
@@ -254,22 +281,48 @@ private struct PetalFallModifier: ViewModifier {
 // MARK: - 页面背景（网页版 body 光晕的 SwiftUI 等价）
 
 /// 控制台浅色背景：#edf0f4 + 右上蓝光晕 + 左中绿光晕
+/// 神兽主题：底色换神兽 --bg0，光晕换主题色，右侧探出神兽水墨图腾（网页版 body::after + #mythWatermark）
 struct WebConsoleBackground: View {
     var body: some View {
         ZStack {
             WebTheme.bg0
-            RadialGradient(
-                colors: [WebTheme.blue.opacity(0.06), .clear],
-                center: .init(x: 0.8, y: -0.05),
-                startRadius: 0,
-                endRadius: 260
-            )
-            RadialGradient(
-                colors: [WebTheme.green.opacity(0.05), .clear],
-                center: .init(x: 0.0, y: 0.3),
-                startRadius: 0,
-                endRadius: 300
-            )
+            if let myth = WebTheme.myth {
+                // 神兽主题：主题色光晕（网页版：右上主色雾 + 左下鎏金雾）
+                RadialGradient(
+                    colors: [Color(hex: myth.mainHex).opacity(0.16), .clear],
+                    center: .init(x: 0.88, y: 0.06),
+                    startRadius: 0,
+                    endRadius: 300
+                )
+                RadialGradient(
+                    colors: [Color(hex: myth.goldHex).opacity(0.12), .clear],
+                    center: .init(x: 0.04, y: 0.94),
+                    startRadius: 0,
+                    endRadius: 280
+                )
+                // 神兽图腾：右上探出（网页版 #mythWatermark）
+                Image(myth.imageName)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 340)
+                    .rotationEffect(.degrees(-6))
+                    .opacity(0.16)
+                    .position(x: UIScreen.main.bounds.width * 0.78, y: 130)
+                    .allowsHitTesting(false)
+            } else {
+                RadialGradient(
+                    colors: [WebTheme.blue.opacity(0.06), .clear],
+                    center: .init(x: 0.8, y: -0.05),
+                    startRadius: 0,
+                    endRadius: 260
+                )
+                RadialGradient(
+                    colors: [WebTheme.green.opacity(0.05), .clear],
+                    center: .init(x: 0.0, y: 0.3),
+                    startRadius: 0,
+                    endRadius: 300
+                )
+            }
         }
         .ignoresSafeArea()
     }

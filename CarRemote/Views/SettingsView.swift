@@ -21,7 +21,10 @@ struct SettingsView: View {
                 appearanceSection
                 confirmSection
                 siriSection
-                adminSection
+                // 网页版 applyAdminEntry：非管理员不显示管理入口
+                if appState.isAdminUser {
+                    adminSection
+                }
                 clubProfileSection
                 aboutSection
             }
@@ -40,6 +43,12 @@ struct SettingsView: View {
             .sheet(isPresented: $showWhitelist) {
                 WhitelistView()
                     .environmentObject(appState)
+            }
+            .task {
+                // 兜底：确保管理员身份已探测（决定入口显隐）
+                if !appState.isAdminUser {
+                    await appState.refreshAdminRole()
+                }
             }
         }
     }
@@ -137,22 +146,56 @@ struct SettingsView: View {
         )
     }
 
-    // MARK: - Siri 语音开关（默认折叠）
+    // MARK: - Siri 语音控制（重新设计：一个总开关 + 短语示例，默认折叠）
 
     private var siriSection: some View {
         Section {
             DisclosureGroup(isExpanded: $siriExpanded) {
-                ForEach(CarCommand.allCases, id: \.self) { command in
-                    Toggle(isOn: siriBinding(for: command)) {
-                        Label(command.displayName, systemImage: command.sfSymbol)
+                // 常用直达短语示例
+                siriPhraseRow("解锁车辆", phrase: "用长安控车解锁车辆")
+                siriPhraseRow("锁定车辆", phrase: "用长安控车锁上车")
+                siriPhraseRow("查看车况", phrase: "长安控车车况怎么样")
+                siriPhraseRow("寻车", phrase: "用长安控车找车")
+                siriPhraseRow("空调", phrase: "用长安控车打开 / 关闭空调")
+                siriPhraseRow("任意指令", phrase: "用长安控车控制车辆")
+            } label: {
+                Toggle(isOn: siriMasterBinding) {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Siri 语音控制")
+                            Text("关闭后所有语音与快捷指令立即失效")
+                                .font(.system(size: 10.5))
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "waveform")
                     }
                 }
-            } label: {
-                Text("Siri 语音控制")
             }
         } footer: {
-            Text("关闭后，对应指令不再响应语音与小组件按钮。语音短语如：「用长安控车解锁车辆」")
+            Text("对 Siri 说下表短语即可控车。点火、熄火等高危操作会先向你确认；「控制车辆」可触发任意指令，Siri 会追问要做什么。")
         }
+    }
+
+    private func siriPhraseRow(_ name: String, phrase: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(name)
+                .font(.system(size: 13, weight: .medium))
+            Text("“\(phrase)”")
+                .font(.system(size: 11.5))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var siriMasterBinding: Binding<Bool> {
+        Binding(
+            get: { settings.siriMasterEnabled },
+            set: { newValue in
+                settings.siriMasterEnabled = newValue
+                saveSettings()
+            }
+        )
     }
 
     // MARK: - 白名单管理（管理员入口）
@@ -175,16 +218,6 @@ struct SettingsView: View {
         } footer: {
             Text("查看使用者统计、登录白名单与体验卡密（仅站主 / 管理员可进入）")
         }
-    }
-
-    private func siriBinding(for command: CarCommand) -> Binding<Bool> {
-        Binding(
-            get: { settings.siriAllows(command: command) },
-            set: { _ in
-                settings.toggleSiri(command: command)
-                saveSettings()
-            }
-        )
     }
 
     // MARK: - 圈子资料

@@ -23,7 +23,8 @@ struct SectionCard<Content: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .webCard()
         .overlay(alignment: .top) {
-            if sakura {
+            // 神兽主题下樱花不生效（网页版：神兽与经典樱花二选一）
+            if sakura && WebTheme.myth == nil {
                 SakuraOverlay()
                     .frame(height: 16)
                     .allowsHitTesting(false)
@@ -253,8 +254,6 @@ struct CarVisualView: View {
         Image(carImageName)
             .resizable()
             .aspectRatio(contentMode: .fit)
-            // 网页版 filter: drop-shadow(0 16px 22px rgba(15,23,42,.18))
-            .shadow(color: Color(red: 15/255, green: 23/255, blue: 42/255).opacity(0.18), radius: 11, x: 0, y: 8)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(isUnlocked ? "车辆图片，当前已解锁" : "车辆图片，当前已锁止")
     }

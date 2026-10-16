@@ -3,19 +3,27 @@ import CarCore
 
 /// Siri 语音短语（"Hey Siri，用长安控车解锁车辆"）。
 ///
-/// 说明：
-/// - Intent 定义在共享框架 CarCore 中，桌面小组件的按钮也复用同一批 Intent；
-/// - 每条指令能否被执行，还受 App 内「设置 → 语音命令」开关控制
-///   （与网页版「专属密钥、只控制你自己的车」的安全策略一致）。
+/// 重新设计后的语音体系：
+/// - 「控制车辆」统一入口：Siri 追问要控制什么，一条指令覆盖全部控车能力，
+///   高危操作（开锁/闭锁/点火/熄火）执行前会语音确认；
+/// - 常用操作保留直达短语，说完即执行；
+/// - 总开关在 App「设置 → Siri 语音控制」，关闭后所有语音指令立即失效。
 ///
-/// 协议要求（见 AppIntents.AppShortcutsProvider）：
-///   @AppShortcutsBuilder static var appShortcuts: [AppShortcut] { get }
-/// 必须是 static，且属性体走 @AppShortcutsBuilder 结果生成器风格
-/// （多个 AppShortcut 表达式直接换行排列，无需数组括号与逗号）。
+/// 注意：Apple 限制每个 App 最多注册 10 个 App Shortcut。
 struct CarAppShortcuts: AppShortcutsProvider {
 
     @AppShortcutsBuilder
     static var appShortcuts: [AppShortcut] {
+        // 统一入口：说完后 Siri 追问「想对车做什么？」，支持全部 14 条指令
+        AppShortcut(
+            intent: ControlCarIntent(),
+            phrases: [
+                "用\(.applicationName)控制车辆",
+                "用\(.applicationName)控制我的车"
+            ],
+            shortTitle: "控制车辆",
+            systemImageName: "car.fill"
+        )
         AppShortcut(
             intent: UnlockCarIntent(),
             phrases: [
@@ -70,21 +78,11 @@ struct CarAppShortcuts: AppShortcutsProvider {
             shortTitle: "查看车况",
             systemImageName: "gauge"
         )
-        // 注意：Apple 限制每个 App 最多注册 10 个 App Shortcut，
-        // 因此这里精选了 10 条最常用的语音短语（共 11 个 Intent）。
-        // 「关闭车窗」Intent 仍存在于 CarCore，可通过快捷指令 App 与
-        // 桌面小组件按钮使用，只是不注册 Siri 语音短语。
         AppShortcut(
-            intent: StartEngineIntent(),
-            phrases: ["用\(.applicationName)启动车辆"],
-            shortTitle: "远程点火",
-            systemImageName: "flame"
-        )
-        AppShortcut(
-            intent: StopEngineIntent(),
-            phrases: ["用\(.applicationName)熄灭发动机"],
-            shortTitle: "远程熄火",
-            systemImageName: "stop.circle"
+            intent: CloseWindowsIntent(),
+            phrases: ["用\(.applicationName)关上车窗"],
+            shortTitle: "关闭车窗",
+            systemImageName: "arrow.down.to.line"
         )
         AppShortcut(
             intent: OpenACIntent(),

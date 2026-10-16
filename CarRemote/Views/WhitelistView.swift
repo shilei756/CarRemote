@@ -30,6 +30,9 @@ struct WhitelistView: View {
     @State private var usage: AdminUsageData?
     @State private var isLoading = false
     @State private var banner: Banner?
+    /// 使用者列表分页（网页版 WL_PAGE_SIZE = 10）
+    private let pageSize = 10
+    @State private var userPage = 1
 
     @State private var adminPhoneInput = ""
     @State private var wlPhoneInput = ""
@@ -289,14 +292,15 @@ struct WhitelistView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
-    /// 使用者列表（网页版 wlList）
+    /// 使用者列表（网页版 wlList：每页 10 条 + 底部分页条）
     private var usersCard: some View {
         SectionCard(title: "使用者明细", sakura: false) {
             VStack(spacing: 8) {
                 if let usage, !usage.items.isEmpty {
-                    ForEach(usage.items) { item in
+                    ForEach(pagedUsers) { item in
                         userRow(item)
                     }
+                    pagerRow
                 } else {
                     Text("暂无记录 · 有人打开网站后这里会显示")
                         .font(.system(size: 12))
@@ -306,6 +310,51 @@ struct WhitelistView: View {
                 }
             }
         }
+    }
+
+    /// 当前页的使用者（对齐网页版 _renderUsersPage 的 slice 逻辑）
+    private var pagedUsers: [AdminUsageItem] {
+        guard let usage else { return [] }
+        let totalPages = max(1, (usage.items.count + pageSize - 1) / pageSize)
+        if userPage > totalPages { userPage = totalPages }
+        if userPage < 1 { userPage = 1 }
+        let start = (userPage - 1) * pageSize
+        return Array(usage.items.dropFirst(start).prefix(pageSize))
+    }
+
+    /// 分页条（网页版 _pagerHTML：上一页 / 页码 / 下一页 + 共 N 个）
+    private var pagerRow: some View {
+        let total = usage?.items.count ?? 0
+        let totalPages = max(1, (total + pageSize - 1) / pageSize)
+        return VStack(spacing: 2) {
+            HStack(spacing: 14) {
+                Button {
+                    userPage -= 1
+                } label: {
+                    Text("‹ 上一页")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(userPage <= 1 ? WebTheme.faint : WebTheme.blue)
+                }
+                .disabled(userPage <= 1)
+                Text("\(userPage) / \(totalPages)")
+                    .font(.system(size: 10.5))
+                    .monospacedDigit()
+                    .foregroundStyle(WebTheme.muted)
+                Button {
+                    userPage += 1
+                } label: {
+                    Text("下一页 ›")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(userPage >= totalPages ? WebTheme.faint : WebTheme.blue)
+                }
+                .disabled(userPage >= totalPages)
+            }
+            .padding(.top, 9)
+            Text("共 \(total) 个 · 每页 \(pageSize) 个")
+                .font(.system(size: 10))
+                .foregroundStyle(WebTheme.faint)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private func userRow(_ item: AdminUsageItem) -> some View {

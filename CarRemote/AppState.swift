@@ -21,11 +21,18 @@ final class AppState: ObservableObject {
     @Published var statusUpdatedAt: Date?
     @Published var isRefreshing = false
     @Published var errorMessage: String?
+    /// 当前账号是否有管理入口（网页版 applyAdminEntry：/admin/is_admin）
+    @Published var isAdminUser = false
+    /// 当前神兽主题（网页版 localStorage myth_theme；变化时整树重算配色）
+    @Published var mythTheme: MythTheme? {
+        didSet { SharedStore.saveMythTheme(mythTheme) }
+    }
 
     private var foregroundBeated = false
 
     init() {
         restore()
+        mythTheme = SharedStore.loadMythTheme()
     }
 
     // MARK: - 会话恢复
@@ -52,8 +59,18 @@ final class AppState: ObservableObject {
         }
         if phase == .ready {
             await reportUsage()
+            await refreshAdminRole()
             await refreshStatus()
         }
+    }
+
+    /// 探测当前账号是否为管理员（决定白名单管理入口显隐）
+    func refreshAdminRole() async {
+        guard let credentials else {
+            isAdminUser = false
+            return
+        }
+        isAdminUser = await AdminService.isAdmin(phone: credentials.phone)
     }
 
     // MARK: - 登录 / 登出
@@ -77,9 +94,9 @@ final class AppState: ObservableObject {
         cardStatus = nil
         status = nil
         statusUpdatedAt = nil
+        isAdminUser = false
         phase = .loggedOut
     }
-
     // MARK: - 前台 / 用量上报
 
     func handleForeground() async {

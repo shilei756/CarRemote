@@ -19,6 +19,8 @@ final class DashboardViewModel: ObservableObject {
     // 空调
     @Published var acMode: ACMode
     @Published var showACQR = false
+    /// 空调开通剩余天数（nil = 未开通或查询失败，界面隐藏）
+    @Published var acRemainingDays: Int?
 
     // 更多功能面板
     @Published var showHistoryActions = false
@@ -66,10 +68,11 @@ final class DashboardViewModel: ObservableObject {
             defer { executingCommand = nil }
             do {
                 let result: CommandResult
-                if (command == .openAir || command == .closeAir), acMode == .official {
-                    // 空调官方正版链路（需已扫码开通）
+                if (command == .openAir || command == .closeAir), acMode == .new {
+                    // 空调新版链路（网页版 newAC：开放平台，需已扫码开通）
                     result = try await ACService.executeOfficial(command: command, credentials: credentials)
                 } else {
+                    // 其余指令与空调官方版（网页版 performAction：直连长安链路）
                     result = try await CarService.execute(command: command, credentials: credentials)
                 }
                 toast = toastText(command: command, result: result)
@@ -79,7 +82,7 @@ final class DashboardViewModel: ObservableObject {
                 }
             } catch {
                 var message = error.localizedDescription
-                if (command == .openAir || command == .closeAir), acMode == .official,
+                if (command == .openAir || command == .closeAir), acMode == .new,
                    message.contains("开通") || message.contains("凭证") {
                     message += "，点击「更多功能 → 空调开通」扫码授权"
                 }
@@ -100,6 +103,16 @@ final class DashboardViewModel: ObservableObject {
     func setACMode(_ mode: ACMode) {
         acMode = mode
         SharedStore.saveACMode(mode)
+        if mode == .new {
+            // 切到新版时刷新一次开通剩余天数
+            Task { await loadACRemainingDays() }
+        }
+    }
+
+    /// 查询空调开通剩余天数（新版链路专用）
+    func loadACRemainingDays() async {
+        guard let appState, let credentials = appState.credentials else { return }
+        acRemainingDays = await ACService.activationRemainingDays(credentials: credentials)
     }
 
     // MARK: - 车辆位置
