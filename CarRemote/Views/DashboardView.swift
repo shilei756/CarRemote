@@ -106,6 +106,7 @@ struct DashboardView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     // 网页版车名长方形：点击可 DIY 自定义名称
                     Button {
+                        nameDraft = appState.customCarName.isEmpty ? appState.carName : appState.customCarName
                         showNameEditor = true
                     } label: {
                         HStack(spacing: 6) {
@@ -136,7 +137,7 @@ struct DashboardView: View {
                     } label: {
                         ZStack {
                             Circle()
-                                .fill(WebTheme.card.opacity(0.65))
+                                .fill(.clear)
                                 .frame(width: 34, height: 34)
                             Circle()
                                 .strokeBorder(WebTheme.border, lineWidth: 1)
@@ -435,18 +436,18 @@ struct DashboardView: View {
                         .frame(width: 40, height: 97)
                         .opacity(0.9)
                 }
-                .frame(width: 84, height: 104)
+                .frame(width: 88, height: 104)
                 .overlay(alignment: .topLeading) {
-                    tireBadge(status.tirePressures[0], label: "左前")
+                    tireBadge(status.tirePressures[0], label: "左前").offset(x: -7)
                 }
                 .overlay(alignment: .topTrailing) {
-                    tireBadge(status.tirePressures[1], label: "右前")
+                    tireBadge(status.tirePressures[1], label: "右前").offset(x: 7)
                 }
                 .overlay(alignment: .bottomLeading) {
-                    tireBadge(status.tirePressures[2], label: "左后")
+                    tireBadge(status.tirePressures[2], label: "左后").offset(x: -7)
                 }
                 .overlay(alignment: .bottomTrailing) {
-                    tireBadge(status.tirePressures[3], label: "右后")
+                    tireBadge(status.tirePressures[3], label: "右后").offset(x: 7)
                 }
             }
         }
