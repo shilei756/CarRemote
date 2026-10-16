@@ -112,6 +112,11 @@ public enum CarService {
 
     /// 执行控车指令
     public static func execute(command: CarCommand, credentials: Credentials) async throws -> CommandResult {
+        try await performAction(action: command.rawValue, credentials: credentials)
+    }
+
+    /// 通用指令下发（含 360 全景 photograph），复用 PIN 校验 → 公钥 → 加密 → execute 链路
+    public static func performAction(action: String, credentials: Credentials) async throws -> CommandResult {
         let (token, updatedCredentials) = try await AuthService.validAccessToken(for: credentials)
         SharedStore.saveCredentials(updatedCredentials)
 
@@ -154,8 +159,8 @@ public enum CarService {
         }
         let plaintextObject: [String: Any] = [
             "pinVerifyCode": pinVerifyCode,
-            "cmd": command.rawValue,
-            "type": command.rawValue,
+            "cmd": action,
+            "type": action,
             "pin": credentials.pin,
             "wifiPassword": ""
         ]
@@ -197,6 +202,8 @@ public enum CarService {
         let ok = dict.bool("success") == true || dict.int("code") == 200 || dict.string("code") == "200"
         let message = dict.string("msg") ?? dict.string("message")
             ?? (ok ? "指令已发送到车机" : "车辆未接受指令")
-        return CommandResult(ok: ok, message: message)
+        // 360 全景等异步任务：解析 data.taskId 供后续轮询取图
+        let taskId = (dict["data"] as? [String: Any])?.string("taskId")
+        return CommandResult(ok: ok, message: message, taskId: taskId)
     }
 }

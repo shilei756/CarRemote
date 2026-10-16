@@ -102,10 +102,13 @@ public struct CarInfo: Sendable, Equatable {
 public struct CommandResult: Sendable {
     public let ok: Bool
     public let message: String
+    /// 指令任务 ID（360 全景拍照等异步任务用，普通控车为 nil）
+    public let taskId: String?
 
-    public init(ok: Bool, message: String) {
+    public init(ok: Bool, message: String, taskId: String? = nil) {
         self.ok = ok
         self.message = message
+        self.taskId = taskId
     }
 }
 

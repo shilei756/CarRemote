@@ -172,10 +172,9 @@ final class TabRouter: ObservableObject {
 
     enum Tab: Int, CaseIterable {
         case control = 0
-        case club = 1
-        case fuel = 2
-        case maintenance = 3
-        case profile = 4
+        case fuel = 1
+        case maintenance = 2
+        case profile = 3
     }
 
     @Published var selectedTab: Tab = .control

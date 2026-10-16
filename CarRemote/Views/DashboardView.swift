@@ -14,11 +14,6 @@ struct MainTabView: View {
                     Label("控车", systemImage: "car.circle.fill")
                 }
                 .tag(TabRouter.Tab.control)
-            ClubView(appState: appState)
-                .tabItem {
-                    Label("圈子", systemImage: "bubble.left.and.bubble.right.fill")
-                }
-                .tag(TabRouter.Tab.club)
             FuelTrackerView(appState: appState)
                 .tabItem {
                     Label("油耗", systemImage: "fuelpump.fill")
@@ -233,8 +228,14 @@ struct DashboardView: View {
                     .environmentObject(appState)
             }
             .sheet(item: $viewModel.showEmbed) { target in
-                EmbedWebSheet(key: target.key)
-                    .environmentObject(appState)
+                // 原生 UI（替代内嵌网页）
+                if target.key == "vehicle_status" {
+                    VehicleStatusSheet()
+                        .environmentObject(appState)
+                } else {
+                    PanoramaSheet()
+                        .environmentObject(appState)
+                }
             }
             .sheet(isPresented: $viewModel.showWhitelist) {
                 WhitelistView()
