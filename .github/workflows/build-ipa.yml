@@ -58,15 +58,26 @@ jobs:
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
 
           # 1) 创建临时钥匙串并导入 p12
-          # 注意：必须用 openssl base64 -d -A 解码，不能用系统自带的 base64 --decode——
-          # macOS 的 BSD base64 处理超长单行（几千字符）会输出残缺数据，
-          # 导致 security import 报 "Unable to decode the provided data"。
+          # 两个关键点：
+          # - 必须用 openssl base64 -d -A 解码：macOS 自带的 BSD base64 解几千字符的
+          #   长单行会输出残缺数据，导致 security import 报 "Unable to decode"；
+          # - CERT_P12_BASE64 里的 p12 须为 3DES/SHA1 传统加密格式：macOS security
+          #   对 OpenSSL 3.x 默认的 PBES2/AES-256 格式 PKCS#12 导入会失败。
           security create-keychain -p "" "$KEYCHAIN_PATH"
           security set-keychain-settings -t 3600 -l "$KEYCHAIN_PATH"
           security unlock-keychain -p "" "$KEYCHAIN_PATH"
           printf '%s' "$CERT_P12_BASE64" | openssl base64 -d -A > "$RUNNER_TEMP/cert.p12"
-          security import "$RUNNER_TEMP/cert.p12" \
-            -P "$CERT_PASSWORD" -t cert -f pkcs12 -k "$KEYCHAIN_PATH" -A
+          echo "证书文件: $(wc -c < "$RUNNER_TEMP/cert.p12") 字节, MD5 $(md5 -q "$RUNNER_TEMP/cert.p12")"
+          if security import "$RUNNER_TEMP/cert.p12" \
+               -P "$CERT_PASSWORD" -k "$KEYCHAIN_PATH" -A -T /usr/bin/codesign 2>&1; then
+            echo "证书导入成功"
+          else
+            echo "首次导入失败，尝试备用方式"
+            security import "$RUNNER_TEMP/cert.p12" \
+              -P "$CERT_PASSWORD" -t cert -f pkcs12 -k "$KEYCHAIN_PATH" -A || \
+            security import "$RUNNER_TEMP/cert.p12" \
+              -P "$CERT_PASSWORD" -k "$KEYCHAIN_PATH" -T /usr/bin/codesign
+          fi
           security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" "$KEYCHAIN_PATH"
 
