@@ -11,15 +11,15 @@ struct MainTabView: View {
                 .tabItem {
                     Label("控车", systemImage: "car.circle.fill")
                 }
-            ClubView()
+            ClubView(appState: appState)
                 .tabItem {
                     Label("圈子", systemImage: "bubble.left.and.bubble.right.fill")
                 }
-            FuelTrackerView()
+            FuelTrackerView(appState: appState)
                 .tabItem {
                     Label("油耗", systemImage: "fuelpump.fill")
                 }
-            MaintenanceView()
+            MaintenanceView(appState: appState)
                 .tabItem {
                     Label("维保", systemImage: "wrench.and.screwdriver.fill")
                 }

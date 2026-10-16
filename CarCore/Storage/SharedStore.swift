@@ -105,8 +105,20 @@ public struct StatusSnapshot: Codable, Equatable, Sendable {
 
     public init(carName: String) {
         self.carName = carName
-        self.updatedAt = .distantPast
+        // 注意：Bool 是非可选类型，不会自动置 nil，必须显式初始化，
+        // 否则报 "return from initializer without initializing all stored properties"
+        self.remainingRangeKm = nil
+        self.fuelLeftLiters = nil
+        self.totalOdometerKm = nil
+        self.batteryVoltage = nil
+        self.vehicleTempC = nil
+        self.acTempC = nil
+        self.doorUnlocked = false
+        self.windowOpen = false
+        self.sunroofOpen = false
+        self.engineRunning = false
         self.tirePressures = [nil, nil, nil, nil]
+        self.updatedAt = .distantPast
     }
 
     public var summaryText: String {
