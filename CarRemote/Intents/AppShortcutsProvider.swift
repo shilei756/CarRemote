@@ -70,12 +70,10 @@ struct CarAppShortcuts: AppShortcutsProvider {
             shortTitle: "查看车况",
             systemImageName: "gauge"
         )
-        AppShortcut(
-            intent: CloseWindowsIntent(),
-            phrases: ["用\(.applicationName)关车窗"],
-            shortTitle: "关闭车窗",
-            systemImageName: "wind.slash"
-        )
+        // 注意：Apple 限制每个 App 最多注册 10 个 App Shortcut，
+        // 因此这里精选了 10 条最常用的语音短语（共 11 个 Intent）。
+        // 「关闭车窗」Intent 仍存在于 CarCore，可通过快捷指令 App 与
+        // 桌面小组件按钮使用，只是不注册 Siri 语音短语。
         AppShortcut(
             intent: StartEngineIntent(),
             phrases: ["用\(.applicationName)启动车辆"],
