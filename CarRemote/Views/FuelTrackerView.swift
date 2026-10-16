@@ -49,84 +49,135 @@ struct FuelTrackerView: View {
         }
     }
 
-    // MARK: - 汇总
+    // MARK: - 汇总（照搬网页版 fuelPage：最新油耗大数字 + 3 列统计网格）
 
     private var summaryCard: some View {
-        SectionCard(title: "油耗概览") {
-            LazyVGrid(
-                columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2),
-                spacing: 12
-            ) {
-                StatusTile(
-                    title: "平均油耗",
-                    value: viewModel.averageConsumption.map { String(format: "%.1f", $0) } ?? "--",
-                    unit: "L/100km",
-                    systemImage: "chart.line.uptrend.xyaxis",
-                    tint: .green
-                )
-                StatusTile(
-                    title: "最近油耗",
-                    value: viewModel.lastConsumption.map { String(format: "%.1f", $0) } ?? "--",
-                    unit: "L/100km",
-                    systemImage: "clock.arrow.circlepath"
-                )
-                StatusTile(
-                    title: "累计油费",
-                    value: String(format: "%.0f", viewModel.totalSpend),
-                    unit: "元",
-                    systemImage: "yensign.circle"
-                )
-                StatusTile(
-                    title: "累计加油",
-                    value: String(format: "%.1f", viewModel.totalLiters),
-                    unit: "L",
-                    systemImage: "fuelpump.fill"
-                )
+        VStack(spacing: 12) {
+            // 最新油耗大数字卡（网页版 fuelLatest 3xl 粗体）
+            SectionCard(sakura: false) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        CardTitleText(text: "最新油耗")
+                        Spacer()
+                        if viewModel.lastConsumption != nil {
+                            Text("L/100km")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(WebTheme.blue)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 2)
+                                .background(WebTheme.blue.opacity(0.10))
+                                .clipShape(Capsule())
+                        }
+                    }
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(viewModel.lastConsumption.map { String(format: "%.1f", $0) } ?? "--")
+                            .font(.system(size: 30, weight: .bold))
+                            .monospacedDigit()
+                            .foregroundStyle(WebTheme.txt)
+                        if let odo = viewModel.currentOdometerKm {
+                            Text("当前里程 \(CarStatus.format(odo)) km")
+                                .font(.system(size: 11))
+                                .monospacedDigit()
+                                .foregroundStyle(WebTheme.faint)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            if let odo = viewModel.currentOdometerKm {
-                Text("当前里程：\(CarStatus.format(odo)) km")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+
+            // 统计网格（网页版 grid-cols-3 + fuel-stat-value 17px/800）
+            SectionCard(title: "油耗统计", sakura: false) {
+                LazyVGrid(
+                    columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3),
+                    spacing: 14
+                ) {
+                    fuelStat(value: viewModel.averageConsumption.map { String(format: "%.1f", $0) } ?? "--", label: "平均油耗", unit: "L/100km")
+                    fuelStat(value: String(format: "%.1f", viewModel.totalLiters), label: "累计加油", unit: "L")
+                    fuelStat(value: String(format: "%.0f", viewModel.totalSpend), label: "累计油费", unit: "元")
+                    fuelStat(value: "\(viewModel.records.count)", label: "加油次数", unit: "次")
+                    fuelStat(
+                        value: viewModel.averageConsumption.map { String(format: "%.2f", $0 * 7.8) } ?? "--",
+                        label: "每公里成本",
+                        unit: "元"
+                    )
+                    fuelStat(
+                        value: viewModel.totalLiters > 0 ? String(format: "%.1f", viewModel.totalSpend / viewModel.totalLiters) : "--",
+                        label: "平均油价",
+                        unit: "元/L"
+                    )
+                }
             }
         }
     }
 
-    // MARK: - 记录列表
+    /// 网页版 fuel-stat-value：17px/800 等宽数字 + 小标签
+    private func fuelStat(value: String, label: String, unit: String) -> some View {
+        VStack(spacing: 3) {
+            Text(value)
+                .font(.system(size: 17, weight: .bold))
+                .monospacedDigit()
+                .foregroundStyle(WebTheme.txt)
+            Text(label)
+                .font(.system(size: 10))
+                .foregroundStyle(WebTheme.muted)
+            if !unit.isEmpty {
+                Text(unit)
+                    .font(.system(size: 9))
+                    .foregroundStyle(WebTheme.faint)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - 记录列表（网页版记录行：日期粗体 + 里程/油量 + 油耗徽章）
 
     private var recordsList: some View {
-        SectionCard(title: "加油记录（按里程排序）") {
+        SectionCard(title: "加油记录", sakura: false) {
             LazyVStack(spacing: 0) {
                 ForEach(Array(viewModel.records.enumerated()), id: \.element.id) { index, record in
                     if index > 0 {
-                        Divider().padding(.vertical, 10)
+                        Divider()
+                            .overlay(WebTheme.border)
+                            .padding(.vertical, 10)
                     }
                     HStack(alignment: .top, spacing: 12) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(dateText(record.date))
-                                .font(.subheadline.bold())
+                                .font(.system(size: 13.5, weight: .bold))
+                                .monospacedDigit()
+                                .foregroundStyle(WebTheme.txt)
                             Text("\(CarStatus.format(record.odometerKm)) km · \(CarStatus.format(record.liters)) L\(record.isFull ? " · 加满" : "")")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .font(.system(size: 11))
+                                .monospacedDigit()
+                                .foregroundStyle(WebTheme.muted)
                             if let consumption = record.consumption(since: index > 0 ? viewModel.records[index - 1] : nil) {
-                                Text("本段油耗 \(String(format: "%.1f", consumption)) L/100km")
-                                    .font(.caption.bold())
-                                    .foregroundStyle(.green)
+                                // 网页版 fuel-tag 徽章
+                                Text("\(String(format: "%.1f", consumption)) L/100km")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .monospacedDigit()
+                                    .foregroundStyle(WebTheme.green)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 2)
+                                    .background(WebTheme.green.opacity(0.10))
+                                    .clipShape(Capsule())
                             }
                             if !record.note.isEmpty {
                                 Text(record.note)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                                    .font(.system(size: 10.5))
+                                    .foregroundStyle(WebTheme.faint)
                             }
                         }
                         Spacer()
                         if let price = record.pricePerLiter {
                             Text("\(String(format: "%.2f", price)) 元/L")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .font(.system(size: 12, weight: .semibold))
+                                .monospacedDigit()
+                                .foregroundStyle(WebTheme.txt)
                         } else if let cost = record.totalCost {
                             Text("\(String(format: "%.0f", cost)) 元")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .font(.system(size: 12, weight: .semibold))
+                                .monospacedDigit()
+                                .foregroundStyle(WebTheme.txt)
                         }
                     }
                     .padding(.vertical, 6)

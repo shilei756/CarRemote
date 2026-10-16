@@ -166,24 +166,9 @@ struct DashboardView: View {
 
     private func carStage(status: CarStatus) -> some View {
         VStack(spacing: 0) {
-            GeometryReader { geo in
-                ZStack {
-                    // 四轮胎压小标签（网页版 .tpv，绝对定位于车图四角）
-                    tireBadge(status.tirePressures[0], label: "左前")
-                        .position(x: geo.size.width * 0.13, y: geo.size.height * 0.26)
-                    tireBadge(status.tirePressures[1], label: "右前")
-                        .position(x: geo.size.width * 0.87, y: geo.size.height * 0.26)
-                    tireBadge(status.tirePressures[2], label: "左后")
-                        .position(x: geo.size.width * 0.13, y: geo.size.height * 0.74)
-                    tireBadge(status.tirePressures[3], label: "右后")
-                        .position(x: geo.size.width * 0.87, y: geo.size.height * 0.74)
-
-                    CarVisualView(style: settings.carModelStyle, isUnlocked: status.doorUnlocked)
-                        .padding(.horizontal, 26)
-                        .carFloat()
-                }
-            }
-            .frame(height: 150)
+            CarVisualView(style: settings.carModelStyle, isUnlocked: status.doorUnlocked)
+                .padding(.horizontal, 20)
+                .carFloat()
 
             // 椭圆阴影（网页版 .car-shadow：径向渐变椭圆呼吸）
             Ellipse()
@@ -243,95 +228,120 @@ struct DashboardView: View {
     // MARK: - 车况卡（网页版 user-info-container：油量条 + 续航 + 里程 + 温度 + 电瓶条）
 
     private func vehicleInfoCard(status: CarStatus) -> some View {
-        SectionCard {
-            VStack(spacing: 10) {
-                // 第一行：油量 + 续航
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Image(systemName: "fuelpump.fill")
-                        .font(.system(size: 12))
-                        .foregroundStyle(WebTheme.amber)
-                    Text(CarStatus.format(status.fuelLeftLiters))
-                        .font(.system(size: 16, weight: .bold))
-                        .monospacedDigit()
-                        .foregroundStyle(WebTheme.txt)
-                    Text("L")
-                        .font(.system(size: 11))
-                        .foregroundStyle(WebTheme.faint)
-                    Text("\(fuelPercent(status.fuelLeftLiters))%")
-                        .font(.system(size: 11))
-                        .monospacedDigit()
-                        .foregroundStyle(WebTheme.muted)
-                    Spacer()
-                    Text(CarStatus.format(status.remainingRangeKm))
-                        .font(.system(size: 14, weight: .bold))
-                        .monospacedDigit()
-                        .foregroundStyle(WebTheme.txt)
-                    Text("km 续航")
-                        .font(.system(size: 10))
-                        .foregroundStyle(WebTheme.faint)
-                }
-                // 油量条（网页版 .ftrack）
-                WebTrack(
-                    fraction: (status.fuelLeftLiters ?? 0) / tankCapacityL,
-                    fill: LinearGradient(colors: [WebTheme.amber, WebTheme.amber.opacity(0.7)], startPoint: .leading, endPoint: .trailing),
-                    height: 5
-                )
-                // 总里程
-                HStack(spacing: 4) {
-                    Text("总里程")
-                        .font(.system(size: 11))
-                        .foregroundStyle(WebTheme.muted)
-                    Text(CarStatus.format(status.totalOdometerKm) + " km")
-                        .font(.system(size: 11, weight: .semibold))
-                        .monospacedDigit()
-                        .foregroundStyle(WebTheme.txt)
-                    Spacer()
-                    Text("更新于 \(updatedTimeText)")
-                        .font(.system(size: 10))
-                        .monospacedDigit()
-                        .foregroundStyle(WebTheme.faint)
-                }
-                // 第二行：温度 + 电瓶
-                HStack(spacing: 12) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "thermometer.medium")
-                            .font(.system(size: 11))
-                            .foregroundStyle(WebTheme.blue)
-                        Text(CarStatus.format(status.vehicleTempC) + "°C")
-                            .font(.system(size: 11, weight: .semibold))
+        SectionCard(sakura: false) {
+            HStack(alignment: .top, spacing: 12) {
+                // 左列：油量/续航/里程/温度/电瓶（网页版 card 左列）
+                VStack(spacing: 10) {
+                    // 第一行：油量 + 续航
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Image(systemName: "fuelpump.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(WebTheme.amber)
+                        Text(CarStatus.format(status.fuelLeftLiters))
+                            .font(.system(size: 16, weight: .bold))
                             .monospacedDigit()
                             .foregroundStyle(WebTheme.txt)
-                    }
-                    Spacer()
-                    HStack(spacing: 4) {
-                        Image(systemName: "bolt.fill")
+                        Text("L")
                             .font(.system(size: 11))
-                            .foregroundStyle(voltageColor(status.batteryVoltage))
-                        Text(CarStatus.format(status.batteryVoltage) + "V")
-                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(WebTheme.faint)
+                        Text("\(fuelPercent(status.fuelLeftLiters))%")
+                            .font(.system(size: 11))
                             .monospacedDigit()
-                            .foregroundStyle(voltageColor(status.batteryVoltage))
+                            .foregroundStyle(WebTheme.muted)
+                        Spacer()
+                        Text(CarStatus.format(status.remainingRangeKm))
+                            .font(.system(size: 14, weight: .bold))
+                            .monospacedDigit()
+                            .foregroundStyle(WebTheme.txt)
+                        Text("km 续航")
+                            .font(.system(size: 10))
+                            .foregroundStyle(WebTheme.faint)
                     }
-                }
-                // 电瓶条（网页版 .btrack：11V~15V 区间）
-                WebTrack(
-                    fraction: ((status.batteryVoltage ?? 11) - 10.5) / 4.5,
-                    fill: LinearGradient(colors: [voltageColor(status.batteryVoltage)], startPoint: .leading, endPoint: .trailing),
-                    height: 4
-                )
-                // 空调设定
-                if status.acTempC != nil {
+                    // 油量条（网页版 .ftrack）
+                    WebTrack(
+                        fraction: (status.fuelLeftLiters ?? 0) / tankCapacityL,
+                        fill: LinearGradient(colors: [WebTheme.amber, WebTheme.amber.opacity(0.7)], startPoint: .leading, endPoint: .trailing),
+                        height: 5
+                    )
+                    // 总里程
                     HStack(spacing: 4) {
-                        Image(systemName: "snowflake")
+                        Text("总里程")
                             .font(.system(size: 11))
-                            .foregroundStyle(WebTheme.blue)
-                        Text("空调 \(CarStatus.format(status.acTempC))°C")
+                            .foregroundStyle(WebTheme.muted)
+                        Text(CarStatus.format(status.totalOdometerKm) + " km")
                             .font(.system(size: 11, weight: .semibold))
                             .monospacedDigit()
                             .foregroundStyle(WebTheme.txt)
                         Spacer()
                     }
+                    // 第二行：温度 + 电瓶
+                    HStack(spacing: 12) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "thermometer.medium")
+                                .font(.system(size: 11))
+                                .foregroundStyle(WebTheme.blue)
+                            Text(CarStatus.format(status.vehicleTempC) + "°C")
+                                .font(.system(size: 11, weight: .semibold))
+                                .monospacedDigit()
+                                .foregroundStyle(WebTheme.txt)
+                        }
+                        Spacer()
+                        HStack(spacing: 4) {
+                            Image(systemName: "bolt.fill")
+                                .font(.system(size: 11))
+                                .foregroundStyle(voltageColor(status.batteryVoltage))
+                            Text(CarStatus.format(status.batteryVoltage) + "V")
+                                .font(.system(size: 11, weight: .bold))
+                                .monospacedDigit()
+                                .foregroundStyle(voltageColor(status.batteryVoltage))
+                        }
+                    }
+                    // 电瓶条（网页版 .btrack：11V~15V 区间）
+                    WebTrack(
+                        fraction: ((status.batteryVoltage ?? 11) - 10.5) / 4.5,
+                        fill: LinearGradient(colors: [voltageColor(status.batteryVoltage)], startPoint: .leading, endPoint: .trailing),
+                        height: 4
+                    )
+                    // 空调设定
+                    if status.acTempC != nil {
+                        HStack(spacing: 4) {
+                            Image(systemName: "snowflake")
+                                .font(.system(size: 11))
+                                .foregroundStyle(WebTheme.blue)
+                            Text("空调 \(CarStatus.format(status.acTempC))°C")
+                                .font(.system(size: 11, weight: .semibold))
+                                .monospacedDigit()
+                                .foregroundStyle(WebTheme.txt)
+                            Spacer()
+                        }
+                    }
+                    // 更新时间
+                    HStack {
+                        Spacer()
+                        Text("更新于 \(updatedTimeText)")
+                            .font(.system(size: 10))
+                            .monospacedDigit()
+                            .foregroundStyle(WebTheme.faint)
+                    }
                 }
+
+                // 右列：俯视小车图 + 四角胎压签（网页版 car_top_real + .tpv）
+                ZStack {
+                    Image("car_top")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 58, height: 118)
+                        .opacity(0.9)
+                    tireBadge(status.tirePressures[0], label: "左前")
+                        .position(x: 8, y: 14)
+                    tireBadge(status.tirePressures[1], label: "右前")
+                        .position(x: 50, y: 14)
+                    tireBadge(status.tirePressures[2], label: "左后")
+                        .position(x: 8, y: 104)
+                    tireBadge(status.tirePressures[3], label: "右后")
+                        .position(x: 50, y: 104)
+                }
+                .frame(width: 58, height: 118)
             }
         }
     }

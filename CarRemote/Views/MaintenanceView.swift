@@ -15,7 +15,8 @@ struct MaintenanceView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 16) {
+                VStack(spacing: 12) {
+                    overviewCard
                     if !viewModel.upcoming.isEmpty {
                         upcomingCard
                     }
@@ -28,12 +29,13 @@ struct MaintenanceView: View {
                     } else {
                         recordsList
                     }
-                    Spacer(minLength: 24)
+                    Spacer(minLength: 32)
                 }
-                .padding(16)
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
             }
             .background(WebConsoleBackground())
-            .navigationTitle("维保提醒")
+            .navigationTitle("智能维保")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -51,11 +53,87 @@ struct MaintenanceView: View {
         }
     }
 
-    // MARK: - 临近提醒
+    // MARK: - 概览卡（照搬网页版 mtOverview：总里程大数字 + 上次保养 + 下次徽章）
+
+    private var overviewCard: some View {
+        SectionCard(sakura: false) {
+            VStack(alignment: .leading, spacing: 10) {
+                // 总里程 + 上次保养（网页版 flex items-end gap-4）
+                HStack(alignment: .bottom, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("当前总里程")
+                            .font(.system(size: 10))
+                            .foregroundStyle(WebTheme.muted)
+                        HStack(alignment: .firstTextBaseline, spacing: 2) {
+                            Text(CarStatus.format(viewModel.currentOdometerKm))
+                                .font(.system(size: 26, weight: .bold))
+                                .monospacedDigit()
+                                .foregroundStyle(WebTheme.txt)
+                            Text("km")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(WebTheme.faint)
+                        }
+                    }
+                    Spacer()
+                    if let last = viewModel.records.first {
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text("上次保养")
+                                .font(.system(size: 10))
+                                .foregroundStyle(WebTheme.muted)
+                            Text("\(CarStatus.format(last.odometerKm)) km")
+                                .font(.system(size: 15, weight: .bold))
+                                .monospacedDigit()
+                                .foregroundStyle(WebTheme.txt)
+                            Text(dateText(last.date))
+                                .font(.system(size: 10))
+                                .monospacedDigit()
+                                .foregroundStyle(WebTheme.faint)
+                        }
+                    }
+                }
+
+                // 下次提醒徽章（网页版 mtNextBadges）
+                if !viewModel.upcoming.isEmpty {
+                    HStack(spacing: 8) {
+                        ForEach(Array(viewModel.upcoming.prefix(3).enumerated()), id: \.element.id) { _, record in
+                            HStack(spacing: 4) {
+                                Image(systemName: "clock.badge.exclamationmark")
+                                    .font(.system(size: 9))
+                                Text("\(record.item)")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .lineLimit(1)
+                                Text(reminderShortText(record))
+                                    .font(.system(size: 9))
+                                    .monospacedDigit()
+                            }
+                            .foregroundStyle(WebTheme.amber)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(WebTheme.amber.opacity(0.10))
+                            .clipShape(Capsule())
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func reminderShortText(_ record: MaintenanceRecord) -> String {
+        if let remaining = record.remainingKm(currentOdometerKm: viewModel.currentOdometerKm ?? 0) {
+            return remaining < 0 ? "超 \(CarStatus.format(abs(remaining)))km" : "剩 \(CarStatus.format(remaining))km"
+        }
+        if let nextDate = record.nextDate {
+            let days = Int(nextDate.timeIntervalSinceNow / 86400)
+            return days < 0 ? "超 \(abs(days))天" : "剩 \(days)天"
+        }
+        return ""
+    }
+
+    // MARK: - 临近提醒（网页版 amber 徽章行）
 
     private var upcomingCard: some View {
-        SectionCard(title: "保养提醒") {
-            VStack(spacing: 10) {
+        SectionCard(title: "保养提醒", sakura: false) {
+            VStack(spacing: 8) {
                 // 注意：这里必须用 enumerated() 双参数闭包的写法。
                 // 直接用 ForEach(viewModel.upcoming, id: \.id) { record in }
                 // 会让 Swift 的类型检查器错选 Binding 重载
@@ -64,13 +142,16 @@ struct MaintenanceView: View {
                 ForEach(Array(viewModel.upcoming.enumerated()), id: \.element.id) { _, record in
                     HStack(spacing: 10) {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
+                            .font(.system(size: 12))
+                            .foregroundStyle(WebTheme.amber)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(record.item)
-                                .font(.subheadline.bold())
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(WebTheme.txt)
                             Text(reminderText(record))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .font(.system(size: 11))
+                                .monospacedDigit()
+                                .foregroundStyle(WebTheme.muted)
                         }
                         Spacer()
                     }
@@ -106,39 +187,46 @@ struct MaintenanceView: View {
             LazyVStack(spacing: 0) {
                 ForEach(Array(viewModel.records.enumerated()), id: \.element.id) { index, record in
                     if index > 0 {
-                        Divider().padding(.vertical, 10)
+                        Divider()
+                            .overlay(WebTheme.border)
+                            .padding(.vertical, 10)
                     }
                     HStack(alignment: .top, spacing: 12) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(record.item)
-                                .font(.subheadline.bold())
+                                .font(.system(size: 13.5, weight: .bold))
+                                .foregroundStyle(WebTheme.txt)
                             Text("\(dateText(record.date)) · \(CarStatus.format(record.odometerKm)) km")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .font(.system(size: 11))
+                                .monospacedDigit()
+                                .foregroundStyle(WebTheme.muted)
                             if !record.note.isEmpty {
                                 Text(record.note)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(WebTheme.faint)
                             }
                             if let next = record.nextOdometerKm, next > 0 {
                                 Text("下次提醒：\(CarStatus.format(next)) km")
-                                    .font(.caption2)
-                                    .foregroundStyle(.orange)
+                                    .font(.system(size: 10))
+                                    .monospacedDigit()
+                                    .foregroundStyle(WebTheme.amber)
                             }
                             if let nextDate = record.nextDate {
                                 Text("下次提醒：\(dateText(nextDate))")
-                                    .font(.caption2)
-                                    .foregroundStyle(.orange)
+                                    .font(.system(size: 10))
+                                    .monospacedDigit()
+                                    .foregroundStyle(WebTheme.amber)
                             }
                         }
                         Spacer()
                         if let cost = record.cost {
-                            Text("\(String(format: "%.0f", cost)) 元")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            Text("¥\(String(format: "%.0f", cost))")
+                                .font(.system(size: 12, weight: .semibold))
+                                .monospacedDigit()
+                                .foregroundStyle(WebTheme.txt)
                         }
                     }
-                    .padding(.vertical, 6)
+                    .padding(.vertical, 8)
                 }
             }
         }
@@ -210,6 +298,8 @@ struct AddMaintenanceSheet: View {
             }
             .navigationTitle("记一笔维保")
             .navigationBarTitleDisplayMode(.inline)
+            .scrollContentBackground(.hidden)
+            .background(WebConsoleBackground())
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("取消") { dismiss() }

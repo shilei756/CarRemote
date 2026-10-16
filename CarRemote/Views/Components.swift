@@ -242,117 +242,28 @@ struct WebTrack<Fill: ShapeStyle>: View {
     }
 }
 
-// MARK: - 车辆可视化（浅色背景适配）
+// MARK: - 车辆可视化（网页版真实车型侧视图）
 
 struct CarVisualView: View {
     let style: CarModelStyle
     let isUnlocked: Bool
 
     var body: some View {
-        GeometryReader { geo in
-            let w = geo.size.width
-            let h = geo.size.height
-            ZStack {
-                // 车身（浅色主题下车身改为深灰蓝，与浅色背景形成对比）
-                RoundedRectangle(cornerRadius: h * 0.16, style: .continuous)
-                    .fill(bodyGradient)
-                    .frame(width: w * 0.94, height: h * 0.40)
-                    .position(x: w * 0.5, y: h * 0.66)
-                // 车顶
-                roof(in: CGSize(width: w, height: h))
-                    .fill(bodyGradient)
-                // 车窗
-                windowGlass(in: CGSize(width: w, height: h))
-                    .fill(Color(hex: 0xedf0f4).opacity(0.92))
-                // 车轮
-                wheel(diameter: h * 0.24)
-                    .position(x: w * 0.25, y: h * 0.76)
-                wheel(diameter: h * 0.24)
-                    .position(x: w * 0.75, y: h * 0.76)
-                // 锁状态徽标
-                lockBadge
-                    .position(x: w * 0.88, y: h * 0.16)
-            }
-        }
-        .aspectRatio(2.1, contentMode: .fit)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(isUnlocked ? "车辆示意图，当前已解锁" : "车辆示意图，当前已锁止")
+        Image(carImageName)
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            // 网页版 filter: drop-shadow(0 16px 22px rgba(15,23,42,.18))
+            .shadow(color: Color(red: 15/255, green: 23/255, blue: 42/255).opacity(0.18), radius: 11, x: 0, y: 8)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(isUnlocked ? "车辆图片，当前已解锁" : "车辆图片，当前已锁止")
     }
 
-    /// 浅色背景下车身用深色金属渐变（深蓝灰 → 深灰）
-    private var bodyGradient: LinearGradient {
-        LinearGradient(
-            colors: [
-                Color(red: 0.29, green: 0.35, blue: 0.44),
-                Color(red: 0.15, green: 0.19, blue: 0.25)
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-    }
-
-    private func roof(in size: CGSize) -> Path {
-        var path = Path()
-        let w = size.width
-        let h = size.height
+    /// 车型侧视图映射（与网页版 /static/img/ 图片一一对应）
+    private var carImageName: String {
         switch style {
-        case .sedan:
-            path.move(to: CGPoint(x: w * 0.24, y: h * 0.56))
-            path.addLine(to: CGPoint(x: w * 0.34, y: h * 0.30))
-            path.addLine(to: CGPoint(x: w * 0.60, y: h * 0.30))
-            path.addLine(to: CGPoint(x: w * 0.72, y: h * 0.56))
-        case .coupe:
-            path.move(to: CGPoint(x: w * 0.26, y: h * 0.56))
-            path.addQuadCurve(
-                to: CGPoint(x: w * 0.66, y: h * 0.28),
-                control: CGPoint(x: w * 0.40, y: 0.26)
-            )
-            path.addLine(to: CGPoint(x: w * 0.74, y: h * 0.56))
-        case .suv:
-            path.move(to: CGPoint(x: w * 0.22, y: h * 0.56))
-            path.addLine(to: CGPoint(x: w * 0.28, y: h * 0.24))
-            path.addLine(to: CGPoint(x: w * 0.68, y: h * 0.24))
-            path.addLine(to: CGPoint(x: w * 0.76, y: h * 0.56))
-        }
-        path.closeSubpath()
-        return path
-    }
-
-    private func windowGlass(in size: CGSize) -> Path {
-        var path = Path()
-        let w = size.width
-        let h = size.height
-        path.addRoundedRect(
-            in: CGRect(x: w * 0.38, y: h * 0.33, width: w * 0.18, height: h * 0.17),
-            cornerSize: CGSize(width: 4, height: 4)
-        )
-        path.addRoundedRect(
-            in: CGRect(x: w * 0.58, y: h * 0.33, width: w * 0.10, height: h * 0.17),
-            cornerSize: CGSize(width: 4, height: 4)
-        )
-        return path
-    }
-
-    private func wheel(diameter: CGFloat) -> some View {
-        ZStack {
-            Circle()
-                .fill(Color(hex: 0x1e293b))
-                .frame(width: diameter, height: diameter)
-            Circle()
-                .fill(WebTheme.card)
-                .frame(width: diameter * 0.45, height: diameter * 0.45)
-        }
-    }
-
-    private var lockBadge: some View {
-        ZStack {
-            Circle()
-                .fill(WebTheme.card)
-                .frame(width: 34, height: 34)
-                .shadow(color: Color(red: 15/255, green: 23/255, blue: 42/255).opacity(0.15), radius: 4, y: 2)
-            Image(systemName: isUnlocked ? "lock.open.fill" : "lock.fill")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(isUnlocked ? WebTheme.amber : WebTheme.green)
+        case .sedan: return "car_yidong"        // 逸动PLUS（网页版 car_side.png）
+        case .coupe: return "car_univ"          // UNI-V（网页版 univ_side.png）
+        case .suv: return "car_cs75plus"        // CS75PLUS（网页版 cs75plus_side.png）
         }
     }
 }
