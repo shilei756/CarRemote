@@ -5,11 +5,13 @@ import CarCore
 @main
 struct CarRemoteApp: App {
     @StateObject private var appState = AppState()
+    @StateObject private var themeManager = ThemeManager.shared
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(appState)
+                .environmentObject(themeManager)
                 .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
                     Task { await appState.handleForeground() }
                 }
@@ -20,6 +22,8 @@ struct CarRemoteApp: App {
 /// 根视图：根据登录/授权状态切换界面
 struct RootView: View {
     @EnvironmentObject private var appState: AppState
+    // 主题观察：主题变化时整棵视图树重算，WebTheme 静态色值随之刷新
+    @EnvironmentObject private var themeManager: ThemeManager
 
     var body: some View {
         Group {
@@ -45,7 +49,7 @@ struct LaunchView: View {
             Image(systemName: "car.circle")
                 .font(.system(size: 72))
                 .foregroundStyle(.tint)
-            Text("远程控车")
+            Text("长安控车")
                 .font(.title.bold())
             ProgressView()
         }

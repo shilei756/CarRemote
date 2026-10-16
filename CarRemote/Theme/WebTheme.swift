@@ -3,18 +3,22 @@ import SwiftUI
 // MARK: - 网页版设计规范（照搬 https://a9db267525c1cf6b2.app.workbuddy.host/ 控制台）
 
 /// 控制台浅色主题（与网页版 /user_info 的 :root CSS 变量一一对应）
+/// 夜间模式取值来自网页版 `html.dark` 规则块（--bg0:#101318 等）
 enum WebTheme {
+    /// 当前主题（由 ThemeManager 持有，视图随主题切换重算）
+    static var isDark: Bool { ThemeManager.shared.isDark }
+
     // 背景与卡片
-    static let bg0 = Color(hex: 0xedf0f4)          // 页面背景
-    static let card = Color(hex: 0xffffff)         // 卡片底
-    static let card2 = Color(hex: 0xf1f4f8)        // 次级底（分段控件底等）
-    static let border = Color(hex: 0xe4e9f0)       // 边框
-    static let track = Color(hex: 0xe8edf3)        // 进度条底
+    static var bg0: Color { isDark ? Color(hex: 0x101318) : Color(hex: 0xedf0f4) }
+    static var card: Color { isDark ? Color(hex: 0x181c23) : Color(hex: 0xffffff) }
+    static var card2: Color { isDark ? Color(hex: 0x20252e) : Color(hex: 0xf1f4f8) }
+    static var border: Color { isDark ? Color(hex: 0x2a3038) : Color(hex: 0xe4e9f0) }
+    static var track: Color { isDark ? Color(hex: 0x2a3038) : Color(hex: 0xe8edf3) }
 
     // 文字
-    static let txt = Color(hex: 0x1e293b)          // 主文字
-    static let muted = Color(hex: 0x64748b)        // 次文字
-    static let faint = Color(hex: 0x94a3b8)        // 弱文字
+    static var txt: Color { isDark ? Color(hex: 0xe7eaef) : Color(hex: 0x1e293b) }
+    static var muted: Color { isDark ? Color(hex: 0x9aa3b2) : Color(hex: 0x64748b) }
+    static var faint: Color { isDark ? Color(hex: 0x64748b) : Color(hex: 0x94a3b8) }
 
     // 语义色（网页版 --blue/--green/--amber/--red/--purple）
     static let blue = Color(hex: 0x3b82f6)
@@ -24,7 +28,7 @@ enum WebTheme {
     static let purple = Color(hex: 0x7c3aed)
 
     // 大按钮描边色（.cbig.lock / .cbig.unlock）
-    static let lockBorder = Color(hex: 0xcbd5e1)
+    static var lockBorder: Color { isDark ? Color(hex: 0x3a424d) : Color(hex: 0xcbd5e1) }
 
     // 导航胶囊渐变（.nav-btn：linear-gradient(135deg,#8b5cf6,#6366f1)）
     static var navGradient: LinearGradient {
@@ -37,7 +41,9 @@ enum WebTheme {
 
     // 卡片：白底 + 圆角 20 + 阴影 0 2px 10px rgba(15,23,42,.04) + 1px 边框
     static let cardRadius: CGFloat = 20
-    static let cardShadow = Color(red: 15/255, green: 23/255, blue: 42/255).opacity(0.04)
+    static var cardShadow: Color {
+        isDark ? Color.black.opacity(0.3) : Color(red: 15/255, green: 23/255, blue: 42/255).opacity(0.04)
+    }
 }
 
 // MARK: - 登录页暗色主题（与网页版首页 :root 变量一一对应）

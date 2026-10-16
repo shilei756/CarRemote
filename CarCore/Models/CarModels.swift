@@ -47,7 +47,7 @@ public enum CarCommand: String, CaseIterable, Sendable {
         case .openEngine: return "flame"
         case .closeEngine: return "stop.circle"
         case .openWindow: return "wind"
-        case .closeWindow: return "wind.slash"
+        case .closeWindow: return "arrow.down.to.line"   // 网页版同款（wind.slash 在 SF Symbols 中不存在，会渲染空白）
         case .windowSlit: return "wind"
         case .closeDormer: return "sun.max"
         case .skyWindowLiftUp: return "sun.max"

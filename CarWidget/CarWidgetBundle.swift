@@ -20,7 +20,7 @@ struct CarRemoteWidget: Widget {
                     Color(.systemBackground)
                 }
         }
-        .configurationDisplayName("远程控车")
+        .configurationDisplayName("长安控车")
         .description("车况一览与快捷控车：续航、油量、胎压、锁态，一键开锁/闭锁/闪灯/鸣笛。")
         .supportedFamilies([
             .systemSmall, .systemMedium, .systemLarge,

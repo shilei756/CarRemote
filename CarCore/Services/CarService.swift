@@ -1,5 +1,24 @@
 import Foundation
 
+/// 车辆位置详情（car/location 接口，含官网返回的具体地址）
+public struct CarLocationInfo: Sendable, Equatable {
+    public let address: String
+    public let city: String
+    public let latitude: Double
+    public let longitude: Double
+    public let gpsTime: String
+    public let speed: Double?
+
+    public init(address: String, city: String, latitude: Double, longitude: Double, gpsTime: String, speed: Double?) {
+        self.address = address
+        self.city = city
+        self.latitude = latitude
+        self.longitude = longitude
+        self.gpsTime = gpsTime
+        self.speed = speed
+    }
+}
+
 /// 车辆数据与控车指令服务。
 ///
 /// 指令下发链路（与网页版完全一致）：
@@ -58,6 +77,37 @@ public enum CarService {
         }
         let status = try await fetchStatus(carId: car.carId, accessToken: token)
         return (status, car, updatedCredentials)
+    }
+
+    /// 获取车辆实时位置（与网页版位置卡一致：官网返回 address 具体地址）
+    public static func fetchLocation(carId: String, accessToken: String) async throws -> CarLocationInfo {
+        guard var components = URLComponents(string: APIConfig.iovBaseURL + "/car/location") else {
+            throw APIError.invalidURL
+        }
+        components.queryItems = [
+            URLQueryItem(name: "carId", value: carId),
+            URLQueryItem(name: "mapType", value: "GCJ02"),
+            URLQueryItem(name: "ErrorAutoProjectile", value: "false"),
+            URLQueryItem(name: "toast", value: "false"),
+            URLQueryItem(name: "token", value: accessToken),
+            URLQueryItem(name: "isNev", value: "0"),
+            URLQueryItem(name: "deviceId", value: "00000000-5768-bcb8-ffff-ffffef05ac4a")
+        ]
+        let object = try await APIClient.getJSON(components.url!, headers: APIClient.changanHeaders)
+        guard let dict = object as? [String: Any] else { throw APIError.decode("位置解析失败") }
+        guard let data = dict["data"] as? [String: Any] else {
+            throw APIError.server(dict.string("message") ?? dict.string("msg") ?? "未获取到位置数据")
+        }
+        let lat = data.double("lat") ?? data.double("latitude") ?? 0
+        let lng = data.double("lng") ?? data.double("longitude") ?? 0
+        return CarLocationInfo(
+            address: data.string("address") ?? "",
+            city: data.string("city") ?? "",
+            latitude: lat,
+            longitude: lng,
+            gpsTime: data.string("gpsTime") ?? "",
+            speed: data.double("speed")
+        )
     }
 
     /// 执行控车指令

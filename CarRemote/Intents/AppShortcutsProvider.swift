@@ -1,7 +1,7 @@
 import AppIntents
 import CarCore
 
-/// Siri 语音短语（"Hey Siri，用远程控车解锁车辆"）。
+/// Siri 语音短语（"Hey Siri，用长安控车解锁车辆"）。
 ///
 /// 说明：
 /// - Intent 定义在共享框架 CarCore 中，桌面小组件的按钮也复用同一批 Intent；

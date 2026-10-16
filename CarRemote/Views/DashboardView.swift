@@ -5,29 +5,35 @@ import CarCore
 /// 样式照搬网页版控制台（浅色 + 白卡 + 樱花花瓣 + 浮动车图）
 struct MainTabView: View {
     @EnvironmentObject private var appState: AppState
+    @StateObject private var tabRouter = TabRouter.shared
 
     var body: some View {
-        TabView {
+        TabView(selection: $tabRouter.selectedTab) {
             DashboardView(appState: appState)
                 .tabItem {
                     Label("控车", systemImage: "car.circle.fill")
                 }
+                .tag(TabRouter.Tab.control)
             ClubView(appState: appState)
                 .tabItem {
                     Label("圈子", systemImage: "bubble.left.and.bubble.right.fill")
                 }
+                .tag(TabRouter.Tab.club)
             FuelTrackerView(appState: appState)
                 .tabItem {
                     Label("油耗", systemImage: "fuelpump.fill")
                 }
+                .tag(TabRouter.Tab.fuel)
             MaintenanceView(appState: appState)
                 .tabItem {
                     Label("维保", systemImage: "wrench.and.screwdriver.fill")
                 }
+                .tag(TabRouter.Tab.maintenance)
             SettingsView()
                 .tabItem {
                     Label("我的", systemImage: "person.crop.circle.fill")
                 }
+                .tag(TabRouter.Tab.profile)
         }
         .tint(WebTheme.blue)
     }
@@ -42,6 +48,8 @@ struct DashboardView: View {
     init(appState: AppState) {
         _viewModel = StateObject(wrappedValue: DashboardViewModel(appState: appState))
     }
+
+    @State private var showWallpaperSheet = false
 
     private var settings: AppSettings { SharedStore.loadSettings() }
 
@@ -65,6 +73,7 @@ struct DashboardView: View {
                             if status.location != nil {
                                 locationCard(status: status)
                             }
+                            moreToolsCard
                         } else {
                             loadingOrEmpty
                         }
@@ -75,6 +84,10 @@ struct DashboardView: View {
                 }
                 .refreshable {
                     await appState.refreshStatus()
+                    viewModel.loadLocation()
+                }
+                .task {
+                    viewModel.loadLocation()
                 }
             }
             .toolbar {
@@ -130,6 +143,30 @@ struct DashboardView: View {
             }
             .sheet(isPresented: $viewModel.showMoreControls) {
                 MoreControlsSheet(viewModel: viewModel)
+            }
+            .sheet(isPresented: $viewModel.showACQR) {
+                ACQRScanSheet()
+                    .environmentObject(appState)
+            }
+            .sheet(isPresented: $viewModel.showHistoryActions) {
+                ControlHistorySheet()
+                    .environmentObject(appState)
+            }
+            .sheet(isPresented: $viewModel.showMessages) {
+                MessageHistorySheet()
+                    .environmentObject(appState)
+            }
+            .sheet(isPresented: $viewModel.showTrips) {
+                TripHistorySheet()
+                    .environmentObject(appState)
+            }
+            .sheet(item: $viewModel.showEmbed) { key in
+                EmbedWebSheet(key: key)
+                    .environmentObject(appState)
+            }
+            .sheet(isPresented: $viewModel.showWhitelist) {
+                WhitelistView()
+                    .environmentObject(appState)
             }
             .alert("确认执行", isPresented: confirmBinding) {
                 Button("取消", role: .cancel) { viewModel.cancelPending() }
@@ -327,7 +364,7 @@ struct DashboardView: View {
 
                 // 右列：俯视小车图 + 四角胎压签（网页版 car_top_real + .tpv）
                 ZStack {
-                    Image("car_top")
+                    Image("car_car_top")
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .frame(width: 58, height: 118)
@@ -382,24 +419,48 @@ struct DashboardView: View {
 
     private var moreControlsCard: some View {
         SectionCard(title: "更多控车", sakura: false) {
-            LazyVGrid(
-                columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 5),
-                spacing: 14
-            ) {
-                ForEach(Array(CarCommand.extraCommands.enumerated()), id: \.element) { _, command in
-                    CompactControlButton(
-                        command: command,
-                        isExecuting: viewModel.executingCommand == command
-                    ) {
-                        viewModel.execute(command)
+            VStack(alignment: .leading, spacing: 10) {
+                // 空调模式分段切换（网页版 setAcMode：新版 = 站内代理；官方版 = 开放平台需扫码开通）
+                HStack(spacing: 8) {
+                    Text("空调控制")
+                        .font(.system(size: 10))
+                        .foregroundStyle(WebTheme.faint)
+                    Picker("空调模式", selection: Binding(
+                        get: { viewModel.acMode },
+                        set: { viewModel.setACMode($0) }
+                    )) {
+                        ForEach(ACMode.allCases, id: \.self) { mode in
+                            Text(mode.rawValue).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 150)
+                    if viewModel.acMode == .official {
+                        Text("需扫码开通")
+                            .font(.system(size: 9))
+                            .foregroundStyle(WebTheme.amber)
+                    }
+                    Spacer()
+                }
+                LazyVGrid(
+                    columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 5),
+                    spacing: 14
+                ) {
+                    ForEach(Array(CarCommand.extraCommands.enumerated()), id: \.element) { _, command in
+                        CompactControlButton(
+                            command: command,
+                            isExecuting: viewModel.executingCommand == command
+                        ) {
+                            viewModel.execute(command)
+                        }
                     }
                 }
+                .padding(.top, 4)
             }
-            .padding(.top, 4)
         }
     }
 
-    // MARK: - 定位卡（网页版 locCard：地址 + 刷新 + 紫蓝渐变导航按钮）
+    // MARK: - 定位卡（网页版 locCard：具体地址 + 城市 + 定位时间 + 紫蓝渐变导航按钮）
 
     private func locationCard(status: CarStatus) -> some View {
         SectionCard(sakura: false) {
@@ -416,13 +477,36 @@ struct DashboardView: View {
                     Text("车辆位置")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(WebTheme.txt)
-                    Text(locationText(status))
-                        .font(.system(size: 11))
+                    // 主行：官网返回的具体地址（小区/路段），无地址时回退经纬度
+                    Text(locationAddressText(status))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(WebTheme.txt)
+                        .lineLimit(1)
+                    // 次行：城市 · 定位时间 · 经纬度
+                    Text(locationSubText(status))
+                        .font(.system(size: 10))
                         .monospacedDigit()
                         .foregroundStyle(WebTheme.muted)
                         .lineLimit(1)
                 }
                 Spacer()
+                if viewModel.isLoadingLocation {
+                    ProgressView()
+                        .tint(WebTheme.muted)
+                } else {
+                    Button {
+                        viewModel.loadLocation()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(WebTheme.muted)
+                            .frame(width: 30, height: 30)
+                            .background(WebTheme.card2)
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("刷新位置")
+                }
                 // 网页版 .nav-btn：紫蓝渐变胶囊
                 Button {
                     viewModel.navigateToCar()
@@ -446,9 +530,109 @@ struct DashboardView: View {
         }
     }
 
-    private func locationText(_ status: CarStatus) -> String {
-        guard let location = status.location else { return "暂无位置信息" }
-        return String(format: "%.5f, %.5f", location.latitude, location.longitude)
+    /// 主行地址：优先官网 address；否则「定位中…」/经纬度
+    private func locationAddressText(_ status: CarStatus) -> String {
+        if let info = viewModel.locationInfo, !info.address.isEmpty {
+            return info.address
+        }
+        if viewModel.isLoadingLocation { return "定位中…" }
+        if let location = status.location {
+            return String(format: "%.5f, %.5f", location.latitude, location.longitude)
+        }
+        return "暂无位置信息"
+    }
+
+    /// 次行：城市 · 定位时间 · 经纬度
+    private func locationSubText(_ status: CarStatus) -> String {
+        var parts: [String] = []
+        if let info = viewModel.locationInfo {
+            if !info.city.isEmpty { parts.append(info.city) }
+            if !info.gpsTime.isEmpty { parts.append("定位于 \(info.gpsTime)") }
+        }
+        if let location = status.location {
+            parts.append(String(format: "%.4f, %.4f", location.latitude, location.longitude))
+        }
+        return parts.isEmpty ? "--" : parts.joined(separator: " · ")
+    }
+
+    // MARK: - 更多功能（网页版 moreGrid：11 个磁贴）
+
+    private var moreToolsCard: some View {
+        SectionCard(title: "更多功能", sakura: false) {
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4),
+                spacing: 14
+            ) {
+                moreToolTile(name: "查询车况", symbol: "arrow.triangle.2.circlepath", color: WebTheme.blue) {
+                    Task { await appState.refreshStatus(); viewModel.loadLocation() }
+                }
+                moreToolTile(name: "操作历史", symbol: "clock.arrow.circlepath", color: WebTheme.amber) {
+                    viewModel.showHistoryActions = true
+                }
+                moreToolTile(name: "消息记录", symbol: "bubble.left.and.text.bubble.right", color: Color(hex: 0x06b6d4)) {
+                    viewModel.showMessages = true
+                }
+                moreToolTile(name: "我的行程", symbol: "road.lanes", color: WebTheme.purple) {
+                    viewModel.showTrips = true
+                }
+                moreToolTile(name: "空调开通", symbol: "qrcode", color: WebTheme.green) {
+                    viewModel.showACQR = true
+                }
+                moreToolTile(name: "车辆状态", symbol: "gauge.with.dots.needle.33percent", color: WebTheme.blue) {
+                    viewModel.showEmbed = "vehicle_status"
+                }
+                moreToolTile(name: "360全景", symbol: "view.360", color: WebTheme.green) {
+                    viewModel.showEmbed = "panorama"
+                }
+                moreToolTile(name: "智能维保", symbol: "wrench.and.screwdriver", color: Color(hex: 0xea580c)) {
+                    TabRouter.shared.select(.maintenance)
+                }
+                moreToolTile(
+                    name: ThemeManager.shared.isDark ? "退出夜间" : "夜间模式",
+                    symbol: ThemeManager.shared.isDark ? "sun.max" : "moon",
+                    color: WebTheme.muted
+                ) {
+                    ThemeManager.shared.toggle()
+                }
+                moreToolTile(name: "经典模式", symbol: "sparkles", color: Color(hex: 0x5b8fd6)) {
+                    ThemeManager.shared.set(.light)
+                }
+                moreToolTile(name: "背景壁纸", symbol: "photo.on.rectangle.angled", color: Color(hex: 0xdb2777)) {
+                    showWallpaperSheet = true
+                }
+                moreToolTile(name: "白名单管理", symbol: "person.2.shield", color: WebTheme.red) {
+                    viewModel.showWhitelist = true
+                }
+            }
+            .padding(.top, 4)
+        }
+        .sheet(isPresented: $showWallpaperSheet) {
+            WallpaperSheet()
+        }
+    }
+
+    /// 网页版 tool-tile：圆角方块底 + 彩色图标 + 名称
+    private func moreToolTile(name: String, symbol: String, color: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(color.opacity(0.10))
+                        .frame(width: 42, height: 42)
+                    Image(systemName: symbol)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(color)
+                }
+                Text(name)
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(WebTheme.muted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .frame(maxWidth: .infinity)
+            .accessibilityLabel(name)
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - 头部与杂项

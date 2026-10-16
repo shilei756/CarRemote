@@ -17,6 +17,12 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
     }
 }
 
+/// App 主题（与网页版夜间模式对应）
+public enum AppTheme: String, Codable, CaseIterable, Sendable {
+    case light = "浅色"
+    case dark = "夜间"
+}
+
 /// App 本地设置（防误触、语音命令开关、车型外观、圈子资料）
 public struct AppSettings: Codable, Equatable, Sendable {
     public var confirmGateCommands: Set<String>
@@ -154,6 +160,9 @@ public enum SharedStore {
         static let statusSnapshot = "carremote.statusSnapshot"
         static let fuelRecords = "carremote.fuelRecords"
         static let maintenanceRecords = "carremote.maintenanceRecords"
+        static let acMode = "carremote.acMode"
+        static let appTheme = "carremote.appTheme"
+        static let sakuraEnabled = "carremote.sakuraEnabled"
     }
 
     private static var defaults: UserDefaults? {
@@ -236,6 +245,38 @@ public enum SharedStore {
     public static func saveFuelRecords(_ records: [FuelRecord]) {
         guard let data = try? JSONEncoder().encode(records) else { return }
         defaults?.set(data, forKey: Key.fuelRecords)
+    }
+
+    // MARK: 空调模式 / 主题（独立键存放，避免影响 AppSettings 解码兼容）
+
+    public static func loadACMode() -> ACMode {
+        guard let raw = defaults?.string(forKey: Key.acMode),
+              let mode = ACMode(rawValue: raw) else { return .new }
+        return mode
+    }
+
+    public static func saveACMode(_ mode: ACMode) {
+        defaults?.set(mode.rawValue, forKey: Key.acMode)
+    }
+
+    public static func loadAppTheme() -> AppTheme {
+        guard let raw = defaults?.string(forKey: Key.appTheme),
+              let theme = AppTheme(rawValue: raw) else { return .light }
+        return theme
+    }
+
+    public static func saveAppTheme(_ theme: AppTheme) {
+        defaults?.set(theme.rawValue, forKey: Key.appTheme)
+    }
+
+    /// 樱花飘落背景开关（默认开，兼容旧行为）
+    public static func loadSakuraEnabled() -> Bool {
+        guard let raw = defaults?.object(forKey: Key.sakuraEnabled) as? Bool else { return true }
+        return raw
+    }
+
+    public static func saveSakuraEnabled(_ enabled: Bool) {
+        defaults?.set(enabled, forKey: Key.sakuraEnabled)
     }
 
     // MARK: 维保记录（本地）

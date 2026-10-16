@@ -1,0 +1,581 @@
+import SwiftUI
+import CarCore
+
+// MARK: - 空调开通扫码（网页版 openAcQrScan / startAcQr / pollAcStatus）
+
+/// 扫码开通空调：展示二维码 → 轮询扫码状态 → 授权成功
+struct ACQRScanSheet: View {
+    @EnvironmentObject private var appState: AppState
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var qrImage: UIImage?
+    @State private var qrURL: URL?
+    @State private var statusText = "正在生成二维码…"
+    @State private var statusColor: Color = WebTheme.muted
+    @State private var errorText: String?
+    @State private var qrId = ""
+    @State private var deadline: Date?
+    @State private var pollTask: Task<Void, Never>?
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                WebConsoleBackground()
+                VStack(spacing: 16) {
+                    Text("空调开通（官方正版）")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(WebTheme.txt)
+                    Text("官方版空调指令通过长安开放平台下发，需先用「长安汽车」App 扫码授权")
+                        .font(.system(size: 11))
+                        .foregroundStyle(WebTheme.muted)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(WebTheme.card)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .strokeBorder(WebTheme.border, lineWidth: 1)
+                            )
+                        if let qrImage {
+                            Image(uiImage: qrImage)
+                                .resizable()
+                                .interpolation(.none)
+                                .frame(width: 180, height: 180)
+                        } else if qrURL != nil {
+                            AsyncImage(url: qrURL) { image in
+                                image.resizable().interpolation(.none)
+                            } placeholder: {
+                                ProgressView()
+                            }
+                            .frame(width: 180, height: 180)
+                        } else {
+                            ProgressView()
+                                .frame(width: 180, height: 180)
+                        }
+                    }
+                    .frame(width: 212, height: 212)
+
+                    Text(statusText)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(statusColor)
+
+                    if let errorText {
+                        Text(errorText)
+                            .font(.system(size: 11))
+                            .foregroundStyle(WebTheme.red)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 24)
+                    }
+
+                    HStack(spacing: 12) {
+                        Button("刷新二维码") {
+                            start(force: false)
+                        }
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 9)
+                        .background(WebTheme.navGradient)
+                        .clipShape(Capsule())
+
+                        if appState.credentials != nil {
+                            Button("已开通，去用官方版") {
+                                dismiss()
+                            }
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(WebTheme.blue)
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 9)
+                            .background(WebTheme.blue.opacity(0.10))
+                            .clipShape(Capsule())
+                        }
+                    }
+                    Spacer()
+                }
+                .padding(.top, 20)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("关闭") { dismiss() }
+                        .foregroundStyle(WebTheme.blue)
+                }
+            }
+            .onAppear { start(force: false) }
+            .onDisappear { pollTask?.cancel() }
+        }
+    }
+
+    private func start(force: Bool) {
+        guard let credentials = appState.credentials else { return }
+        pollTask?.cancel()
+        errorText = nil
+        statusText = "正在生成二维码…"
+        statusColor = WebTheme.muted
+        qrImage = nil
+        qrURL = nil
+        pollTask = Task {
+            do {
+                let qr = try await ACService.requestQRCode(phone: credentials.phone, force: force)
+                if Task.isCancelled { return }
+                qrId = qr.id
+                deadline = Date().addingTimeInterval(Double(qr.ttl))
+                if let data = qr.imageData, let image = UIImage(data: data) {
+                    qrImage = image
+                } else if let url = qr.imageURL {
+                    qrURL = url
+                }
+                statusText = "请用长安汽车 App 扫码"
+                statusColor = WebTheme.txt
+                startPolling()
+            } catch {
+                if Task.isCancelled { return }
+                statusText = "生成失败"
+                statusColor = WebTheme.red
+                errorText = error.localizedDescription
+            }
+        }
+    }
+
+    private func startPolling() {
+        pollTask = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                if Task.isCancelled { return }
+                guard !qrId.isEmpty else { continue }
+                if let deadline, Date() > deadline {
+                    statusText = "二维码已过期"
+                    statusColor = WebTheme.red
+                    errorText = "请点击「刷新二维码」后重新扫码"
+                    return
+                }
+                do {
+                    let status = try await ACService.pollStatus(qrcodeId: qrId)
+                    if Task.isCancelled { return }
+                    switch status.result {
+                    case .unauthorized:
+                        statusText = "请用长安汽车 App 扫码"
+                        statusColor = WebTheme.txt
+                    case .scanned:
+                        statusText = "已扫码，请在手机上点「确认授权」"
+                        statusColor = WebTheme.amber
+                    case .authorized:
+                        statusText = "✅ 开通成功！空调已可用"
+                        statusColor = WebTheme.green
+                        return
+                    }
+                } catch {
+                    if Task.isCancelled { return }
+                    statusText = "二维码已失效"
+                    statusColor = WebTheme.red
+                    errorText = error.localizedDescription
+                    return
+                }
+            }
+        }
+    }
+}
+
+// MARK: - 操作历史
+
+struct ControlHistorySheet: View {
+    @EnvironmentObject private var appState: AppState
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var records: [ControlActionRecord] = []
+    @State private var isLoading = true
+    @State private var errorText: String?
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                WebConsoleBackground()
+                Group {
+                    if isLoading {
+                        VStack(spacing: 12) {
+                            ProgressView().tint(WebTheme.blue)
+                            Text("加载中…").font(.system(size: 13)).foregroundStyle(WebTheme.muted)
+                        }
+                    } else if let errorText {
+                        EmptyStateView(systemImage: "exclamationmark.triangle", title: "加载失败", message: errorText)
+                    } else if records.isEmpty {
+                        EmptyStateView(systemImage: "clock.arrow.circlepath", title: "暂无操作历史", message: "执行控车指令后会显示在这里")
+                    } else {
+                        ScrollView {
+                            LazyVStack(spacing: 10) {
+                                ForEach(records) { record in
+                                    SectionCard(sakura: false) {
+                                        HStack(alignment: .top, spacing: 10) {
+                                            VStack(alignment: .leading, spacing: 3) {
+                                                HStack(spacing: 6) {
+                                                    Text(record.cmdDescription)
+                                                        .font(.system(size: 13, weight: .semibold))
+                                                        .foregroundStyle(WebTheme.txt)
+                                                    Text(record.statusText)
+                                                        .font(.system(size: 9.5, weight: .semibold))
+                                                        .foregroundStyle(record.isSuccess ? WebTheme.green : WebTheme.red)
+                                                        .padding(.horizontal, 6)
+                                                        .padding(.vertical, 2)
+                                                        .background((record.isSuccess ? WebTheme.green : WebTheme.red).opacity(0.12))
+                                                        .clipShape(Capsule())
+                                                }
+                                                if !record.resultDesc.isEmpty {
+                                                    Text(record.resultDesc)
+                                                        .font(.system(size: 11))
+                                                        .foregroundStyle(WebTheme.muted)
+                                                        .lineLimit(2)
+                                                }
+                                            }
+                                            Spacer()
+                                            Text(record.createAt)
+                                                .font(.system(size: 9.5))
+                                                .monospacedDigit()
+                                                .foregroundStyle(WebTheme.faint)
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(16)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("操作历史")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("关闭") { dismiss() }.foregroundStyle(WebTheme.blue)
+                }
+            }
+            .task { await load() }
+        }
+    }
+
+    private func load() async {
+        guard let credentials = appState.credentials else { return }
+        do {
+            let (token, updated) = try await AuthService.validAccessToken(for: credentials)
+            SharedStore.saveCredentials(updated)
+            let cars = try await CarService.fetchCars(accessToken: token)
+            guard let car = cars.first else { throw APIError.server("未获取到车辆信息") }
+            records = try await HistoryService.controlActions(carId: car.carId, accessToken: token)
+        } catch {
+            errorText = error.localizedDescription
+        }
+        isLoading = false
+    }
+}
+
+// MARK: - 消息记录
+
+struct MessageHistorySheet: View {
+    @EnvironmentObject private var appState: AppState
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var records: [MessageRecord] = []
+    @State private var isLoading = true
+    @State private var errorText: String?
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                WebConsoleBackground()
+                Group {
+                    if isLoading {
+                        VStack(spacing: 12) {
+                            ProgressView().tint(WebTheme.blue)
+                            Text("加载中…").font(.system(size: 13)).foregroundStyle(WebTheme.muted)
+                        }
+                    } else if let errorText {
+                        EmptyStateView(systemImage: "exclamationmark.triangle", title: "加载失败", message: errorText)
+                    } else if records.isEmpty {
+                        EmptyStateView(systemImage: "bubble.left.and.text.bubble.right", title: "暂无消息", message: "近 30 天的车辆消息会显示在这里")
+                    } else {
+                        ScrollView {
+                            LazyVStack(spacing: 10) {
+                                ForEach(records) { record in
+                                    SectionCard(sakura: false) {
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            Text(record.msgTime)
+                                                .font(.system(size: 9.5))
+                                                .monospacedDigit()
+                                                .foregroundStyle(WebTheme.faint)
+                                            Text(record.msgContent)
+                                                .font(.system(size: 12.5))
+                                                .foregroundStyle(WebTheme.txt)
+                                            if !record.typeName.isEmpty {
+                                                Text(record.typeName)
+                                                    .font(.system(size: 10.5))
+                                                    .foregroundStyle(WebTheme.muted)
+                                            }
+                                        }
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                    }
+                                }
+                            }
+                            .padding(16)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("消息记录")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("关闭") { dismiss() }.foregroundStyle(WebTheme.blue)
+                }
+            }
+            .task { await load() }
+        }
+    }
+
+    private func load() async {
+        guard let credentials = appState.credentials else { return }
+        do {
+            let (token, updated) = try await AuthService.validAccessToken(for: credentials)
+            SharedStore.saveCredentials(updated)
+            let cars = try await CarService.fetchCars(accessToken: token)
+            guard let car = cars.first else { throw APIError.server("未获取到车辆信息") }
+            records = try await HistoryService.messages(carId: car.carId, accessToken: token)
+        } catch {
+            errorText = error.localizedDescription
+        }
+        isLoading = false
+    }
+}
+
+// MARK: - 我的行程
+
+struct TripHistorySheet: View {
+    @EnvironmentObject private var appState: AppState
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var records: [TripRecord] = []
+    @State private var isLoading = true
+    @State private var errorText: String?
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                WebConsoleBackground()
+                Group {
+                    if isLoading {
+                        VStack(spacing: 12) {
+                            ProgressView().tint(WebTheme.blue)
+                            Text("加载中…").font(.system(size: 13)).foregroundStyle(WebTheme.muted)
+                        }
+                    } else if let errorText {
+                        EmptyStateView(systemImage: "exclamationmark.triangle", title: "加载失败", message: errorText)
+                    } else if records.isEmpty {
+                        EmptyStateView(systemImage: "road.lanes", title: "暂无行程", message: "近 7 天的行程会显示在这里")
+                    } else {
+                        ScrollView {
+                            LazyVStack(spacing: 10) {
+                                ForEach(records) { record in
+                                    SectionCard(sakura: false) {
+                                        VStack(alignment: .leading, spacing: 6) {
+                                            HStack(spacing: 6) {
+                                                Text(record.startTime)
+                                                    .font(.system(size: 11))
+                                                    .monospacedDigit()
+                                                    .foregroundStyle(WebTheme.muted)
+                                                Image(systemName: "arrow.right")
+                                                    .font(.system(size: 9))
+                                                    .foregroundStyle(WebTheme.faint)
+                                                Text(record.endTime)
+                                                    .font(.system(size: 11))
+                                                    .monospacedDigit()
+                                                    .foregroundStyle(WebTheme.muted)
+                                            }
+                                            HStack(spacing: 5) {
+                                                Circle().fill(WebTheme.green).frame(width: 6, height: 6)
+                                                Text(record.startAddress)
+                                                    .font(.system(size: 12))
+                                                    .foregroundStyle(WebTheme.txt)
+                                                    .lineLimit(1)
+                                            }
+                                            HStack(spacing: 5) {
+                                                Circle().fill(WebTheme.red).frame(width: 6, height: 6)
+                                                Text(record.endAddress)
+                                                    .font(.system(size: 12))
+                                                    .foregroundStyle(WebTheme.txt)
+                                                    .lineLimit(1)
+                                            }
+                                            HStack(spacing: 12) {
+                                                tripStat(title: "里程", value: record.mileage.map { CarStatus.format($0) + " km" } ?? "--")
+                                                tripStat(title: "耗时", value: record.spendTime.map { CarStatus.format($0) + " 分" } ?? "--")
+                                                tripStat(title: "均速", value: record.avgSpeed.map { CarStatus.format($0) + " km/h" } ?? "--")
+                                                tripStat(title: "油耗", value: record.oil.map { CarStatus.format($0) + " L" } ?? "--")
+                                            }
+                                        }
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                    }
+                                }
+                            }
+                            .padding(16)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("我的行程")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("关闭") { dismiss() }.foregroundStyle(WebTheme.blue)
+                }
+            }
+            .task { await load() }
+        }
+    }
+
+    private func tripStat(title: String, value: String) -> some View {
+        VStack(spacing: 2) {
+            Text(title)
+                .font(.system(size: 9))
+                .foregroundStyle(WebTheme.faint)
+            Text(value)
+                .font(.system(size: 11, weight: .semibold))
+                .monospacedDigit()
+                .foregroundStyle(WebTheme.txt)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func load() async {
+        guard let credentials = appState.credentials else { return }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        let end = formatter.string(from: Date())
+        let start = formatter.string(from: Date().addingTimeInterval(-6 * 24 * 3600))
+        do {
+            let (token, updated) = try await AuthService.validAccessToken(for: credentials)
+            SharedStore.saveCredentials(updated)
+            let cars = try await CarService.fetchCars(accessToken: token)
+            guard let car = cars.first else { throw APIError.server("未获取到车辆信息") }
+            records = try await HistoryService.trips(carId: car.carId, accessToken: token, startDate: start, endDate: end)
+        } catch {
+            errorText = error.localizedDescription
+        }
+        isLoading = false
+    }
+}
+
+// MARK: - 车辆状态 / 360全景（内嵌网页版页面）
+
+struct EmbedWebSheet: View {
+    let key: String
+    @EnvironmentObject private var appState: AppState
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                WebConsoleBackground()
+                if let url = embedURL {
+                    WebViewBridge(url: url)
+                        .ignoresSafeArea(edges: .bottom)
+                } else {
+                    EmptyStateView(systemImage: "globe", title: "暂不可用", message: "请先登录后重试")
+                }
+            }
+            .navigationTitle(key == "vehicle_status" ? "车辆状态" : "360全景")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("关闭") { dismiss() }.foregroundStyle(WebTheme.blue)
+                }
+            }
+        }
+    }
+
+    /// 与网页版 credQuery 一致：phone + ref_token + pin + embed=1
+    private var embedURL: URL? {
+        guard let credentials = appState.credentials else { return nil }
+        var components = URLComponents(string: APIConfig.siteBaseURL + "/" + key)
+        components?.queryItems = [
+            URLQueryItem(name: "phone", value: credentials.phone),
+            URLQueryItem(name: "ref_token", value: credentials.refToken),
+            URLQueryItem(name: "pin", value: credentials.pin),
+            URLQueryItem(name: "embed", value: "1")
+        ]
+        return components?.url
+    }
+}
+
+// MARK: - 背景壁纸
+
+struct WallpaperSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var sakuraEnabled = SharedStore.loadSakuraEnabled()
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                WebConsoleBackground()
+                VStack(spacing: 14) {
+                    wallpaperOption(
+                        title: "樱花飘落",
+                        subtitle: "卡片顶部花瓣缓缓飘落（网页版默认）",
+                        symbol: "snowflake",
+                        selected: sakuraEnabled
+                    ) {
+                        sakuraEnabled = true
+                    }
+                    wallpaperOption(
+                        title: "纯净背景",
+                        subtitle: "仅保留浅色背景与光晕，无花瓣动画",
+                        symbol: "circle",
+                        selected: !sakuraEnabled
+                    ) {
+                        sakuraEnabled = false
+                    }
+                    Spacer()
+                }
+                .padding(16)
+            }
+            .navigationTitle("背景壁纸")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("完成") {
+                        SharedStore.saveSakuraEnabled(sakuraEnabled)
+                        dismiss()
+                    }
+                    .foregroundStyle(WebTheme.blue)
+                }
+            }
+        }
+    }
+
+    private func wallpaperOption(title: String, subtitle: String, symbol: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: symbol)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(selected ? WebTheme.blue : WebTheme.muted)
+                    .frame(width: 40, height: 40)
+                    .background((selected ? WebTheme.blue : WebTheme.muted).opacity(0.10))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(WebTheme.txt)
+                    Text(subtitle)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(WebTheme.muted)
+                }
+                Spacer()
+                if selected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(WebTheme.blue)
+                }
+            }
+            .padding(14)
+            .webCard()
+        }
+        .buttonStyle(.plain)
+    }
+}

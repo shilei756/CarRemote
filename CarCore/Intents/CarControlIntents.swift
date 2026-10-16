@@ -12,7 +12,7 @@ public enum CarIntentRunner {
             return "「\(command.displayName)」尚未在 App 的「设置 → 语音命令」中开放"
         }
         guard let credentials = SharedStore.loadCredentials() else {
-            return "请先在「远程控车」App 中登录"
+            return "请先在「长安控车」App 中登录"
         }
         do {
             let result = try await CarService.execute(command: command, credentials: credentials)

@@ -6,7 +6,8 @@ import CarCore
 struct SectionCard<Content: View>: View {
     var title: String?
     /// 是否显示顶部樱花花瓣飘落（网页版 .myth-card 的 card-snow）
-    var sakura = true
+    /// 默认读「背景壁纸」设置：纯净背景（sakuraEnabled=false）时不显示
+    var sakura: Bool = SharedStore.loadSakuraEnabled()
     @ViewBuilder var content: Content
 
     var body: some View {

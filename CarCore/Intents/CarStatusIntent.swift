@@ -13,7 +13,7 @@ public struct CarStatusIntent: AppIntent {
 
     public func perform() async throws -> some IntentResult & ProvidesDialog {
         guard let credentials = SharedStore.loadCredentials() else {
-            return .result(dialog: IntentDialog(stringLiteral: "请先在「远程控车」App 中登录"))
+            return .result(dialog: IntentDialog(stringLiteral: "请先在「长安控车」App 中登录"))
         }
         do {
             let (status, car, updatedCredentials) = try await CarService.refresh(credentials: credentials)

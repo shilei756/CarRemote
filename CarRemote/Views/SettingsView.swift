@@ -8,6 +8,11 @@ struct SettingsView: View {
 
     @State private var settings: AppSettings = SharedStore.loadSettings()
     @State private var showLogoutConfirm = false
+    @State private var showWhitelist = false
+    // 折叠状态：高危操作与 Siri 语音默认收起（反馈 #7）
+    @State private var confirmExpanded = false
+    @State private var siriExpanded = false
+    @State private var appTheme: AppTheme = SharedStore.loadAppTheme()
 
     var body: some View {
         NavigationStack {
@@ -16,6 +21,7 @@ struct SettingsView: View {
                 appearanceSection
                 confirmSection
                 siriSection
+                adminSection
                 clubProfileSection
                 aboutSection
             }
@@ -30,6 +36,10 @@ struct SettingsView: View {
                 }
             } message: {
                 Text("退出后需要重新输入手机号与控车码登录，本地记录不会丢失。")
+            }
+            .sheet(isPresented: $showWhitelist) {
+                WhitelistView()
+                    .environmentObject(appState)
             }
         }
     }
@@ -73,7 +83,7 @@ struct SettingsView: View {
         return "未授权"
     }
 
-    // MARK: - 车型外观
+    // MARK: - 车型外观 / 主题
 
     private var appearanceSection: some View {
         Section {
@@ -85,24 +95,33 @@ struct SettingsView: View {
             .onChange(of: settings.carModelStyle) { _, _ in
                 saveSettings()
             }
+            Picker("主题", selection: $appTheme) {
+                Text("浅色（经典）").tag(AppTheme.light)
+                Text("夜间").tag(AppTheme.dark)
+            }
+            .onChange(of: appTheme) { _, newValue in
+                ThemeManager.shared.set(newValue)
+            }
         } header: {
             Text("外观")
         } footer: {
-            Text("仅影响主界面车辆示意图的造型")
+            Text("车型仅影响主界面车辆示意图；夜间主题同网页版暗色配色")
         }
     }
 
-    // MARK: - 防误触
+    // MARK: - 防误触（默认折叠）
 
     private var confirmSection: some View {
         Section {
-            ForEach(CarCommand.allCases, id: \.self) { command in
-                Toggle(isOn: confirmBinding(for: command)) {
-                    Label(command.displayName, systemImage: command.sfSymbol)
+            DisclosureGroup(isExpanded: $confirmExpanded) {
+                ForEach(CarCommand.allCases, id: \.self) { command in
+                    Toggle(isOn: confirmBinding(for: command)) {
+                        Label(command.displayName, systemImage: command.sfSymbol)
+                    }
                 }
+            } label: {
+                Text("高危操作二次确认")
             }
-        } header: {
-            Text("高危操作二次确认")
         } footer: {
             Text("开启后，执行开锁 / 闭锁 / 点火 / 熄火等指令前会弹窗确认")
         }
@@ -118,19 +137,43 @@ struct SettingsView: View {
         )
     }
 
-    // MARK: - Siri 语音开关
+    // MARK: - Siri 语音开关（默认折叠）
 
     private var siriSection: some View {
         Section {
-            ForEach(CarCommand.allCases, id: \.self) { command in
-                Toggle(isOn: siriBinding(for: command)) {
-                    Label(command.displayName, systemImage: command.sfSymbol)
+            DisclosureGroup(isExpanded: $siriExpanded) {
+                ForEach(CarCommand.allCases, id: \.self) { command in
+                    Toggle(isOn: siriBinding(for: command)) {
+                        Label(command.displayName, systemImage: command.sfSymbol)
+                    }
+                }
+            } label: {
+                Text("Siri 语音控制")
+            }
+        } footer: {
+            Text("关闭后，对应指令不再响应语音与小组件按钮。语音短语如：「用长安控车解锁车辆」")
+        }
+    }
+
+    // MARK: - 白名单管理（管理员入口）
+
+    private var adminSection: some View {
+        Section {
+            Button {
+                showWhitelist = true
+            } label: {
+                HStack {
+                    Text("白名单管理")
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.tertiary)
                 }
             }
         } header: {
-            Text("Siri 语音控制")
+            Text("管理")
         } footer: {
-            Text("关闭后，对应指令不再响应语音与小组件按钮。语音短语如：「用远程控车解锁车辆」")
+            Text("查看使用者统计、登录白名单与体验卡密（仅站主 / 管理员可进入）")
         }
     }
 
