@@ -114,9 +114,10 @@ public enum ACService {
             return max(0, Int(cached.timeIntervalSinceNow / 86400))
         }
         // 1. 授权码（inCall access_token）
-        let (authorizeToken, updated) = try? await AuthService.validAccessToken(for: credentials)
-        if let updated { SharedStore.saveCredentials(updated) }
-        guard let authorizeToken else { return nil }
+        guard let (authorizeToken, updated) = try? await AuthService.validAccessToken(for: credentials) else {
+            return nil
+        }
+        SharedStore.saveCredentials(updated)
 
         // 2. 站内换取开放平台 refresh_token（未开通时服务端返回失败）
         guard let tokenURL = URL(string: APIConfig.siteBaseURL + "/api/open/token") else { return nil }
@@ -137,11 +138,12 @@ public enum ACService {
             ("client_secret", "YjIzNWFmZDMxMzAwNDc4NQ=="),
             ("client_id", "b235afd313004785bfde580c188c47bb")
         ])
+        let bodyData = formBody.data(using: String.Encoding.utf8)
         guard let oauthObject = try? await APIClient.request(
             oauthComponents.url!,
             method: "POST",
             headers: ["Content-Type": "application/x-www-form-urlencoded"],
-            body: formBody.data(using: .utf8)
+            body: bodyData
         ), let oauthDict = oauthObject as? [String: Any],
             let expireIn = oauthDict.int("refresh_token_expire_in") else { return nil }
 
