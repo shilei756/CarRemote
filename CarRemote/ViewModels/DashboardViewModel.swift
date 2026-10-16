@@ -24,7 +24,7 @@ final class DashboardViewModel: ObservableObject {
     @Published var showHistoryActions = false
     @Published var showMessages = false
     @Published var showTrips = false
-    @Published var showEmbed: String?   // "vehicle_status" / "panorama"
+    @Published var showEmbed: EmbedTarget?   // "vehicle_status" / "panorama"
     @Published var showWhitelist = false
 
     private weak var appState: AppState?
@@ -135,12 +135,21 @@ final class DashboardViewModel: ObservableObject {
     func navigateToCar() {
         guard let status = appState?.status, let location = status.location else { return }
         let name = locationInfo?.address ?? "车辆位置"
-        let urlString = "https://uri.amap.com/navigation?to=\(location.longitude),\(location.latitude),\(name)&mode=car&coordinate=gaode&callnative=1"
-            .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? urlString
+        let raw = "https://uri.amap.com/navigation?to=\(location.longitude),\(location.latitude),\(name)&mode=car&coordinate=gaode&callnative=1"
+        let urlString = raw.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? raw
         if let url = URL(string: urlString) {
             UIApplication.shared.open(url)
         }
     }
+}
+
+/// 内嵌网页目标（车辆状态 / 360全景）
+struct EmbedTarget: Identifiable, Equatable {
+    let id: String
+    var key: String { id }
+
+    static let vehicleStatus = EmbedTarget(id: "vehicle_status")
+    static let panorama = EmbedTarget(id: "panorama")
 }
 
 /// 底部 Tab 路由（更多功能磁贴跨页跳转用）

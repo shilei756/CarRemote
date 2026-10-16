@@ -1,12 +1,14 @@
 import SwiftUI
+import CarCore
 
 // MARK: - 网页版设计规范（照搬 https://a9db267525c1cf6b2.app.workbuddy.host/ 控制台）
 
 /// 控制台浅色主题（与网页版 /user_info 的 :root CSS 变量一一对应）
 /// 夜间模式取值来自网页版 `html.dark` 规则块（--bg0:#101318 等）
 enum WebTheme {
-    /// 当前主题（由 ThemeManager 持有，视图随主题切换重算）
-    static var isDark: Bool { ThemeManager.shared.isDark }
+    /// 当前主题：读持久化键（ThemeManager.set 时同步写入，与 @Published theme 同源）
+    /// 直接读 UserDefaults 而非 ThemeManager.shared，避免 @MainActor 隔离传播到全部静态色值
+    static var isDark: Bool { SharedStore.loadAppTheme() == .dark }
 
     // 背景与卡片
     static var bg0: Color { isDark ? Color(hex: 0x101318) : Color(hex: 0xedf0f4) }

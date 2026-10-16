@@ -50,7 +50,7 @@ struct WhitelistView: View {
     }
     @State private var pendingConfirm: PendingConfirm?
 
-    private struct Banner: Identifiable {
+    private struct Banner: Identifiable, Equatable {
         let id = UUID()
         let text: String
         let isError: Bool

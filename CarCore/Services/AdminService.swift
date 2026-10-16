@@ -262,6 +262,7 @@ public enum AdminService {
     }
 
     /// 操作请求：success=false 时抛出服务端消息
+    @discardableResult
     private static func postAdmin(path: String, password: String, caller: String, extra: [String: Any]) async throws -> Any {
         let object = try await postAdminRaw(path: path, password: password, caller: caller, extra: extra)
         guard let dict = object as? [String: Any] else { throw APIError.decode("响应解析失败") }

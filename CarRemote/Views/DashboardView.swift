@@ -160,8 +160,8 @@ struct DashboardView: View {
                 TripHistorySheet()
                     .environmentObject(appState)
             }
-            .sheet(item: $viewModel.showEmbed) { key in
-                EmbedWebSheet(key: key)
+            .sheet(item: $viewModel.showEmbed) { target in
+                EmbedWebSheet(key: target.key)
                     .environmentObject(appState)
             }
             .sheet(isPresented: $viewModel.showWhitelist) {
@@ -579,10 +579,10 @@ struct DashboardView: View {
                     viewModel.showACQR = true
                 }
                 moreToolTile(name: "车辆状态", symbol: "gauge.with.dots.needle.33percent", color: WebTheme.blue) {
-                    viewModel.showEmbed = "vehicle_status"
+                    viewModel.showEmbed = .vehicleStatus
                 }
                 moreToolTile(name: "360全景", symbol: "view.360", color: WebTheme.green) {
-                    viewModel.showEmbed = "panorama"
+                    viewModel.showEmbed = .panorama
                 }
                 moreToolTile(name: "智能维保", symbol: "wrench.and.screwdriver", color: Color(hex: 0xea580c)) {
                     TabRouter.shared.select(.maintenance)
