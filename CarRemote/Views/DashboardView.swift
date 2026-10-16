@@ -64,6 +64,36 @@ struct DashboardView: View {
                 WebConsoleBackground()
                 ScrollView {
                     VStack(spacing: 12) {
+                        // 车名 DIY 胶囊（放在内容区第一行：iOS 26 导航栏会把按钮重塑成图标导致文字被裁）
+                        HStack {
+                            Button {
+                                nameDraft = appState.customCarName
+                                showNameEditor = true
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Text(appState.carName.isEmpty ? "我的爱车" : appState.carName)
+                                        .font(.system(size: 16, weight: .bold))
+                                        .foregroundStyle(WebTheme.txt)
+                                        .lineLimit(1)
+                                        .fixedSize(horizontal: true, vertical: false)
+                                    Image(systemName: "pencil")
+                                        .font(.system(size: 10, weight: .semibold))
+                                        .foregroundStyle(WebTheme.faint)
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 7)
+                                .background(WebTheme.card2)
+                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .strokeBorder(WebTheme.border, lineWidth: 1)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("编辑车辆名称")
+                            Spacer()
+                        }
+                        .padding(.top, 2)
                         if let errorMessage = appState.errorMessage {
                             errorBanner(errorMessage)
                         }
@@ -103,33 +133,6 @@ struct DashboardView: View {
             }
             }
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    // 网页版车名长方形：点击可 DIY 自定义名称
-                    Button {
-                        nameDraft = appState.customCarName
-                        showNameEditor = true
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text(appState.carName.isEmpty ? "我的爱车" : appState.carName)
-                                .font(.system(size: 15, weight: .bold))
-                                .foregroundStyle(WebTheme.txt)
-                                .lineLimit(1)
-                            Image(systemName: "pencil")
-                                .font(.system(size: 9, weight: .semibold))
-                                .foregroundStyle(WebTheme.faint)
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(WebTheme.card2)
-                        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .strokeBorder(WebTheme.border, lineWidth: 1)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("编辑车辆名称")
-                }
                 ToolbarItem(placement: .topBarTrailing) {
                     // 网页版 .icon-round 圆形刷新钮
                     Button {
