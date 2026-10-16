@@ -56,7 +56,12 @@ struct MaintenanceView: View {
     private var upcomingCard: some View {
         SectionCard(title: "保养提醒") {
             VStack(spacing: 10) {
-                ForEach(viewModel.upcoming, id: \.id) { record in
+                // 注意：这里必须用 enumerated() 双参数闭包的写法。
+                // 直接用 ForEach(viewModel.upcoming, id: \.id) { record in }
+                // 会让 Swift 的类型检查器错选 Binding 重载
+                // （报 cannot convert [MaintenanceRecord] to Binding<C>），
+                // 与下方 recordsList 中的写法保持一致。
+                ForEach(Array(viewModel.upcoming.enumerated()), id: \.element.id) { _, record in
                     HStack(spacing: 10) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(.orange)
