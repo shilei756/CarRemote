@@ -32,7 +32,7 @@ struct MaintenanceView: View {
                 }
                 .padding(16)
             }
-            .background(Color(.systemBackground))
+            .background(WebConsoleBackground())
             .navigationTitle("维保提醒")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -2,6 +2,7 @@ import SwiftUI
 import CarCore
 
 /// 主界面：五个标签（控车 / 圈子 / 油耗 / 维保 / 我的）
+/// 样式照搬网页版控制台（浅色 + 白卡 + 樱花花瓣 + 浮动车图）
 struct MainTabView: View {
     @EnvironmentObject private var appState: AppState
 
@@ -28,11 +29,12 @@ struct MainTabView: View {
                     Label("我的", systemImage: "person.crop.circle.fill")
                 }
         }
-        .tint(Color.accentColor)
+        .tint(WebTheme.blue)
     }
 }
 
-/// 控车主界面：车况仪表盘 + 快捷控车
+/// 控车主界面：照搬网页版控制台结构
+/// header（车名+状态点） → 浮动车图 → 车况卡 → 快捷控车 → 更多指令 → 定位卡
 struct DashboardView: View {
     @EnvironmentObject private var appState: AppState
     @StateObject private var viewModel: DashboardViewModel
@@ -43,55 +45,80 @@ struct DashboardView: View {
 
     private var settings: AppSettings { SharedStore.loadSettings() }
 
+    /// 油箱容积估算（长安逸动PLUS/UNI-V 约 50L），用于油量百分比进度条
+    private let tankCapacityL = 50.0
+
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
-                    if let errorMessage = appState.errorMessage {
-                        errorBanner(errorMessage)
-                    }
-                    carHeader
-                    if let status = appState.status {
-                        carVisual(status: status)
-                        stateFlagsCard(status: status)
-                        primaryControls
-                        statusTiles(status: status)
-                        tireCard(status: status)
-                        if status.location != nil {
-                            locateButton
+            ZStack {
+                WebConsoleBackground()
+                ScrollView {
+                    VStack(spacing: 12) {
+                        if let errorMessage = appState.errorMessage {
+                            errorBanner(errorMessage)
                         }
-                    } else {
-                        EmptyStateView(
-                            systemImage: "antenna.radiowaves.left.and.right",
-                            title: appState.isRefreshing ? "正在获取车况…" : "暂无车况数据",
-                            message: appState.isRefreshing ? "" : "下拉刷新，或点击右上角按钮重新获取"
-                        )
+                        if let status = appState.status {
+                            carStage(status: status)
+                            vehicleInfoCard(status: status)
+                            quickControlsCard
+                            moreControlsCard
+                            if status.location != nil {
+                                locationCard(status: status)
+                            }
+                        } else {
+                            loadingOrEmpty
+                        }
+                        Spacer(minLength: 32)
                     }
-                    Spacer(minLength: 24)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
                 }
-                .padding(16)
+                .refreshable {
+                    await appState.refreshStatus()
+                }
             }
-            .background(Color(.systemBackground))
-            .navigationTitle(appState.carName)
-            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    // 网页版 app-header：车名 + 在线状态点
+                    HStack(spacing: 6) {
+                        Text(appState.carName)
+                            .font(.system(size: 17, weight: .bold))
+                            .foregroundStyle(WebTheme.txt)
+                        Circle()
+                            .fill(WebTheme.green)
+                            .frame(width: 6, height: 6)
+                            .pulseDot()
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
+                    // 网页版 .icon-round 圆形刷新钮
                     Button {
                         Task { await appState.refreshStatus() }
                     } label: {
-                        if appState.isRefreshing {
-                            ProgressView()
-                        } else {
-                            Image(systemName: "arrow.clockwise")
+                        ZStack {
+                            Circle()
+                                .fill(WebTheme.card)
+                                .frame(width: 34, height: 34)
+                            Circle()
+                                .strokeBorder(WebTheme.border, lineWidth: 1)
+                                .frame(width: 34, height: 34)
+                            if appState.isRefreshing {
+                                ProgressView()
+                                    .scaleEffect(0.75)
+                                    .tint(WebTheme.muted)
+                            } else {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(WebTheme.muted)
+                            }
                         }
                     }
                     .accessibilityLabel("刷新车况")
                     .disabled(appState.isRefreshing)
                 }
             }
-            .refreshable {
-                await appState.refreshStatus()
-            }
+            .toolbarBackground(.automatic, for: .navigationBar)
+            .navigationBarTitleDisplayMode(.inline)
             .toast(viewModel.toast)
             .onChange(of: viewModel.toast) { _, newValue in
                 if newValue != nil {
@@ -113,58 +140,69 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - 车辆头部
-
-    private var carHeader: some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(appState.carName)
-                    .font(.title3.bold())
-                Text("更新于 \(updatedTimeText)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Image(systemName: settings.carModelStyle.sfSymbol)
-                .font(.title2)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private var updatedTimeText: String {
-        guard let date = appState.statusUpdatedAt else { return "--" }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm:ss"
-        return formatter.string(from: date)
-    }
-
-    // MARK: - 车辆可视化
-
-    private func carVisual(status: CarStatus) -> some View {
-        SectionCard {
-            CarVisualView(style: settings.carModelStyle, isUnlocked: status.doorUnlocked)
-                .padding(.horizontal, 8)
-            HStack {
-                Text(status.engineRunning ? "发动机已启动" : "发动机熄火")
-                    .font(.caption.bold())
-                    .foregroundStyle(status.engineRunning ? Color.red : Color.secondary)
-                Spacer()
-                Text(status.doorUnlocked ? "车门已解锁" : "车门已锁止")
-                    .font(.caption.bold())
-                    .foregroundStyle(status.doorUnlocked ? Color.orange : Color.green)
-            }
-        }
-    }
-
-    // MARK: - 状态旗标
-
-    private func stateFlagsCard(status: CarStatus) -> some View {
-        SectionCard(title: "车辆状态") {
-            let flags = status.stateFlags.flags
-            if flags.isEmpty {
-                FlagChip(text: "一切正常", systemImage: "checkmark.shield.fill", color: .green)
+    private var loadingOrEmpty: some View {
+        Group {
+            if appState.isRefreshing {
+                VStack(spacing: 14) {
+                    ProgressView()
+                        .tint(WebTheme.blue)
+                    Text("正在获取车况…")
+                        .font(.system(size: 13))
+                        .foregroundStyle(WebTheme.muted)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 60)
             } else {
-                FlowTagLayout(spacing: 8) {
+                EmptyStateView(
+                    systemImage: "antenna.radiowaves.left.and.right",
+                    title: "暂无车况数据",
+                    message: "下拉刷新，或点击右上角按钮重新获取"
+                )
+            }
+        }
+    }
+
+    // MARK: - 浮动车图（网页版 car-stage：车图浮动 + 椭圆阴影 + 车况标签 + 四轮胎压）
+
+    private func carStage(status: CarStatus) -> some View {
+        VStack(spacing: 0) {
+            GeometryReader { geo in
+                ZStack {
+                    // 四轮胎压小标签（网页版 .tpv，绝对定位于车图四角）
+                    tireBadge(status.tirePressures[0], label: "左前")
+                        .position(x: geo.size.width * 0.13, y: geo.size.height * 0.26)
+                    tireBadge(status.tirePressures[1], label: "右前")
+                        .position(x: geo.size.width * 0.87, y: geo.size.height * 0.26)
+                    tireBadge(status.tirePressures[2], label: "左后")
+                        .position(x: geo.size.width * 0.13, y: geo.size.height * 0.74)
+                    tireBadge(status.tirePressures[3], label: "右后")
+                        .position(x: geo.size.width * 0.87, y: geo.size.height * 0.74)
+
+                    CarVisualView(style: settings.carModelStyle, isUnlocked: status.doorUnlocked)
+                        .padding(.horizontal, 26)
+                        .carFloat()
+                }
+            }
+            .frame(height: 150)
+
+            // 椭圆阴影（网页版 .car-shadow：径向渐变椭圆呼吸）
+            Ellipse()
+                .fill(
+                    RadialGradient(
+                        colors: [Color(red: 15/255, green: 23/255, blue: 42/255).opacity(0.55), .clear],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: 60
+                    )
+                )
+                .frame(width: 190, height: 12)
+                .padding(.top, -4)
+                .opacity(0.9)
+
+            // 车况标签（网页版 carStateTags）
+            let flags = status.stateFlags.flags
+            if !flags.isEmpty {
+                HStack(spacing: 10) {
                     ForEach(Array(flags.enumerated()), id: \.offset) { _, flag in
                         FlagChip(
                             text: flag.text,
@@ -173,8 +211,243 @@ struct DashboardView: View {
                         )
                     }
                 }
+                .padding(.top, 8)
             }
         }
+        .padding(.top, 4)
+    }
+
+    /// 胎压小标签（网页版 .tpv：白底圆角小签 + 等宽数字）
+    private func tireBadge(_ tire: TirePressure, label: String) -> some View {
+        VStack(spacing: 1) {
+            Text(tire.valueKPa.map { "\(Int($0.rounded()))" } ?? "--")
+                .font(.system(size: 10.5, weight: .bold))
+                .monospacedDigit()
+                .foregroundStyle(tire.isLow ? WebTheme.red : WebTheme.txt)
+            Text(label)
+                .font(.system(size: 8))
+                .foregroundStyle(WebTheme.faint)
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 2)
+        .background(WebTheme.card)
+        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .strokeBorder(tire.isLow ? WebTheme.red.opacity(0.5) : WebTheme.border, lineWidth: 1)
+        )
+        .shadow(color: Color(red: 15/255, green: 23/255, blue: 42/255).opacity(0.1), radius: 4, x: 0, y: 1)
+        .accessibilityLabel("\(label)胎压 \(tire.valueKPa.map { "\(Int($0.rounded())) 千帕" } ?? "无数据")")
+    }
+
+    // MARK: - 车况卡（网页版 user-info-container：油量条 + 续航 + 里程 + 温度 + 电瓶条）
+
+    private func vehicleInfoCard(status: CarStatus) -> some View {
+        SectionCard {
+            VStack(spacing: 10) {
+                // 第一行：油量 + 续航
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Image(systemName: "fuelpump.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(WebTheme.amber)
+                    Text(CarStatus.format(status.fuelLeftLiters))
+                        .font(.system(size: 16, weight: .bold))
+                        .monospacedDigit()
+                        .foregroundStyle(WebTheme.txt)
+                    Text("L")
+                        .font(.system(size: 11))
+                        .foregroundStyle(WebTheme.faint)
+                    Text("\(fuelPercent(status.fuelLeftLiters))%")
+                        .font(.system(size: 11))
+                        .monospacedDigit()
+                        .foregroundStyle(WebTheme.muted)
+                    Spacer()
+                    Text(CarStatus.format(status.remainingRangeKm))
+                        .font(.system(size: 14, weight: .bold))
+                        .monospacedDigit()
+                        .foregroundStyle(WebTheme.txt)
+                    Text("km 续航")
+                        .font(.system(size: 10))
+                        .foregroundStyle(WebTheme.faint)
+                }
+                // 油量条（网页版 .ftrack）
+                WebTrack(
+                    fraction: (status.fuelLeftLiters ?? 0) / tankCapacityL,
+                    fill: LinearGradient(colors: [WebTheme.amber, WebTheme.amber.opacity(0.7)], startPoint: .leading, endPoint: .trailing),
+                    height: 5
+                )
+                // 总里程
+                HStack(spacing: 4) {
+                    Text("总里程")
+                        .font(.system(size: 11))
+                        .foregroundStyle(WebTheme.muted)
+                    Text(CarStatus.format(status.totalOdometerKm) + " km")
+                        .font(.system(size: 11, weight: .semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(WebTheme.txt)
+                    Spacer()
+                    Text("更新于 \(updatedTimeText)")
+                        .font(.system(size: 10))
+                        .monospacedDigit()
+                        .foregroundStyle(WebTheme.faint)
+                }
+                // 第二行：温度 + 电瓶
+                HStack(spacing: 12) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "thermometer.medium")
+                            .font(.system(size: 11))
+                            .foregroundStyle(WebTheme.blue)
+                        Text(CarStatus.format(status.vehicleTempC) + "°C")
+                            .font(.system(size: 11, weight: .semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(WebTheme.txt)
+                    }
+                    Spacer()
+                    HStack(spacing: 4) {
+                        Image(systemName: "bolt.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(voltageColor(status.batteryVoltage))
+                        Text(CarStatus.format(status.batteryVoltage) + "V")
+                            .font(.system(size: 11, weight: .bold))
+                            .monospacedDigit()
+                            .foregroundStyle(voltageColor(status.batteryVoltage))
+                    }
+                }
+                // 电瓶条（网页版 .btrack：11V~15V 区间）
+                WebTrack(
+                    fraction: ((status.batteryVoltage ?? 11) - 10.5) / 4.5,
+                    fill: LinearGradient(colors: [voltageColor(status.batteryVoltage)], startPoint: .leading, endPoint: .trailing),
+                    height: 4
+                )
+                // 空调设定
+                if status.acTempC != nil {
+                    HStack(spacing: 4) {
+                        Image(systemName: "snowflake")
+                            .font(.system(size: 11))
+                            .foregroundStyle(WebTheme.blue)
+                        Text("空调 \(CarStatus.format(status.acTempC))°C")
+                            .font(.system(size: 11, weight: .semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(WebTheme.txt)
+                        Spacer()
+                    }
+                }
+            }
+        }
+    }
+
+    private func fuelPercent(_ liters: Double?) -> Int {
+        guard let liters else { return 0 }
+        return Int(min(max((liters / tankCapacityL) * 100, 0), 100).rounded())
+    }
+
+    /// 电瓶电压告警：低于 11.8V 或高于 14.8V 视为异常（燃油车常见区间）
+    private func voltageColor(_ voltage: Double?) -> Color {
+        guard let voltage else { return WebTheme.green }
+        if voltage < 11.8 || voltage > 14.8 { return WebTheme.red }
+        return WebTheme.green
+    }
+
+    // MARK: - 快捷控车（网页版 quickCard：闪灯/开锁/闭锁/鸣笛，中间两个为描边大钮）
+
+    private var quickControlsCard: some View {
+        HStack(alignment: .top, spacing: 0) {
+            ForEach(Array(CarCommand.primaryCommands.enumerated()), id: \.element) { index, command in
+                ControlButtonView(
+                    command: command,
+                    isPrimary: command == .unlockDoor || command == .lockDoor,
+                    isExecuting: viewModel.executingCommand == command
+                ) {
+                    viewModel.execute(command)
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(.vertical, 14)
+        .padding(.horizontal, 8)
+        .webCard()
+    }
+
+    // MARK: - 更多指令（网页版 ctrlCard / moreGrid：5 列网格）
+
+    private var moreControlsCard: some View {
+        SectionCard(title: "更多控车", sakura: false) {
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 5),
+                spacing: 14
+            ) {
+                ForEach(Array(CarCommand.extraCommands.enumerated()), id: \.element) { _, command in
+                    CompactControlButton(
+                        command: command,
+                        isExecuting: viewModel.executingCommand == command
+                    ) {
+                        viewModel.execute(command)
+                    }
+                }
+            }
+            .padding(.top, 4)
+        }
+    }
+
+    // MARK: - 定位卡（网页版 locCard：地址 + 刷新 + 紫蓝渐变导航按钮）
+
+    private func locationCard(status: CarStatus) -> some View {
+        SectionCard(sakura: false) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(WebTheme.purple.opacity(0.12))
+                        .frame(width: 36, height: 36)
+                    Image(systemName: "location.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(WebTheme.purple)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("车辆位置")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(WebTheme.txt)
+                    Text(locationText(status))
+                        .font(.system(size: 11))
+                        .monospacedDigit()
+                        .foregroundStyle(WebTheme.muted)
+                        .lineLimit(1)
+                }
+                Spacer()
+                // 网页版 .nav-btn：紫蓝渐变胶囊
+                Button {
+                    viewModel.navigateToCar()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.triangle.turn.up.right.diamond")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text("导航")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 8)
+                    .background(WebTheme.navGradient)
+                    .clipShape(Capsule())
+                    .shadow(color: WebTheme.purple.opacity(0.3), radius: 12, x: 0, y: 4)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("导航到车辆位置")
+            }
+        }
+    }
+
+    private func locationText(_ status: CarStatus) -> String {
+        guard let location = status.location else { return "暂无位置信息" }
+        return String(format: "%.5f, %.5f", location.latitude, location.longitude)
+    }
+
+    // MARK: - 头部与杂项
+
+    private var updatedTimeText: String {
+        guard let date = appState.statusUpdatedAt else { return "--" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter.string(from: date)
     }
 
     private func flagSystemImage(key: String) -> String {
@@ -188,181 +461,33 @@ struct DashboardView: View {
 
     private func flagColor(key: String) -> Color {
         switch key {
-        case "door": return .orange
-        case "win": return .blue
-        case "engine": return .red
-        default: return .green
+        case "door": return WebTheme.amber
+        case "win": return WebTheme.blue
+        case "engine": return WebTheme.red
+        default: return WebTheme.green
         }
     }
-
-    // MARK: - 主控区
-
-    private var primaryControls: some View {
-        SectionCard(title: "快捷控车") {
-            LazyVGrid(
-                columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 4),
-                spacing: 20
-            ) {
-                ForEach(CarCommand.primaryCommands, id: \.self) { command in
-                    ControlButtonView(
-                        command: command,
-                        isPrimary: true,
-                        isExecuting: viewModel.executingCommand == command
-                    ) {
-                        viewModel.execute(command)
-                    }
-                }
-            }
-            .padding(.vertical, 8)
-
-            Button {
-                viewModel.showMoreControls = true
-            } label: {
-                HStack {
-                    Image(systemName: "square.grid.2x2.fill")
-                    Text("更多控车")
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                }
-                .font(.subheadline.bold())
-                .padding(12)
-                .background(Color(.tertiarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("更多控车指令")
-        }
-    }
-
-    // MARK: - 车况数值
-
-    private func statusTiles(status: CarStatus) -> some View {
-        SectionCard(title: "车况数据") {
-            LazyVGrid(
-                columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2),
-                spacing: 12
-            ) {
-                StatusTile(
-                    title: "剩余续航",
-                    value: CarStatus.format(status.remainingRangeKm),
-                    unit: "km",
-                    systemImage: "road.lanes",
-                    tint: .green
-                )
-                StatusTile(
-                    title: "剩余油量",
-                    value: CarStatus.format(status.fuelLeftLiters),
-                    unit: "L",
-                    systemImage: "fuelpump",
-                    tint: .orange
-                )
-                StatusTile(
-                    title: "总里程",
-                    value: CarStatus.format(status.totalOdometerKm),
-                    unit: "km",
-                    systemImage: "speedometer"
-                )
-                StatusTile(
-                    title: "电瓶电压",
-                    value: CarStatus.format(status.batteryVoltage),
-                    unit: "V",
-                    systemImage: "bolt.fill",
-                    tint: voltageColor(status.batteryVoltage)
-                )
-                StatusTile(
-                    title: "车外温度",
-                    value: CarStatus.format(status.vehicleTempC),
-                    unit: "°C",
-                    systemImage: "thermometer.medium"
-                )
-                StatusTile(
-                    title: "空调设定",
-                    value: CarStatus.format(status.acTempC),
-                    unit: "°C",
-                    systemImage: "snowflake"
-                )
-            }
-        }
-    }
-
-    /// 电瓶电压告警：低于 11.8V 或高于 14.8V 视为异常（燃油车常见区间）
-    private func voltageColor(_ voltage: Double?) -> Color {
-        guard let voltage else { return .accentColor }
-        if voltage < 11.8 || voltage > 14.8 { return .red }
-        return .green
-    }
-
-    // MARK: - 胎压
-
-    private func tireCard(status: CarStatus) -> some View {
-        SectionCard(title: "胎压监测") {
-            LazyVGrid(
-                columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2),
-                spacing: 12
-            ) {
-                ForEach(status.tirePressures, id: \.label) { tire in
-                    StatusTile(
-                        title: tire.label + "胎压",
-                        value: CarStatus.format(tire.valueKPa),
-                        unit: "kPa",
-                        systemImage: tire.isLow ? "exclamationmark.tirepressure" : "circle.grid.cross",
-                        tint: tire.isLow ? .red : .accentColor
-                    )
-                }
-            }
-            if status.tirePressures.contains(where: \.isLow) {
-                Label("有轮胎胎压偏低，建议检查", systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption.bold())
-                    .foregroundStyle(.red)
-            }
-        }
-    }
-
-    // MARK: - 定位
-
-    private var locateButton: some View {
-        Button {
-            viewModel.navigateToCar()
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "location.fill")
-                Text("导航到车辆位置")
-                    .font(.subheadline.bold())
-            }
-            .frame(maxWidth: .infinity)
-            .padding(14)
-            .background(Color.accentColor.opacity(0.14))
-            .foregroundStyle(Color.accentColor)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("导航到车辆位置")
-    }
-
-    // MARK: - 错误横幅
 
     private func errorBanner(_ message: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
+                .foregroundStyle(WebTheme.amber)
             Text(message)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 12))
+                .foregroundStyle(WebTheme.muted)
             Spacer()
             Button {
                 appState.errorMessage = nil
             } label: {
                 Image(systemName: "xmark")
                     .font(.caption.bold())
+                    .foregroundStyle(WebTheme.faint)
             }
         }
         .padding(12)
-        .background(Color.orange.opacity(0.12))
+        .background(WebTheme.amber.opacity(0.10))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
-
-    // MARK: - 确认弹窗
 
     private var confirmBinding: Binding<Bool> {
         Binding(
@@ -377,73 +502,83 @@ struct DashboardView: View {
     }
 }
 
-/// 更多控车面板
+// MARK: - 紧凑型指令按钮（网页版 moreGrid 网格单元）
+
+struct CompactControlButton: View {
+    let command: CarCommand
+    var isExecuting = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                ZStack {
+                    Circle()
+                        .fill(WebTheme.card2)
+                        .frame(width: 40, height: 40)
+                    if isExecuting {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                            .tint(iconColor)
+                    } else {
+                        Image(systemName: command.sfSymbol)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(iconColor)
+                    }
+                }
+                Text(command.displayName)
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(WebTheme.muted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .frame(maxWidth: .infinity)
+            .accessibilityLabel("\(command.displayName)\(command.isDangerous ? "，高危操作" : "")")
+        }
+        .buttonStyle(.plain)
+        .disabled(isExecuting)
+    }
+
+    private var iconColor: Color {
+        command.isDangerous ? WebTheme.amber : WebTheme.blue
+    }
+}
+
+/// 更多控车面板（保留入口，快捷排已含全部指令；此面板作为全量指令备用）
 struct MoreControlsSheet: View {
     @ObservedObject var viewModel: DashboardViewModel
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                LazyVGrid(
-                    columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 4),
-                    spacing: 20
-                ) {
-                    ForEach(CarCommand.extraCommands, id: \.self) { command in
-                        ControlButtonView(
-                            command: command,
-                            isExecuting: viewModel.executingCommand == command
-                        ) {
-                            viewModel.execute(command)
+            ZStack {
+                WebConsoleBackground()
+                ScrollView {
+                    LazyVGrid(
+                        columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4),
+                        spacing: 18
+                    ) {
+                        ForEach(Array(CarCommand.extraCommands.enumerated()), id: \.element) { _, command in
+                            CompactControlButton(
+                                command: command,
+                                isExecuting: viewModel.executingCommand == command
+                            ) {
+                                viewModel.execute(command)
+                            }
                         }
                     }
+                    .padding(20)
                 }
-                .padding(20)
             }
             .navigationTitle("更多控车")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("完成") { dismiss() }
+                        .foregroundStyle(WebTheme.blue)
                 }
             }
         }
         .presentationDetents([.medium, .large])
-    }
-}
-
-/// 流式标签布局（状态旗标换行）
-struct FlowTagLayout: Layout {
-    var spacing: CGFloat = 8
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let maxWidth = proposal.width ?? .infinity
-        var x = 0.0, y = 0.0, rowHeight = 0.0
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x + size.width > maxWidth, x > 0 {
-                x = 0
-                y += rowHeight + spacing
-                rowHeight = 0
-            }
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
-        }
-        return CGSize(width: maxWidth, height: y + rowHeight)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x = bounds.minX, y = bounds.minY, rowHeight = 0.0
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x + size.width > bounds.maxX, x > bounds.minX {
-                x = bounds.minX
-                y += rowHeight + spacing
-                rowHeight = 0
-            }
-            subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
-        }
     }
 }

@@ -19,6 +19,8 @@ struct SettingsView: View {
                 clubProfileSection
                 aboutSection
             }
+            .scrollContentBackground(.hidden)
+            .background(WebConsoleBackground())
             .navigationTitle("我的")
             .navigationBarTitleDisplayMode(.inline)
             .alert("退出登录", isPresented: $showLogoutConfirm) {

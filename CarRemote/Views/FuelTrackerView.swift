@@ -30,7 +30,7 @@ struct FuelTrackerView: View {
                 }
                 .padding(16)
             }
-            .background(Color(.systemBackground))
+            .background(WebConsoleBackground())
             .navigationTitle("油耗统计")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

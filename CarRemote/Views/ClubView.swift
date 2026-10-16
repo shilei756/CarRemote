@@ -45,7 +45,7 @@ struct ClubView: View {
                 }
                 .padding(16)
             }
-            .background(Color(.systemBackground))
+            .background(WebConsoleBackground())
             .navigationTitle("玩车圈子")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -298,7 +298,7 @@ struct PublishSheet: View {
                 }
                 .padding(16)
             }
-            .background(Color(.systemBackground))
+            .background(WebConsoleBackground())
             .navigationTitle("发布动态")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
