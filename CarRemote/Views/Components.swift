@@ -1,4 +1,5 @@
 import SwiftUI
+import CarCore
 
 // MARK: - 卡片容器
 
@@ -206,11 +207,11 @@ struct CarVisualView: View {
         let w = size.width
         let h = size.height
         path.addRoundedRect(
-            CGRect(x: w * 0.38, y: h * 0.33, width: w * 0.18, height: h * 0.17),
+            in: CGRect(x: w * 0.38, y: h * 0.33, width: w * 0.18, height: h * 0.17),
             cornerSize: CGSize(width: 4, height: 4)
         )
         path.addRoundedRect(
-            CGRect(x: w * 0.58, y: h * 0.33, width: w * 0.10, height: h * 0.17),
+            in: CGRect(x: w * 0.58, y: h * 0.33, width: w * 0.10, height: h * 0.17),
             cornerSize: CGSize(width: 4, height: 4)
         )
         return path

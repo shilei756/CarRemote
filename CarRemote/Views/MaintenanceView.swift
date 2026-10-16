@@ -56,7 +56,7 @@ struct MaintenanceView: View {
     private var upcomingCard: some View {
         SectionCard(title: "保养提醒") {
             VStack(spacing: 10) {
-                ForEach(viewModel.upcoming) { record in
+                ForEach(viewModel.upcoming, id: \.id) { record in
                     HStack(spacing: 10) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(.orange)

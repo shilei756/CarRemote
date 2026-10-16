@@ -28,7 +28,7 @@ struct MainTabView: View {
                     Label("我的", systemImage: "person.crop.circle.fill")
                 }
         }
-        .tint(.accentColor)
+        .tint(Color.accentColor)
     }
 }
 
@@ -333,7 +333,7 @@ struct DashboardView: View {
             .frame(maxWidth: .infinity)
             .padding(14)
             .background(Color.accentColor.opacity(0.14))
-            .foregroundStyle(.accentColor)
+            .foregroundStyle(Color.accentColor)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)

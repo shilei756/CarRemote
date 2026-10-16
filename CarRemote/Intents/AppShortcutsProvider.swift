@@ -1,4 +1,5 @@
 import AppIntents
+import CarCore
 
 /// Siri 语音短语（"Hey Siri，用远程控车解锁车辆"）。
 ///

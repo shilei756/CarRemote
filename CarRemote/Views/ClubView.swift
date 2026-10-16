@@ -117,7 +117,7 @@ struct PostCard: View {
                         .clipShape(Circle())
                     } else {
                         Image(systemName: "person.fill")
-                            .foregroundStyle(.accentColor)
+                            .foregroundStyle(Color.accentColor)
                     }
                 }
                 VStack(alignment: .leading, spacing: 2) {
@@ -129,7 +129,7 @@ struct PostCard: View {
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .background(Color.accentColor.opacity(0.12))
-                            .foregroundStyle(.accentColor)
+                            .foregroundStyle(Color.accentColor)
                             .clipShape(Capsule())
                         if !post.timeText.isEmpty {
                             Text(post.timeText)
