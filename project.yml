@@ -31,11 +31,15 @@ attributes:
 
 settings:
   base:
-    # ---- 签名（主 App 与共享框架共用同一证书与描述文件）----
+    # ---- 签名（证书与团队对所有目标生效）----
+    # 注意：PROVISIONING_PROFILE_SPECIFIER 不放在工程级——
+    # 框架目标（CarCore）不支持描述文件，放在工程级会被它继承
+    # 并触发 Xcode 报错「CarCore does not support provisioning profiles」。
+    # 主 App 的描述文件在下方 CarRemote 目标里单独声明，
+    # 小组件扩展的描述文件在 project.widget.yml 的 CarWidget 目标里声明。
     DEVELOPMENT_TEAM: 7NSH43RT4Z
     CODE_SIGN_STYLE: Manual
     CODE_SIGN_IDENTITY: "iPhone Distribution: Akbahri Naquibullah (7NSH43RT4Z)"
-    PROVISIONING_PROFILE_SPECIFIER: 405fd63f-be4d-4d47-b6b6-bbae20fc8986
     # ---- 通用构建设置 ----
     SWIFT_VERSION: "5.0"
     SWIFT_STRICT_CONCURRENCY: minimal
@@ -68,6 +72,10 @@ targets:
         PRODUCT_NAME: CarRemote
         INFOPLIST_FILE: CarRemote/Info.plist
         CODE_SIGN_ENTITLEMENTS: CarRemote/CarRemote.entitlements
+        # 主 App 描述文件 UUID（Ad Hoc，已登记 1 台设备）。
+        # 不放在工程级的原因见上方注释：框架目标不能带描述文件。
+        # CI 会用 security cms 动态提取真实 UUID 后 sed 替换这里的占位值。
+        PROVISIONING_PROFILE_SPECIFIER: 405fd63f-be4d-4d47-b6b6-bbae20fc8986
         # 显式覆盖 XcodeGen 预设：application_iOS 预设默认注入
         # CODE_SIGN_IDENTITY="iPhone Developer"、平台预设注入
         # TARGETED_DEVICE_FAMILY="1,2"，目标级会覆盖工程级，必须在这里显式声明
@@ -100,6 +108,12 @@ targets:
         DEFINES_MODULE: YES
         GENERATE_INFOPLIST_FILES: YES
         CODE_SIGN_ENTITLEMENTS: CarCore/CarCore.entitlements
+        # 框架目标不使用描述文件：框架随 App 一起签名，自身没有
+        # Provisioning Profile 概念。工程级 PROVISIONING_PROFILE_SPECIFIER
+        # 会被框架继承并触发 Xcode 报错
+        # 「CarCore does not support provisioning profiles」，
+        # 因此在这里显式清空（空字符串覆盖工程级设置）。
+        PROVISIONING_PROFILE_SPECIFIER: ""
         # 显式覆盖 framework 预设注入的 CODE_SIGN_IDENTITY="" 与
         # 平台预设的 TARGETED_DEVICE_FAMILY="1,2"
         CODE_SIGN_IDENTITY: "iPhone Distribution: Akbahri Naquibullah (7NSH43RT4Z)"

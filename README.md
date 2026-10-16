@@ -175,7 +175,7 @@ open CarRemote.xcodeproj
 | --- | --- |
 | 站点地址 / 联系 QQ | `CarCore/Config/APIConfig.swift` |
 | 加一条控车指令 | `CarCore/Models/CarModels.swift` + `CarCore/Intents/CarControlIntents.swift` + `CarRemote/Intents/AppShortcutsProvider.swift` |
-| 换主 App 证书 / 描述文件 | 改 `project.yml` 里的 `CODE_SIGN_IDENTITY`（共 3 处：工程级 + CarRemote + CarCore）与 `PROVISIONING_PROFILE_SPECIFIER`；小组件改 `project.widget.yml`（CI 会用上传的描述文件自动覆盖 UUID，证书名需手动改） |
+| 换主 App 证书 / 描述文件 | 改 `project.yml` 里的 `CODE_SIGN_IDENTITY`（共 3 处：工程级 + CarRemote + CarCore）与 `PROVISIONING_PROFILE_SPECIFIER`（仅 CarRemote 目标级，框架目标不能带描述文件）；小组件改 `project.widget.yml`（CI 会用上传的描述文件自动覆盖 UUID，证书名需手动改） |
 | 小组件开关 / 描述文件 | `project.widget.yml` + Secret `PROVISIONING_PROFILE_WIDGET_BASE64` |
 | 换 App 图标 | 替换 `CarRemote/Assets.xcassets/AppIcon.appiconset/AppIcon.png`（1024×1024） |
 | 主题色 | `CarRemote/Assets.xcassets/AccentColor.colorset/Contents.json` |
