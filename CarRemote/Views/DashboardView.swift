@@ -106,11 +106,11 @@ struct DashboardView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     // 网页版车名长方形：点击可 DIY 自定义名称
                     Button {
-                        nameDraft = appState.customCarName.isEmpty ? appState.carName : appState.customCarName
+                        nameDraft = appState.customCarName
                         showNameEditor = true
                     } label: {
                         HStack(spacing: 6) {
-                            Text(appState.carName)
+                            Text(appState.carName.isEmpty ? "我的爱车" : appState.carName)
                                 .font(.system(size: 15, weight: .bold))
                                 .foregroundStyle(WebTheme.txt)
                                 .lineLimit(1)
@@ -159,14 +159,49 @@ struct DashboardView: View {
             }
             .toolbarBackground(.automatic, for: .navigationBar)
             .navigationBarTitleDisplayMode(.inline)
-            .alert("车辆名称", isPresented: $showNameEditor) {
-                TextField("给爱车起个名字", text: $nameDraft)
-                Button("保存") {
-                    appState.customCarName = nameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+            .sheet(isPresented: $showNameEditor) {
+                // 弹窗内 TextField 绑定在 iOS 上时序不稳，改用 sheet 表单保证写入可靠
+                VStack(spacing: 16) {
+                    Text("车辆名称")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(WebTheme.txt)
+                        .padding(.top, 24)
+                    TextField("给爱车起个名字", text: $nameDraft)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 15))
+                        .padding(.horizontal, 20)
+                    Text("留空则显示官网车辆原名")
+                        .font(.system(size: 11))
+                        .foregroundStyle(WebTheme.faint)
+                    HStack(spacing: 12) {
+                        Button {
+                            showNameEditor = false
+                        } label: {
+                            Text("取消")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(WebTheme.muted)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(WebTheme.card2)
+                                .clipShape(Capsule())
+                        }
+                        Button {
+                            appState.customCarName = nameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                            showNameEditor = false
+                        } label: {
+                            Text("保存")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(WebTheme.blue)
+                                .clipShape(Capsule())
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    Spacer()
                 }
-                Button("取消", role: .cancel) {}
-            } message: {
-                Text("留空则显示官网车辆原名")
+                .presentationDetents([.height(260)])
             }
             .toast(viewModel.toast)
             .onChange(of: viewModel.toast) { _, newValue in
@@ -244,7 +279,6 @@ struct DashboardView: View {
         VStack(spacing: 0) {
             CarVisualView(style: settings.carModelStyle, isUnlocked: status.doorUnlocked)
                 .padding(.horizontal, 20)
-                .carFloat()
 
             // 椭圆阴影（网页版 .car-shadow：径向渐变椭圆呼吸）
             Ellipse()
