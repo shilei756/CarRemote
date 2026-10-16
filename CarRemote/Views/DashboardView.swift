@@ -64,7 +64,7 @@ struct DashboardView: View {
                 WebConsoleBackground()
                 ScrollView {
                     VStack(spacing: 12) {
-                        // 车名 DIY 胶囊（放在内容区第一行：iOS 26 导航栏会把按钮重塑成图标导致文字被裁）
+                        // 顶部行：车名 DIY 胶囊 + 刷新钮齐平（iOS 26 导航栏会把按钮重塑成图标导致文字被裁，故放内容区）
                         HStack {
                             Button {
                                 nameDraft = appState.customCarName
@@ -92,6 +92,30 @@ struct DashboardView: View {
                             .buttonStyle(.plain)
                             .accessibilityLabel("编辑车辆名称")
                             Spacer()
+                            // 网页版 .icon-round 圆形刷新钮（与车名同行齐平）
+                            Button {
+                                Task { await appState.refreshStatus() }
+                            } label: {
+                                ZStack {
+                                    Circle()
+                                        .fill(.clear)
+                                        .frame(width: 34, height: 34)
+                                    Circle()
+                                        .strokeBorder(WebTheme.border, lineWidth: 1)
+                                        .frame(width: 34, height: 34)
+                                    if appState.isRefreshing {
+                                        ProgressView()
+                                            .scaleEffect(0.75)
+                                            .tint(WebTheme.muted)
+                                    } else {
+                                        Image(systemName: "arrow.clockwise")
+                                            .font(.system(size: 14, weight: .bold))
+                                            .foregroundStyle(WebTheme.txt)
+                                    }
+                                }
+                            }
+                            .accessibilityLabel("刷新车况")
+                            .disabled(appState.isRefreshing)
                         }
                         .padding(.top, 2)
                         if let errorMessage = appState.errorMessage {
@@ -132,36 +156,7 @@ struct DashboardView: View {
                 }
             }
             }
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    // 网页版 .icon-round 圆形刷新钮
-                    Button {
-                        Task { await appState.refreshStatus() }
-                    } label: {
-                        ZStack {
-                            Circle()
-                                .fill(.clear)
-                                .frame(width: 34, height: 34)
-                            Circle()
-                                .strokeBorder(WebTheme.border, lineWidth: 1)
-                                .frame(width: 34, height: 34)
-                            if appState.isRefreshing {
-                                ProgressView()
-                                    .scaleEffect(0.75)
-                                    .tint(WebTheme.muted)
-                            } else {
-                                Image(systemName: "arrow.clockwise")
-                                    .font(.system(size: 14, weight: .bold))
-                                    .foregroundStyle(WebTheme.txt)
-                            }
-                        }
-                    }
-                    .accessibilityLabel("刷新车况")
-                    .disabled(appState.isRefreshing)
-                }
-            }
-            .toolbarBackground(.automatic, for: .navigationBar)
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarHidden(true)
             .sheet(isPresented: $showNameEditor) {
                 // 弹窗内 TextField 绑定在 iOS 上时序不稳，改用 sheet 表单保证写入可靠
                 VStack(spacing: 16) {
