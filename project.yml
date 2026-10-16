@@ -1,0 +1,132 @@
+# =============================================================
+# CarRemote「远程控车」原生 App — XcodeGen 工程定义（主 spec）
+#
+# 为什么用 XcodeGen：CI 里一条命令生成标准 Xcode 工程，
+# 避免手写 pbxproj 出错。本地如需打开：brew install xcodegen && xcodegen
+#
+# 签名说明（手动签名）：
+#   - 证书：iPhone Distribution: Akbahri Naquibullah (7NSH43RT4Z)
+#   - 主 App 描述文件 UUID：405fd63f-be4d-4d47-b6b6-bbae20fc8986
+#     （Ad Hoc，已登记 1 台设备；换描述文件时改下面这一行）
+#   - 小组件扩展需要「另一个」描述文件（App ID 不同，见 README），
+#     定义在 project.widget.yml 中，由 CI 按需加载：
+#       INCLUDE_WIDGET=true xcodegen   → 生成含小组件的三目标工程
+#       xcodegen                       → 只生成 App + CarCore（无小组件）
+#
+# CI 会先用 `security cms` 从上传的描述文件里动态提取真实 UUID
+# 再 sed 替换下面的占位 UUID，因此后台重新生成描述文件无需改这里。
+# =============================================================
+name: CarRemote
+
+options:
+  bundleIdPrefix: app.copper1249
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+  transitivelyLinkDependencies: false
+
+attributes:
+  LastSwiftUpdateCheck: "1800.0"
+  LastUpgradeCheck: "1800.0"
+
+settings:
+  base:
+    # ---- 签名（主 App 与共享框架共用同一证书与描述文件）----
+    DEVELOPMENT_TEAM: 7NSH43RT4Z
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "iPhone Distribution: Akbahri Naquibullah (7NSH43RT4Z)"
+    PROVISIONING_PROFILE_SPECIFIER: 405fd63f-be4d-4d47-b6b6-bbae20fc8986
+    # ---- 通用构建设置 ----
+    SWIFT_VERSION: "5.0"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+    SDKROOT: iphoneos
+    TARGETED_DEVICE_FAMILY: "1"
+    ENABLE_BITCODE: NO
+    VALIDATE_PRODUCT: NO
+    CLANG_ENABLE_MODULES: YES
+    ALWAYS_SEARCH_USER_PATHS: NO
+
+targets:
+  # ================= 主 App =================
+  CarRemote:
+    type: application
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: CarRemote
+        excludes:
+          - "Info.plist"
+    dependencies:
+      - target: CarCore
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.copper1249.chipmunk6639
+        PRODUCT_NAME: CarRemote
+        INFOPLIST_FILE: CarRemote/Info.plist
+        CODE_SIGN_ENTITLEMENTS: CarRemote/CarRemote.entitlements
+        # 显式覆盖 XcodeGen 预设：application_iOS 预设默认注入
+        # CODE_SIGN_IDENTITY="iPhone Developer"、平台预设注入
+        # TARGETED_DEVICE_FAMILY="1,2"，目标级会覆盖工程级，必须在这里显式声明
+        CODE_SIGN_IDENTITY: "iPhone Distribution: Akbahri Naquibullah (7NSH43RT4Z)"
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILES: NO
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/Frameworks"
+      configs:
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+        Release: {}
+
+  # ================= 共享框架（App 与小组件共用）=================
+  CarCore:
+    type: framework
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: CarCore
+        excludes:
+          - "CarCore.entitlements"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.copper1249.chipmunk6639.CarCore
+        PRODUCT_MODULE_NAME: CarCore
+        DEFINES_MODULE: YES
+        GENERATE_INFOPLIST_FILES: YES
+        CODE_SIGN_ENTITLEMENTS: CarCore/CarCore.entitlements
+        # 显式覆盖 framework 预设注入的 CODE_SIGN_IDENTITY="" 与
+        # 平台预设的 TARGETED_DEVICE_FAMILY="1,2"
+        CODE_SIGN_IDENTITY: "iPhone Distribution: Akbahri Naquibullah (7NSH43RT4Z)"
+        TARGETED_DEVICE_FAMILY: "1"
+        SKIP_INSTALL: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/Frameworks"
+
+schemes:
+  CarRemote:
+    build:
+      targets:
+        CarRemote: all
+        CarCore: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+
+# 小组件扩展（含 CarWidget 目标、嵌入依赖与 Scheme 条目）：
+# 仅当环境变量 INCLUDE_WIDGET=true 时加载，否则生成无小组件版本。
+include:
+  - path: project.widget.yml
+    enable: ${INCLUDE_WIDGET}

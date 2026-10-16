@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  主 App 权限。
+  注意：这里的每一项都必须已包含在描述文件（405fd63f-...）的 Entitlements 中，
+  否则 CI 签名会失败。当前描述文件已包含：App Groups（group.6cd6b6c14418f98a.1~5）、
+  Siri、Keychain 共享组（7NSH43RT4Z.*）。
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.6cd6b6c14418f98a.1</string>
+	</array>
+	<key>com.apple.developer.siri</key>
+	<true/>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>7NSH43RT4Z.carremote</string>
+	</array>
+</dict>
+</plist>

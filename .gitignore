@@ -1,0 +1,16 @@
+# XcodeGen 生成物（CI 与本地都通过 `xcodegen` 重新生成，不要提交）
+CarRemote.xcodeproj/
+
+# macOS / Xcode 本地文件
+.DS_Store
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+DerivedData/
+
+# 本地签名材料（绝不入库）
+*.p12
+*.mobileprovision
+*.cer
+*.certSigningRequest
+base64.txt

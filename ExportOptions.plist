@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Ad Hoc 导出配置：配合「iPhone Distribution」证书 + 含设备 UDID 的描述文件，
+  产出的 IPA 可直接安装到描述文件登记的 iPhone（设置 → 通用 → VPN与设备管理 信任）。
+
+  provisioningProfiles 只需映射「App 与 App 扩展」的 Bundle ID：
+  - app.copper1249.chipmunk6639            主 App
+  - app.copper1249.chipmunk6639.CarWidget  小组件扩展（独立描述文件）
+  嵌入式框架（CarCore.framework）无需映射，导出时随 App 身份签名。
+
+  CI 会把两处 UUID 占位符替换成从上传的描述文件里动态提取的真实 UUID：
+  - 主 App：sed 替换 405fd63f-be4d-4d47-b6b6-bbae20fc8986（后台重生成描述文件时自动跟随）
+  - 小组件：sed 替换 WIDGET_PROFILE_UUID
+  无小组件构建时，CI 会自动移除 CarWidget 映射项。
+  将来若要上架 App Store，把 method 改为 app-store 并更换 App Store 分发描述文件。
+-->
+<plist version="1.0">
+<dict>
+	<key>method</key>
+	<string>ad-hoc</string>
+	<key>teamID</key>
+	<string>7NSH43RT4Z</string>
+	<key>signingStyle</key>
+	<string>manual</string>
+	<key>provisioningProfiles</key>
+	<dict>
+		<key>app.copper1249.chipmunk6639</key>
+		<string>405fd63f-be4d-4d47-b6b6-bbae20fc8986</string>
+		<key>app.copper1249.chipmunk6639.CarWidget</key>
+		<string>WIDGET_PROFILE_UUID</string>
+	</dict>
+	<key>destination</key>
+	<string>export</string>
+	<key>manageVersionAndBuildNumber</key>
+	<false/>
+</dict>
+</plist>

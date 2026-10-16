@@ -1,0 +1,60 @@
+# =============================================================
+# CarRemote 小组件扩展 spec（被 project.yml 条件 include）
+#
+# 加载条件：INCLUDE_WIDGET=true（CI 上传了小组件描述文件时自动设置）。
+#
+# 为什么单独一个文件：iOS 规定「每个扩展目标必须有自己独立的
+# App ID 与描述文件」。小组件的 Bundle ID 是
+# app.copper1249.chipmunk6639.CarWidget，与主 App 不同，
+# 因此需要单独在开发者后台注册 App ID 并生成 Ad Hoc 描述文件
+# （步骤见 README「创建小组件描述文件」）。
+#
+# 合并语义（XcodeGen）：
+#   - targets/CarRemote/dependencies 会与主 spec 的数组拼接
+#     → 最终为 [CarCore, CarWidget]
+#   - schemes/CarRemote/build/targets 为字典深合并
+#     → 最终包含 CarRemote / CarCore / CarWidget
+# =============================================================
+targets:
+  # ================= 桌面小组件扩展 =================
+  CarWidget:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: CarWidget
+        excludes:
+          - "Info.plist"
+    dependencies:
+      - target: CarCore
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.copper1249.chipmunk6639.CarWidget
+        PRODUCT_NAME: CarWidget
+        INFOPLIST_FILE: CarWidget/Info.plist
+        CODE_SIGN_ENTITLEMENTS: CarWidget/CarWidget.entitlements
+        # 显式覆盖平台预设注入的 TARGETED_DEVICE_FAMILY="1,2"；
+        # CODE_SIGN_IDENTITY 虽然 app-extension 预设不注入，也显式声明保持一致
+        CODE_SIGN_IDENTITY: "iPhone Distribution: Akbahri Naquibullah (7NSH43RT4Z)"
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILES: NO
+        SKIP_INSTALL: YES
+        # 小组件描述文件 UUID：由 CI 从 PROVISIONING_PROFILE_WIDGET_BASE64
+        # 动态提取后通过环境变量注入；本地开发时需自行 export。
+        PROVISIONING_PROFILE_SPECIFIER: ${WIDGET_PROFILE_UUID}
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/Frameworks"
+
+  # 主 App 追加对小组件的嵌入依赖（与主 spec 的 CarCore 依赖拼接）
+  CarRemote:
+    dependencies:
+      - target: CarWidget
+        embed: true
+
+schemes:
+  CarRemote:
+    build:
+      targets:
+        CarWidget: all

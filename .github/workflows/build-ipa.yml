@@ -1,0 +1,154 @@
+# =============================================================
+# CarRemote 云端构建流水线（GitHub Actions）
+#
+# 无需 Mac：push 代码后，GitHub 的 macOS 构建机自动编译并产出 IPA，
+# 在 Actions 运行记录页面底部 "Artifacts" 直接下载。
+#
+# 首次使用需要在仓库 Settings → Secrets and variables → Actions
+# 添加 Secret（见 README）：
+#   CERT_P12_BASE64                  证书 .p12 的 base64（必填）
+#   CERT_PASSWORD                    证书密码（当前为 1）（必填）
+#   PROVISIONING_PROFILE_BASE64      主 App 描述文件 base64（必填）
+#   PROVISIONING_PROFILE_WIDGET_BASE64  小组件描述文件 base64（选填）
+#
+# 说明：iOS 规定每个扩展目标必须有独立的 App ID 与描述文件。
+# 不提供小组件描述文件时，流水线自动降级为「无小组件」版本，
+# App / Siri / 车况 / 圈子等全部功能不受影响。
+# =============================================================
+name: Build IPA
+
+on:
+  workflow_dispatch: {}          # 手动触发：Actions 页面点 "Run workflow"
+  push:
+    branches: [main]
+    paths:
+      - "CarRemote/**"
+      - "CarCore/**"
+      - "CarWidget/**"
+      - "project.yml"
+      - "project.widget.yml"
+      - "ExportOptions.plist"
+      - ".github/workflows/**"
+
+concurrency:
+  group: build-ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-ipa:
+    name: 编译并导出 IPA
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 XcodeGen
+        run: brew install xcodegen
+
+      - name: 导入证书与描述文件
+        env:
+          CERT_P12_BASE64: ${{ secrets.CERT_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.CERT_PASSWORD }}
+          PROVISIONING_PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
+          PROVISIONING_PROFILE_WIDGET_BASE64: ${{ secrets.PROVISIONING_PROFILE_WIDGET_BASE64 }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PATH="$RUNNER_TEMP/carremote-build.keychain"
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+
+          # 1) 创建临时钥匙串并导入 p12
+          security create-keychain -p "" "$KEYCHAIN_PATH"
+          security set-keychain-settings -t 3600 -l "$KEYCHAIN_PATH"
+          security unlock-keychain -p "" "$KEYCHAIN_PATH"
+          printf '%s' "$CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" \
+            -P "$CERT_PASSWORD" -t cert -f pkcs12 -k "$KEYCHAIN_PATH" -A
+          security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" "$KEYCHAIN_PATH"
+
+          # 2) 安装主描述文件，并动态提取真实 UUID 回写 project.yml
+          #    （后台重新生成描述文件后 UUID 会变，这里自动跟随，无需改仓库文件）
+          printf '%s' "$PROVISIONING_PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/main.mobileprovision"
+          MAIN_UUID="$(security cms -D -i "$RUNNER_TEMP/main.mobileprovision" | plutil -extract UUID raw -o - -)"
+          echo "主 App 描述文件 UUID: $MAIN_UUID"
+          cp "$RUNNER_TEMP/main.mobileprovision" \
+            "$HOME/Library/MobileDevice/Provisioning Profiles/$MAIN_UUID.mobileprovision"
+          sed -i '' "s|405fd63f-be4d-4d47-b6b6-bbae20fc8986|$MAIN_UUID|g" project.yml
+
+          # 3) 小组件描述文件（选填）：安装 + 提取 UUID + 开启条件编译
+          if [ -n "${PROVISIONING_PROFILE_WIDGET_BASE64:-}" ]; then
+            printf '%s' "$PROVISIONING_PROFILE_WIDGET_BASE64" | base64 --decode > "$RUNNER_TEMP/widget.mobileprovision"
+            WIDGET_UUID="$(security cms -D -i "$RUNNER_TEMP/widget.mobileprovision" | plutil -extract UUID raw -o - -)"
+            echo "小组件描述文件 UUID: $WIDGET_UUID"
+            cp "$RUNNER_TEMP/widget.mobileprovision" \
+              "$HOME/Library/MobileDevice/Provisioning Profiles/$WIDGET_UUID.mobileprovision"
+            echo "INCLUDE_WIDGET=true" >> "$GITHUB_ENV"
+            echo "WIDGET_PROFILE_UUID=$WIDGET_UUID" >> "$GITHUB_ENV"
+            # 同步替换导出配置里的小组件 UUID 占位符
+            sed -i '' "s|WIDGET_PROFILE_UUID|$WIDGET_UUID|g" ExportOptions.plist
+            echo "::notice::已加载小组件描述文件，本次构建包含桌面小组件"
+          else
+            echo "::notice::未配置 PROVISIONING_PROFILE_WIDGET_BASE64，本次构建不含桌面小组件（其余功能不受影响）"
+          fi
+
+          # 4) 校验签名身份可用
+          echo "=== 可用签名身份 ==="
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH" || true
+
+      - name: 生成 Xcode 工程
+        run: |
+          set -euo pipefail
+          echo "INCLUDE_WIDGET=${INCLUDE_WIDGET:-false}"
+          xcodegen
+          grep -c "CarWidget" CarRemote.xcodeproj/project.pbxproj || true
+
+      - name: Archive 编译
+        run: |
+          set -euo pipefail
+          IDENTITY="$(security find-identity -v -p codesigning "$RUNNER_TEMP/carremote-build.keychain" \
+            | grep -o 'iPhone Distribution: [^"]*' | head -n 1)"
+          if [ -z "$IDENTITY" ]; then
+            echo "::error::未找到 iPhone Distribution 签名身份，请检查 Secrets 中的证书"
+            exit 1
+          fi
+          echo "使用签名身份: $IDENTITY"
+          xcodebuild archive \
+            -project CarRemote.xcodeproj \
+            -scheme CarRemote \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath "$RUNNER_TEMP/CarRemote.xcarchive" \
+            DEVELOPMENT_TEAM=7NSH43RT4Z \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="$IDENTITY"
+
+      - name: 导出 IPA
+        run: |
+          set -euo pipefail
+          # 无小组件构建时，从导出配置中移除小组件的映射项
+          if [ "${INCLUDE_WIDGET:-}" != "true" ]; then
+            python3 - <<'PYEOF'
+          import plistlib
+          path = "ExportOptions.plist"
+          with open(path, "rb") as f:
+              options = plistlib.load(f)
+          options.get("provisioningProfiles", {}).pop("app.copper1249.chipmunk6639.CarWidget", None)
+          with open(path, "wb") as f:
+              plistlib.dump(options, f)
+          print("已移除小组件导出映射（无小组件构建）")
+          PYEOF
+          fi
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/CarRemote.xcarchive" \
+            -exportPath "$RUNNER_TEMP/ipa" \
+            -exportOptionsPlist ExportOptions.plist
+          ls -lh "$RUNNER_TEMP/ipa"
+
+      - name: 上传 IPA 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: CarRemote-ipa
+          path: ${{ runner.temp }}/ipa/CarRemote.ipa
+          if-no-files-found: error
+          retention-days: 14
