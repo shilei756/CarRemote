@@ -165,43 +165,17 @@ public enum ACService {
         }
 
         // 3. 站内登录：授权码换取开放平台凭证。
-        //    关键：只有走「授权码登录」的 access_token 才带车控（car-control）权限；
-        //    库存 refresh_token 直接刷新出的 token scope 只有 car_info/user，
+        //    /api/open/login 返回 {"success":true,"synced":true,"refresh_token":"..."}：
+        //    服务端已用授权码做完整登录并保存新凭证（synced=true），
+        //    用它返回的新 refresh_token 去 oauth 刷新，得到的 token 才带车控权限；
+        //    库存旧 refresh_token 刷出的 token scope 只有 car_info/user，
         //    下发指令会被网关拒绝（code=40001 服务未注册）。
-        //    /api/open/login 服务端会用授权码做完整登录并保存新凭证。
         var accessToken = ""
         var chain = ""
         var diag = ""   // 诊断：链路 + 各接口原始返回
-        do {
-            let loginObject = try await APIClient.postJSON(
-                URL(string: APIConfig.siteBaseURL + "/api/open/login")!,
-                json: ["phone": credentials.phone, "authorize_token": authorizeToken]
-            )
-            let loginRaw = (try? JSONSerialization.data(withJSONObject: loginObject)).flatMap { String(data: $0, encoding: .utf8) } ?? "?"
-            if let loginDict = loginObject as? [String: Any],
-               loginDict.bool("success") == true,
-               let token = loginDict.string("access_token"), !token.isEmpty {
-                accessToken = token
-                chain = "login"
-            }
-            diag += "login=\(String(loginRaw.prefix(160))); "
-        } catch {
-            diag += "login_err=\(error.localizedDescription); "
-        }
 
-        // 4. 登录链失败时退回库存 refresh_token 刷新（权限可能不足，但保底可查）
-        if accessToken.isEmpty {
-            chain = "refresh"
-            let tokenObject = try await APIClient.postJSON(
-                URL(string: APIConfig.siteBaseURL + "/api/open/token")!,
-                json: ["phone": credentials.phone, "authorize_token": authorizeToken]
-            )
-            guard let tokenDict = tokenObject as? [String: Any],
-                  tokenDict.bool("success") == true,
-                  let refreshToken = tokenDict.string("refresh_token"), !refreshToken.isEmpty else {
-                let message = (tokenObject as? [String: Any])?.string("message") ?? "空调尚未开通，请先扫码开通"
-                throw APIError.server(message)
-            }
+        // oauth 刷新：refresh_token → access_token
+        func oauthRefresh(_ refreshToken: String) async throws -> (String, String?) {
             let oauthForm = APIClient.formData([
                 ("redict_uri", ""),
                 ("refresh_token", refreshToken),
@@ -217,11 +191,48 @@ public enum ACService {
             )
             guard let oauthDict = oauthObject as? [String: Any],
                   let token = oauthDict.string("access_token"), !token.isEmpty else {
-                let message = (oauthObject as? [String: Any])?.string("error") ?? "开放平台凭证刷新失败，请重新扫码开通"
-                throw APIError.server("\(message) [\(diag)]")
+                let message = (oauthObject as? [String: Any])?.string("error") ?? "开放平台凭证刷新失败"
+                throw APIError.server(message)
             }
+            return (token, oauthDict.string("scope"))
+        }
+
+        // 3a. 优先：授权码登录链（新 refresh_token，带车控权限）
+        do {
+            let loginObject = try await APIClient.postJSON(
+                URL(string: APIConfig.siteBaseURL + "/api/open/login")!,
+                json: ["phone": credentials.phone, "authorize_token": authorizeToken]
+            )
+            let loginRaw = (try? JSONSerialization.data(withJSONObject: loginObject)).flatMap { String(data: $0, encoding: .utf8) } ?? "?"
+            diag += "login=\(String(loginRaw.prefix(120))); "
+            if let loginDict = loginObject as? [String: Any],
+               loginDict.bool("success") == true,
+               let newRefresh = loginDict.string("refresh_token"), !newRefresh.isEmpty {
+                let (token, scope) = try await oauthRefresh(newRefresh)
+                accessToken = token
+                chain = "login"
+                diag += "scope=\(scope ?? "?"); "
+            }
+        } catch {
+            diag += "login_err=\(error.localizedDescription); "
+        }
+
+        // 3b. 登录链失败时退回库存 refresh_token 刷新（权限可能不足，保底可查）
+        if accessToken.isEmpty {
+            chain = "refresh"
+            let tokenObject = try await APIClient.postJSON(
+                URL(string: APIConfig.siteBaseURL + "/api/open/token")!,
+                json: ["phone": credentials.phone, "authorize_token": authorizeToken]
+            )
+            guard let tokenDict = tokenObject as? [String: Any],
+                  tokenDict.bool("success") == true,
+                  let refreshToken = tokenDict.string("refresh_token"), !refreshToken.isEmpty else {
+                let message = (tokenObject as? [String: Any])?.string("message") ?? "空调尚未开通，请先扫码开通"
+                throw APIError.server(message)
+            }
+            let (token, scope) = try await oauthRefresh(refreshToken)
             accessToken = token
-            diag += "scope=\(oauthDict.string("scope") ?? "?"); "
+            diag += "scope=\(scope ?? "?"); "
         }
         diag += "chain=\(chain); "
 
