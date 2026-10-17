@@ -165,17 +165,10 @@ public enum ACService {
             throw APIError.server("未获取到车辆信息")
         }
 
-        // 3. 站内登录：授权码换取开放平台凭证。
-        //    /api/open/login 返回 {"success":true,"synced":true,"refresh_token":"..."}：
-        //    服务端已用授权码做完整登录并保存新凭证（synced=true），
-        //    用它返回的新 refresh_token 去 oauth 刷新，得到的 token 才带车控权限；
-        //    库存旧 refresh_token 刷出的 token scope 只有 car_info/user，
-        //    下发指令会被网关拒绝（code=40001 服务未注册）。
-        var accessToken = ""
-        var chain = ""
-        var diag = ""   // 诊断：链路 + 各接口原始返回
-
-        // oauth 刷新：refresh_token → access_token
+        // 3. 组装候选 token（按可能性排序，全部尝试）：
+        //    A. 网页版同款：/api/open/token(authorize) 的 refresh_token → oauth 刷新
+        //    B. /api/open/login 返回的 refresh_token → oauth 刷新
+        //    C. inCall 授权码直接当车控 token
         func oauthRefresh(_ refreshToken: String) async throws -> (String, String?) {
             let oauthForm = APIClient.formData([
                 ("redict_uri", ""),
@@ -192,89 +185,92 @@ public enum ACService {
             )
             guard let oauthDict = oauthObject as? [String: Any],
                   let token = oauthDict.string("access_token"), !token.isEmpty else {
-                let message = (oauthObject as? [String: Any])?.string("error") ?? "开放平台凭证刷新失败"
+                let message = (oauthObject as? [String: Any])?.string("error") ?? "刷新失败"
                 throw APIError.server(message)
             }
             return (token, oauthDict.string("scope"))
         }
 
-        // 3a. 优先：授权码登录链（新 refresh_token，带车控权限）
+        var tokenCandidates: [(label: String, token: String)] = []
+        var diag = ""
+
+        // A. 网页版同款链路
+        do {
+            let tokenObject = try await APIClient.postJSON(
+                URL(string: APIConfig.siteBaseURL + "/api/open/token")!,
+                json: ["phone": credentials.phone, "authorize_token": authorizeToken]
+            )
+            let raw = (try? JSONSerialization.data(withJSONObject: tokenObject)).flatMap { String(data: $0, encoding: .utf8) } ?? "?"
+            if let dict = tokenObject as? [String: Any], dict.bool("success") == true,
+               let rt = dict.string("refresh_token"), !rt.isEmpty {
+                let (token, scope) = try await oauthRefresh(rt)
+                tokenCandidates.append(("webtoken", token))
+                diag += "A.scope=\(scope ?? "?"); "
+            } else {
+                diag += "A.fail=\(String(raw.prefix(80))); "
+            }
+        } catch { diag += "A.err=\(error.localizedDescription); " }
+
+        // B. 登录链
         do {
             let loginObject = try await APIClient.postJSON(
                 URL(string: APIConfig.siteBaseURL + "/api/open/login")!,
                 json: ["phone": credentials.phone, "authorize_token": authorizeToken]
             )
-            let loginRaw = (try? JSONSerialization.data(withJSONObject: loginObject)).flatMap { String(data: $0, encoding: .utf8) } ?? "?"
-            diag += "login=\(String(loginRaw.prefix(120))); "
-            if let loginDict = loginObject as? [String: Any],
-               loginDict.bool("success") == true,
-               let newRefresh = loginDict.string("refresh_token"), !newRefresh.isEmpty {
-                let (token, scope) = try await oauthRefresh(newRefresh)
-                accessToken = token
-                chain = "login"
-                diag += "scope=\(scope ?? "?"); "
+            if let dict = loginObject as? [String: Any], dict.bool("success") == true,
+               let rt = dict.string("refresh_token"), !rt.isEmpty {
+                let (token, scope) = try await oauthRefresh(rt)
+                tokenCandidates.append(("logintoken", token))
+                diag += "B.scope=\(scope ?? "?"); "
             }
-        } catch {
-            diag += "login_err=\(error.localizedDescription); "
-        }
+        } catch { diag += "B.err=\(error.localizedDescription); " }
 
-        // 3b. 登录链失败时退回库存 refresh_token 刷新（权限可能不足，保底可查）
-        if accessToken.isEmpty {
-            chain = "refresh"
-            let tokenObject = try await APIClient.postJSON(
-                URL(string: APIConfig.siteBaseURL + "/api/open/token")!,
-                json: ["phone": credentials.phone, "authorize_token": authorizeToken]
-            )
-            guard let tokenDict = tokenObject as? [String: Any],
-                  tokenDict.bool("success") == true,
-                  let refreshToken = tokenDict.string("refresh_token"), !refreshToken.isEmpty else {
-                let message = (tokenObject as? [String: Any])?.string("message") ?? "空调尚未开通，请先扫码开通"
-                throw APIError.server(message)
-            }
-            let (token, scope) = try await oauthRefresh(refreshToken)
-            accessToken = token
-            diag += "scope=\(scope ?? "?"); "
-        }
-        diag += "chain=\(chain); "
+        // C. inCall 授权码直用
+        tokenCandidates.append(("authorizetoken", authorizeToken))
 
-        // 5. 下发指令（逐项对齐网页版 _newACGo：只带这几个头，不带 X-Requested-With）
-        //    对每个候选 carId 依次尝试，「服务未注册」(40001) 换下一辆，直到成功。
+        // 4. 下发：每个 token × 每个 carId 依次尝试，40001（服务未注册）换下一个组合
         guard let executeURL = URL(string: "https://open.iov.changan.com.cn/openc-apigw/vrtm-agent/api/v2/open/car-control/\(command.rawValue)") else {
             throw APIError.invalidURL
         }
-        let headers: [String: String] = [
-            "x-vcs-nonce": "WYYL",
-            "x-vcs-user-access-token": accessToken,
-            "x-vcs-timestamp": String(Int(Date().timeIntervalSince1970 * 1000)),
-            "Content-Type": "application/json; charset=utf-8",
-            "User-Agent": "okhttp/3.10.0"
-        ]
         var lastCode = ""
         var lastRaw = ""
         var lastMessage = "车辆未接受指令"
         var ok = false
-        for car in cars {
-            let body: [String: Any] = [
-                "mapArgsJson": "{}",
-                "senderType": "APP",
-                "cmd": command.rawValue,
-                "carId": car.carId
-            ]
-            let bodyData = try JSONSerialization.data(withJSONObject: body)
-            let (status, data) = try await APIClient.requestRaw(executeURL, method: "POST", headers: headers, body: bodyData)
-            let text = String(data: data, encoding: .utf8) ?? ""
-            let dict = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
-            ok = dict.bool("success") == true
-            lastMessage = dict.string("msg") ?? dict.string("message") ?? (ok ? "指令已发送" : "车辆未接受指令")
-            lastCode = dict["code"].map { "\($0)" } ?? "-"
-            lastRaw = String(text.prefix(120))
-            if ok || lastCode != "40001" { break }
+        var attemptLog = ""
+        outer: for candidate in tokenCandidates {
+            for car in cars {
+                let body: [String: Any] = [
+                    "mapArgsJson": "{}",
+                    "senderType": "APP",
+                    "cmd": command.rawValue,
+                    "carId": car.carId
+                ]
+                let bodyData = try JSONSerialization.data(withJSONObject: body)
+                let headers: [String: String] = [
+                    "x-vcs-nonce": "WYYL",
+                    "x-vcs-user-access-token": candidate.token,
+                    "x-vcs-timestamp": String(Int(Date().timeIntervalSince1970 * 1000)),
+                    "Content-Type": "application/json; charset=utf-8",
+                    "User-Agent": "okhttp/3.10.0"
+                ]
+                let (status, data) = try await APIClient.requestRaw(executeURL, method: "POST", headers: headers, body: bodyData)
+                let text = String(data: data, encoding: .utf8) ?? ""
+                let dict = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+                let code = dict["code"].map { "\($0)" } ?? "-"
+                ok = dict.bool("success") == true
+                lastMessage = dict.string("msg") ?? dict.string("message") ?? (ok ? "指令已发送" : "车辆未接受指令")
+                lastCode = code
+                lastRaw = String(text.prefix(100))
+                attemptLog += "\(candidate.label)/\(car.carId.suffix(6))=\(code);"
+                if ok { break outer }
+                if code != "40001" { break }
+            }
         }
         if !ok {
             let carIds = cars.map { $0.carId }.joined(separator: ",")
-            diag += "cars=\(carIds); "
+            diag += "cars=\(carIds); tries=\(attemptLog) "
             lastMessage = "\(lastMessage) [code=\(lastCode) \(diag)raw=\(lastRaw)]"
         }
-        return CommandResult(ok: ok, message: ok ? lastMessage : lastMessage)
+        return CommandResult(ok: ok, message: lastMessage)
     }
 }
