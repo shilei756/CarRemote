@@ -164,45 +164,60 @@ public enum ACService {
             throw APIError.server("未获取到车辆信息")
         }
 
-        // 2. 站内换取开放平台 refresh_token
-        guard let tokenURL = URL(string: APIConfig.siteBaseURL + "/api/open/token") else {
-            throw APIError.invalidURL
-        }
-        let tokenObject = try await APIClient.postJSON(tokenURL, json: [
-            "phone": credentials.phone,
-            "authorize_token": authorizeToken
-        ])
-        guard let tokenDict = tokenObject as? [String: Any],
-              tokenDict.bool("success") == true,
-              let refreshToken = tokenDict.string("refresh_token"), !refreshToken.isEmpty else {
-            let message = (tokenObject as? [String: Any])?.string("message") ?? "空调尚未开通，请先扫码开通"
-            throw APIError.server(message)
-        }
-
-        // 3. 开放平台刷新 access_token（必须 POST 表单；GET 会返回 405 method_not_allowed）
-        guard let oauthURL = URL(string: "https://open.iov.changan.com.cn/oauth/token") else {
-            throw APIError.invalidURL
-        }
-        let oauthForm = APIClient.formData([
-            ("redict_uri", ""),
-            ("refresh_token", refreshToken),
-            ("grant_type", "refresh_token"),
-            ("client_secret", "YjIzNWFmZDMxMzAwNDc4NQ=="),
-            ("client_id", "b235afd313004785bfde580c188c47bb")
-        ])
-        let oauthObject = try await APIClient.request(
-            oauthURL,
-            method: "POST",
-            headers: ["Content-Type": "application/x-www-form-urlencoded"],
-            body: oauthForm.data(using: String.Encoding.utf8)
-        )
-        guard let oauthDict = oauthObject as? [String: Any],
-              let accessToken = oauthDict.string("access_token"), !accessToken.isEmpty else {
-            let message = (oauthObject as? [String: Any])?.string("error") ?? "开放平台凭证刷新失败，请重新扫码开通"
-            throw APIError.server(message)
+        // 3. 站内登录：授权码换取开放平台凭证。
+        //    关键：只有走「授权码登录」的 access_token 才带车控（car-control）权限；
+        //    库存 refresh_token 直接刷新出的 token scope 只有 car_info/user，
+        //    下发指令会被网关拒绝（code=40001 服务未注册）。
+        //    /api/open/login 服务端会用授权码做完整登录并保存新凭证。
+        var accessToken = ""
+        do {
+            let loginObject = try await APIClient.postJSON(
+                URL(string: APIConfig.siteBaseURL + "/api/open/login")!,
+                json: ["phone": credentials.phone, "authorize_token": authorizeToken]
+            )
+            if let loginDict = loginObject as? [String: Any],
+               loginDict.bool("success") == true,
+               let token = loginDict.string("access_token"), !token.isEmpty {
+                accessToken = token
+            }
+        } catch {
+            // 登录链网络异常时退回 refresh 链
         }
 
-        // 4. 下发指令（逐项对齐网页版 _newACGo）
+        // 4. 登录链失败时退回库存 refresh_token 刷新（权限可能不足，但保底可查）
+        if accessToken.isEmpty {
+            let tokenObject = try await APIClient.postJSON(
+                URL(string: APIConfig.siteBaseURL + "/api/open/token")!,
+                json: ["phone": credentials.phone, "authorize_token": authorizeToken]
+            )
+            guard let tokenDict = tokenObject as? [String: Any],
+                  tokenDict.bool("success") == true,
+                  let refreshToken = tokenDict.string("refresh_token"), !refreshToken.isEmpty else {
+                let message = (tokenObject as? [String: Any])?.string("message") ?? "空调尚未开通，请先扫码开通"
+                throw APIError.server(message)
+            }
+            let oauthForm = APIClient.formData([
+                ("redict_uri", ""),
+                ("refresh_token", refreshToken),
+                ("grant_type", "refresh_token"),
+                ("client_secret", "YjIzNWFmZDMxMzAwNDc4NQ=="),
+                ("client_id", "b235afd313004785bfde580c188c47bb")
+            ])
+            let oauthObject = try await APIClient.request(
+                URL(string: "https://open.iov.changan.com.cn/oauth/token")!,
+                method: "POST",
+                headers: ["Content-Type": "application/x-www-form-urlencoded"],
+                body: oauthForm.data(using: String.Encoding.utf8)
+            )
+            guard let oauthDict = oauthObject as? [String: Any],
+                  let token = oauthDict.string("access_token"), !token.isEmpty else {
+                let message = (oauthObject as? [String: Any])?.string("error") ?? "开放平台凭证刷新失败，请重新扫码开通"
+                throw APIError.server(message)
+            }
+            accessToken = token
+        }
+
+        // 5. 下发指令（逐项对齐网页版 _newACGo：只带这几个头，不带 X-Requested-With）
         guard let executeURL = URL(string: "https://open.iov.changan.com.cn/openc-apigw/vrtm-agent/api/v2/open/car-control/\(command.rawValue)") else {
             throw APIError.invalidURL
         }
@@ -213,18 +228,13 @@ public enum ACService {
             "carId": car.carId
         ]
         let bodyData = try JSONSerialization.data(withJSONObject: body)
-        // 注意：不要合并 changanHeaders（它带 X-Requested-With: cn.com.changan.cvim
-        // 与 UA okhttp/4.9.0），网页版下发只带下面这几个头。
-        var headers: [String: String] = [
-            "Host": "open.iov.changan.com.cn",
+        let headers: [String: String] = [
             "x-vcs-nonce": "WYYL",
             "x-vcs-user-access-token": accessToken,
             "x-vcs-timestamp": String(Int(Date().timeIntervalSince1970 * 1000)),
             "Content-Type": "application/json; charset=utf-8",
             "User-Agent": "okhttp/3.10.0"
         ]
-        // iOS 的 URLSession 不允许自定义 Host，手动剔除避免请求被拒
-        headers.removeValue(forKey: "Host")
         let (status, data) = try await APIClient.requestRaw(executeURL, method: "POST", headers: headers, body: bodyData)
         let text = String(data: data, encoding: .utf8) ?? ""
         let dict = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
@@ -232,9 +242,8 @@ public enum ACService {
         var message = dict.string("msg") ?? dict.string("message")
             ?? (ok ? "指令已发送" : "车辆未接受指令")
         if !ok {
-            // 失败时附上诊断信息，便于定位（carId / 状态码 / 原始返回片段）
             let code = dict["code"].map { "\($0)" } ?? "-"
-            let snippet = String(text.prefix(160))
+            let snippet = String(text.prefix(120))
             message = "\(message) [code=\(code) http=\(status) car=\(car.carId) raw=\(snippet)]"
         }
         return CommandResult(ok: ok, message: message)
