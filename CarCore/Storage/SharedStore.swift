@@ -394,6 +394,7 @@ public enum SharedStore {
         static let appTheme = "carremote.appTheme"
         static let sakuraEnabled = "carremote.sakuraEnabled"
         static let acActivationExpire = "carremote.acActivationExpire"
+        static let acOpenRefreshToken = "carremote.acOpenRefreshToken"
         static let mythTheme = "carremote.mythTheme"
         static let customCarName = "carremote.customCarName"
     }
@@ -576,6 +577,17 @@ public enum SharedStore {
 
     public static func saveACActivationExpire(_ date: Date?) {
         defaults?.set(date, forKey: Key.acActivationExpire)
+    }
+
+    /// 开放平台最新 refresh_token（oauth 每次刷新都会轮换，必须存回本地，
+    /// 下次优先用最新的，否则长安会返回降级 token：scope 只剩 car_info/user）
+    public static func loadACOpenRefreshToken() -> String? {
+        let t = defaults?.string(forKey: Key.acOpenRefreshToken) ?? ""
+        return t.isEmpty ? nil : t
+    }
+
+    public static func saveACOpenRefreshToken(_ token: String?) {
+        defaults?.set(token ?? "", forKey: Key.acOpenRefreshToken)
     }
 
     /// 用户自定义车辆名称（左上角 DIY，空串表示跟随官网原名）

@@ -167,6 +167,10 @@ struct ACQRScanSheet: View {
                     case .authorized:
                         statusText = "✅ 开通成功！空调已可用"
                         statusColor = WebTheme.green
+                        // 保存授权成功返回的新鲜 refresh_token（首次刷新它才有车控权限）
+                        if let rt = status.refreshToken, !rt.isEmpty {
+                            SharedStore.saveACOpenRefreshToken(rt)
+                        }
                         onActivated()
                         return
                     }

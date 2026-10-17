@@ -209,10 +209,27 @@ public enum ACService {
                 let message = (oauthObject as? [String: Any])?.string("error") ?? "刷新失败"
                 throw APIError.server(message)
             }
+            // 关键：oauth 刷新会轮换 refresh_token，旧的立即作废（再刷只会拿到
+            // scope=car_info user 的降级 token）。必须把最新的存回本地。
+            if let rotated = oauthDict.string("refresh_token"), !rotated.isEmpty {
+                SharedStore.saveACOpenRefreshToken(rotated)
+            }
             return (token, oauthDict.string("scope"))
         }
 
         var tokenCandidates: [(label: String, token: String)] = []
+
+        // A0. 本地最新轮换 token（自己上次刷新存下的，最新鲜、优先）
+        if let localRT = SharedStore.loadACOpenRefreshToken() {
+            do {
+                let (token, scope) = try await oauthRefresh(localRT)
+                tokenCandidates.append(("localtoken", token))
+                diag += "A0.scope=\(scope ?? "?"); "
+            } catch {
+                diag += "A0.err=\(error.localizedDescription); "
+                SharedStore.saveACOpenRefreshToken(nil)  // 已失效，清掉
+            }
+        }
 
         // A. 网页版同款链路
         do {
