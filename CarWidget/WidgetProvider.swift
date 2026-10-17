@@ -56,8 +56,9 @@ struct CarWidgetProvider: TimelineProvider {
             }
         }
 
-        // 未登录时清掉旧快照，避免显示别人的车（数据隔离）
-        if credentials == nil { snapshot = nil }
+        // 只要能从任一通道读到快照就展示（即使凭据读不到，
+        // 按钮点击时会提示去 App 登录；这样能精确定位数据通道断在哪一环）
+        if credentials == nil { snapshot = snapshot /* 保留 */ }
 
         var commands = settings.widgetCommands
         if commands.count != 5 {
@@ -72,7 +73,7 @@ struct CarWidgetProvider: TimelineProvider {
             snapshot: snapshot,
             widgetCommands: commands,
             carStyle: settings.carModelStyle,
-            isLoggedIn: credentials != nil
+            isLoggedIn: credentials != nil || snapshot != nil
         )
     }
 

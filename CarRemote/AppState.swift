@@ -1,5 +1,6 @@
 import SwiftUI
 import CarCore
+import WidgetKit
 
 /// 全局状态机：登录 → 卡密体验网关 → 主界面。
 /// 白名单/封禁/卡密的判定逻辑与网页版保持一致。
@@ -151,6 +152,8 @@ final class AppState: ObservableObject {
             SharedStore.saveStatusSnapshot(StatusSnapshot(carName: car.displayName, status: status))
             applyCarName()
             errorMessage = nil
+            // 车况快照已更新，立即刷新桌面小组件
+            WidgetCenter.shared.reloadAllTimelines()
         } catch {
             // 任务被系统取消（切标签页/重复下拉/轮询重启）不视为网络故障，静默忽略
             if Task.isCancelled { return }
