@@ -46,34 +46,38 @@ private struct QuickControlButtons: View {
         HStack(spacing: 5) {
             ForEach(0..<5, id: \.self) { index in
                 let command = commands.indices.contains(index) ? CarCommand(rawValue: commands[index]) : nil
-                Button(intent: intent(for: index)) {
-                    VStack(spacing: 3) {
-                        Image(systemName: command?.sfSymbol ?? "questionmark")
-                            .font(.system(size: 13, weight: .semibold))
-                        Text(command?.displayName ?? "未设")
-                            .font(.system(size: 8.5, weight: .semibold))
-                            .lineLimit(1)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
-                    .background(buttonTint(command).opacity(0.16))
-                    .foregroundStyle(buttonTint(command))
-                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                }
-                .buttonStyle(.plain)
+                slotButton(index, command: command)
             }
         }
     }
 
     @ViewBuilder
-    private func intent(for index: Int) -> some AppIntent {
+    private func slotButton(_ index: Int, command: CarCommand?) -> some View {
         switch index {
-        case 0: WidgetSlot1Intent()
-        case 1: WidgetSlot2Intent()
-        case 2: WidgetSlot3Intent()
-        case 3: WidgetSlot4Intent()
-        default: WidgetSlot5Intent()
+        case 0: slotButtonBody(command, intent: WidgetSlot1Intent())
+        case 1: slotButtonBody(command, intent: WidgetSlot2Intent())
+        case 2: slotButtonBody(command, intent: WidgetSlot3Intent())
+        case 3: slotButtonBody(command, intent: WidgetSlot4Intent())
+        default: slotButtonBody(command, intent: WidgetSlot5Intent())
         }
+    }
+
+    private func slotButtonBody<I: AppIntent>(_ command: CarCommand?, intent: I) -> some View {
+        Button(intent: intent) {
+            VStack(spacing: 3) {
+                Image(systemName: command?.sfSymbol ?? "questionmark")
+                    .font(.system(size: 13, weight: .semibold))
+                Text(command?.displayName ?? "未设")
+                    .font(.system(size: 8.5, weight: .semibold))
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
+            .background(buttonTint(command).opacity(0.16))
+            .foregroundStyle(buttonTint(command))
+            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        }
+        .buttonStyle(.plain)
     }
 
     private func buttonTint(_ command: CarCommand?) -> Color {

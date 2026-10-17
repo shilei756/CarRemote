@@ -1,5 +1,6 @@
 import AppIntents
 import CarCore
+import WidgetKit
 
 /// 小组件 5 个可自定义按钮的执行逻辑：
 /// 按槽位读取 App 里配置的指令（设置 → 小组件按钮），
