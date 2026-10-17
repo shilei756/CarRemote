@@ -1,5 +1,6 @@
 import SwiftUI
 import WebKit
+import CarCore
 
 // MARK: - 网页版空调（稳定通道）
 // 直接内嵌站点的 user_info 页（带凭据自动登录）。
