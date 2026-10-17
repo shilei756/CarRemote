@@ -67,6 +67,20 @@ final class FuelViewModel: ObservableObject {
         persist()
     }
 
+    /// 更新一条记录（编辑后按 id 替换并重排）
+    func update(_ record: FuelRecord) {
+        if let index = records.firstIndex(where: { $0.id == record.id }) {
+            records[index] = record
+            records.sort { $0.odometerKm < $1.odometerKm }
+            persist()
+        }
+    }
+
+    func delete(_ record: FuelRecord) {
+        records.removeAll { $0.id == record.id }
+        persist()
+    }
+
     func delete(at offsets: IndexSet) {
         records.remove(atOffsets: offsets)
         persist()
@@ -120,6 +134,17 @@ final class MaintenanceViewModel: ObservableObject {
 
     func delete(at offsets: IndexSet) {
         records.remove(atOffsets: offsets)
+        persist()
+    }
+
+    /// 更新最近保养基准（修改上次保养用）
+    func updateFirst(_ record: MaintenanceRecord) {
+        if !records.isEmpty {
+            records[0] = record
+        } else {
+            records.append(record)
+        }
+        records.sort { $0.date > $1.date }
         persist()
     }
 

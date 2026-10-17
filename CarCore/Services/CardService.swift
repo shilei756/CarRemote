@@ -11,13 +11,20 @@ public enum CardService {
         public let todayOK: Bool
         public let expiryText: String?
         public let message: String?
+        /// 体验用户（卡密体验期）
+        public let experience: Bool
+        /// 体验剩余小时数（官网返回时才有）
+        public let expiryHours: Double?
 
-        public init(authorized: Bool, isRegular: Bool, todayOK: Bool, expiryText: String?, message: String?) {
+        public init(authorized: Bool, isRegular: Bool, todayOK: Bool, expiryText: String?, message: String?,
+                    experience: Bool = false, expiryHours: Double? = nil) {
             self.authorized = authorized
             self.isRegular = isRegular
             self.todayOK = todayOK
             self.expiryText = expiryText
             self.message = message
+            self.experience = experience
+            self.expiryHours = expiryHours
         }
     }
 
@@ -33,19 +40,27 @@ public enum CardService {
         }
         let isRegular = dict.bool("regular") ?? false
         let todayOK = dict.bool("today_ok") ?? false
-        let authorized = isRegular || todayOK
+        let experience = dict.bool("experience") ?? false
+        let authorized = isRegular || todayOK || experience
         var expiry: String?
         if let date = dict.string("card_exp_date"), !date.isEmpty {
             expiry = date
         } else if let mode = dict.string("card_exp_mode"), !mode.isEmpty {
             expiry = mode
         }
+        // 体验用户剩余小时数（候选键，官网未返回则为 nil）
+        let expHours = dict.double("experience_hours")
+            ?? dict.double("exp_hours")
+            ?? dict.double("hours_left")
+            ?? dict.double("card_exp_hours")
         return CardStatus(
             authorized: authorized,
             isRegular: isRegular,
             todayOK: todayOK,
             expiryText: expiry,
-            message: dict.string("message")
+            message: dict.string("message"),
+            experience: experience,
+            expiryHours: expHours
         )
     }
 

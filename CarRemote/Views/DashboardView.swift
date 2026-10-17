@@ -696,7 +696,7 @@ struct DashboardView: View {
                 moreToolTile(name: "车辆状态", symbol: "gauge.with.dots.needle.33percent", color: WebTheme.blue) {
                     viewModel.showEmbed = .vehicleStatus
                 }
-                moreToolTile(name: "360全景", symbol: "view.360", color: WebTheme.green) {
+                moreToolTile(name: "360全景", symbol: "camera.rotate", color: WebTheme.green) {
                     viewModel.showEmbed = .panorama
                 }
                 moreToolTile(name: "智能维保", symbol: "wrench.and.screwdriver", color: Color(hex: 0xea580c)) {

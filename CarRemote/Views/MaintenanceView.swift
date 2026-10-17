@@ -1,7 +1,7 @@
 import SwiftUI
 import CarCore
 
-/// 维保记录与提醒（本地记录）
+/// 智能维保（对照网页版模板：上次保养基准 + 行业标准周期的零部件状态网格）
 struct MaintenanceView: View {
     @EnvironmentObject private var appState: AppState
     @StateObject private var viewModel: MaintenanceViewModel
@@ -10,24 +10,16 @@ struct MaintenanceView: View {
         _viewModel = StateObject(wrappedValue: MaintenanceViewModel(appState: appState))
     }
 
-    @State private var showAddSheet = false
+    @State private var showEditLastService = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 12) {
-                    overviewCard
-                    if !viewModel.upcoming.isEmpty {
-                        upcomingCard
-                    }
-                    if viewModel.records.isEmpty {
-                        EmptyStateView(
-                            systemImage: "wrench.and.screwdriver",
-                            title: "还没有维保记录",
-                            message: "记录每次保养，到期自动提醒"
-                        )
-                    } else {
-                        recordsList
+                    headerCard
+                    partsGrid
+                    if !viewModel.records.isEmpty {
+                        recordsCard
                     }
                     Spacer(minLength: 32)
                 }
@@ -39,151 +31,215 @@ struct MaintenanceView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showAddSheet = true
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                    .accessibilityLabel("添加维保记录")
+                    Button("修改上次保养") { showEditLastService = true }
+                        .font(.system(size: 13, weight: .semibold))
                 }
             }
-            .sheet(isPresented: $showAddSheet) {
-                AddMaintenanceSheet(viewModel: viewModel)
+            .sheet(isPresented: $showEditLastService) {
+                EditLastServiceSheet(viewModel: viewModel)
             }
         }
     }
 
-    // MARK: - 概览卡（照搬网页版 mtOverview：总里程大数字 + 上次保养 + 下次徽章）
+    // MARK: - 行业标准保养周期（km 区间 / 天数区间，与网页版模板一致）
 
-    private var overviewCard: some View {
+    private struct PartSpec {
+        let name: String
+        let symbol: String
+        let kmInterval: Double
+        let dayInterval: Int
+    }
+
+    private let parts: [PartSpec] = [
+        PartSpec(name: "机油及机油滤清器", symbol: "drop.fill", kmInterval: 5000, dayInterval: 183),
+        PartSpec(name: "空调滤芯", symbol: "wind", kmInterval: 10000, dayInterval: 365),
+        PartSpec(name: "空气滤清器滤芯", symbol: "wind", kmInterval: 10000, dayInterval: 365),
+        PartSpec(name: "汽油滤清器", symbol: "arrow.down.circle", kmInterval: 20000, dayInterval: 731),
+        PartSpec(name: "火花塞", symbol: "bolt.fill", kmInterval: 20000, dayInterval: 731),
+        PartSpec(name: "制动液", symbol: "drop.triangle", kmInterval: 40000, dayInterval: 731),
+        PartSpec(name: "发动机冷却液", symbol: "thermometer.medium", kmInterval: 40000, dayInterval: 731)
+    ]
+
+    // MARK: - 顶部：总里程 / 上次保养里程 / 上次保养日期 + 两徽章
+
+    private var headerCard: some View {
         SectionCard(sakura: false) {
             VStack(alignment: .leading, spacing: 10) {
-                // 总里程 + 上次保养（网页版 flex items-end gap-4）
-                HStack(alignment: .bottom, spacing: 20) {
+                Text("总里程\(updatedSuffix)")
+                    .font(.system(size: 11))
+                    .foregroundStyle(WebTheme.muted)
+
+                HStack(alignment: .firstTextBaseline, spacing: 16) {
                     VStack(alignment: .leading, spacing: 2) {
+                        Text(viewModel.currentOdometerKm.map { CarStatus.format($0) } ?? "--")
+                            .font(.system(size: 26, weight: .bold))
+                            .monospacedDigit()
+                            .foregroundStyle(WebTheme.txt)
                         Text("当前总里程")
                             .font(.system(size: 10))
                             .foregroundStyle(WebTheme.muted)
-                        HStack(alignment: .firstTextBaseline, spacing: 2) {
-                            Text(CarStatus.format(viewModel.currentOdometerKm))
-                                .font(.system(size: 26, weight: .bold))
-                                .monospacedDigit()
-                                .foregroundStyle(WebTheme.txt)
-                            Text("km")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(WebTheme.faint)
-                        }
                     }
-                    Spacer()
-                    if let last = viewModel.records.first {
-                        VStack(alignment: .trailing, spacing: 2) {
-                            Text("上次保养")
-                                .font(.system(size: 10))
-                                .foregroundStyle(WebTheme.muted)
-                            Text("\(CarStatus.format(last.odometerKm)) km")
-                                .font(.system(size: 15, weight: .bold))
-                                .monospacedDigit()
-                                .foregroundStyle(WebTheme.txt)
-                            Text(dateText(last.date))
-                                .font(.system(size: 10))
-                                .monospacedDigit()
-                                .foregroundStyle(WebTheme.faint)
-                        }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(lastService.map { CarStatus.format($0.odometerKm) } ?? "--")
+                            .font(.system(size: 18, weight: .bold))
+                            .monospacedDigit()
+                            .foregroundStyle(WebTheme.txt)
+                        Text("上次保养里程")
+                            .font(.system(size: 10))
+                            .foregroundStyle(WebTheme.muted)
                     }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(lastService.map { dateText($0.date) } ?? "--")
+                            .font(.system(size: 18, weight: .bold))
+                            .monospacedDigit()
+                            .foregroundStyle(WebTheme.txt)
+                        Text("上次保养日期")
+                            .font(.system(size: 10))
+                            .foregroundStyle(WebTheme.muted)
+                    }
+                    Spacer(minLength: 0)
                 }
 
-                // 下次提醒徽章（网页版 mtNextBadges）
-                if !viewModel.upcoming.isEmpty {
+                // 徽章行：距下次保养 X km · 剩余 X 天（取最紧的机油周期）
+                if let last = lastService, let odo = viewModel.currentOdometerKm {
                     HStack(spacing: 8) {
-                        ForEach(Array(viewModel.upcoming.prefix(3).enumerated()), id: \.element.id) { _, record in
-                            HStack(spacing: 4) {
-                                Image(systemName: "clock.badge.exclamationmark")
-                                    .font(.system(size: 9))
-                                Text("\(record.item)")
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .lineLimit(1)
-                                Text(reminderShortText(record))
-                                    .font(.system(size: 9))
-                                    .monospacedDigit()
-                            }
-                            .foregroundStyle(WebTheme.amber)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(WebTheme.amber.opacity(0.10))
-                            .clipShape(Capsule())
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private func reminderShortText(_ record: MaintenanceRecord) -> String {
-        if let remaining = record.remainingKm(currentOdometerKm: viewModel.currentOdometerKm ?? 0) {
-            return remaining < 0 ? "超 \(CarStatus.format(abs(remaining)))km" : "剩 \(CarStatus.format(remaining))km"
-        }
-        if let nextDate = record.nextDate {
-            let days = Int(nextDate.timeIntervalSinceNow / 86400)
-            return days < 0 ? "超 \(abs(days))天" : "剩 \(days)天"
-        }
-        return ""
-    }
-
-    // MARK: - 临近提醒（网页版 amber 徽章行）
-
-    private var upcomingCard: some View {
-        SectionCard(title: "保养提醒", sakura: false) {
-            VStack(spacing: 8) {
-                // 注意：这里必须用 enumerated() 双参数闭包的写法。
-                // 直接用 ForEach(viewModel.upcoming, id: \.id) { record in }
-                // 会让 Swift 的类型检查器错选 Binding 重载
-                // （报 cannot convert [MaintenanceRecord] to Binding<C>），
-                // 与下方 recordsList 中的写法保持一致。
-                ForEach(Array(viewModel.upcoming.enumerated()), id: \.element.id) { _, record in
-                    HStack(spacing: 10) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 12))
-                            .foregroundStyle(WebTheme.amber)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(record.item)
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(WebTheme.txt)
-                            Text(reminderText(record))
-                                .font(.system(size: 11))
+                        let kmLeft = parts[0].kmInterval - (odo - last.odometerKm)
+                        HStack(spacing: 4) {
+                            Image(systemName: "bookmark.fill")
+                                .font(.system(size: 9))
+                            Text(kmLeft >= 0 ? "距下次保养 \(CarStatus.format(kmLeft)) km" : "已超 \(CarStatus.format(-kmLeft)) km")
+                                .font(.system(size: 11, weight: .semibold))
                                 .monospacedDigit()
-                                .foregroundStyle(WebTheme.muted)
                         }
-                        Spacer()
+                        .foregroundStyle(WebTheme.green)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(WebTheme.green.opacity(0.10))
+                        .clipShape(Capsule())
+
+                        let daysLeft = parts[0].dayInterval - Int(Date().timeIntervalSince(last.date) / 86400)
+                        HStack(spacing: 4) {
+                            Image(systemName: "clock.fill")
+                                .font(.system(size: 9))
+                            Text(daysLeft >= 0 ? "剩余 \(daysLeft) 天" : "超期 \(abs(daysLeft)) 天")
+                                .font(.system(size: 11, weight: .semibold))
+                                .monospacedDigit()
+                        }
+                        .foregroundStyle(WebTheme.green)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(WebTheme.green.opacity(0.10))
+                        .clipShape(Capsule())
+                        Spacer(minLength: 0)
                     }
+                } else {
+                    Text("点右上角「修改上次保养」录入保养里程与日期，零部件状态会按行业标准周期自动计算")
+                        .font(.system(size: 11))
+                        .foregroundStyle(WebTheme.amber)
                 }
             }
         }
     }
 
-    private func reminderText(_ record: MaintenanceRecord) -> String {
-        var parts: [String] = []
-        if let remaining = record.remainingKm(currentOdometerKm: viewModel.currentOdometerKm ?? 0) {
-            if remaining < 0 {
-                parts.append("已超期 \(CarStatus.format(abs(remaining))) km")
-            } else {
-                parts.append("还剩 \(CarStatus.format(remaining)) km")
-            }
+    private var updatedSuffix: String {
+        if let updated = appState.statusUpdatedAt {
+            let f = DateFormatter()
+            f.dateFormat = "MM-dd HH:mm"
+            return "（\(f.string(from: updated)) 更新）"
         }
-        if let nextDate = record.nextDate {
-            let days = Int(nextDate.timeIntervalSinceNow / 86400)
-            if days < 0 {
-                parts.append("已超期 \(abs(days)) 天")
-            } else {
-                parts.append("还剩 \(days) 天")
-            }
-        }
-        return parts.joined(separator: " · ")
+        return "（暂未获取车况）"
     }
 
-    // MARK: - 记录列表
+    /// 上次保养基准 = 最近一条维保记录
+    private var lastService: MaintenanceRecord? {
+        viewModel.records.first
+    }
 
-    private var recordsList: some View {
-        SectionCard(title: "维保记录") {
+    // MARK: - 车辆零部件网格（网页版 2 列卡片：状态 + 剩余 km · 天 + 进度条）
+
+    private var partsGrid: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("车辆零部件")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(WebTheme.txt)
+            Text("根据总里程/时间建议（行业标准周期）")
+                .font(.system(size: 11))
+                .foregroundStyle(WebTheme.muted)
+
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                ForEach(Array(parts.enumerated()), id: \.offset) { _, part in
+                    partCard(part)
+                }
+            }
+        }
+    }
+
+    private func partCard(_ part: PartSpec) -> some View {
+        let usageKm: Double? = {
+            guard let last = lastService, let odo = viewModel.currentOdometerKm else { return nil }
+            return odo - last.odometerKm
+        }()
+        let usageDays: Int? = lastService.map { Int(Date().timeIntervalSince($0.date) / 86400) }
+        let kmLeft = usageKm.map { part.kmInterval - $0 }
+        let daysLeft = usageDays.map { part.dayInterval - $0 }
+        // 状态：任一维度到期 = 需要保养；任一维度剩余 < 15% = 即将保养；否则良好
+        let due = (kmLeft.map { $0 <= 0 } ?? false) || (daysLeft.map { $0 <= 0 } ?? false)
+        let soon = !due && ((kmLeft.map { $0 < part.kmInterval * 0.15 } ?? false) || (daysLeft.map { $0 < Int(Double(part.dayInterval) * 0.15) } ?? false))
+        let color: Color = due ? WebTheme.red : (soon ? WebTheme.amber : WebTheme.green)
+        let statusText = due ? "需要保养" : (soon ? "即将保养" : "状态良好")
+        // 进度条：已用周期比例（km / 天 取较大者）
+        let kmRatio = usageKm.map { min(max($0 / part.kmInterval, 0), 1) } ?? 0
+        let dayRatio = usageDays.map { min(max(Double($0) / Double(part.dayInterval), 0), 1) } ?? 0
+        let ratio = max(kmRatio, dayRatio)
+
+        return VStack(alignment: .leading, spacing: 6) {
+            Image(systemName: part.symbol)
+                .font(.system(size: 16))
+                .foregroundStyle(color)
+            Text(part.name)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(WebTheme.txt)
+                .lineLimit(1)
+            Text(statusText + " ›")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(color)
+            Text(remainingText(kmLeft: kmLeft, daysLeft: daysLeft))
+                .font(.system(size: 10.5))
+                .monospacedDigit()
+                .foregroundStyle(WebTheme.muted)
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(WebTheme.card2).frame(height: 4)
+                    Capsule().fill(color.opacity(0.7)).frame(width: geo.size.width * ratio, height: 4)
+                }
+            }
+            .frame(height: 4)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(WebTheme.card)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(due ? WebTheme.red.opacity(0.35) : WebTheme.border, lineWidth: 1)
+        )
+    }
+
+    private func remainingText(kmLeft: Double?, daysLeft: Int?) -> String {
+        var texts: [String] = []
+        if let kmLeft {
+            texts.append(kmLeft >= 0 ? "剩 \(CarStatus.format(kmLeft)) km" : "超 \(CarStatus.format(-kmLeft)) km")
+        }
+        if let daysLeft {
+            texts.append(daysLeft >= 0 ? "\(daysLeft) 天" : "超 \(abs(daysLeft)) 天")
+        }
+        return texts.isEmpty ? "--" : texts.joined(separator: " · ")
+    }
+
+    // MARK: - 保养历史
+
+    private var recordsCard: some View {
+        SectionCard(title: "保养历史", sakura: false) {
             LazyVStack(spacing: 0) {
                 ForEach(Array(viewModel.records.enumerated()), id: \.element.id) { index, record in
                     if index > 0 {
@@ -193,10 +249,11 @@ struct MaintenanceView: View {
                     }
                     HStack(alignment: .top, spacing: 12) {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(record.item)
+                            Text(dateText(record.date))
                                 .font(.system(size: 13.5, weight: .bold))
+                                .monospacedDigit()
                                 .foregroundStyle(WebTheme.txt)
-                            Text("\(dateText(record.date)) · \(CarStatus.format(record.odometerKm)) km")
+                            Text("\(record.item) · \(CarStatus.format(record.odometerKm)) km")
                                 .font(.system(size: 11))
                                 .monospacedDigit()
                                 .foregroundStyle(WebTheme.muted)
@@ -204,18 +261,6 @@ struct MaintenanceView: View {
                                 Text(record.note)
                                     .font(.system(size: 11))
                                     .foregroundStyle(WebTheme.faint)
-                            }
-                            if let next = record.nextOdometerKm, next > 0 {
-                                Text("下次提醒：\(CarStatus.format(next)) km")
-                                    .font(.system(size: 10))
-                                    .monospacedDigit()
-                                    .foregroundStyle(WebTheme.amber)
-                            }
-                            if let nextDate = record.nextDate {
-                                Text("下次提醒：\(dateText(nextDate))")
-                                    .font(.system(size: 10))
-                                    .monospacedDigit()
-                                    .foregroundStyle(WebTheme.amber)
                             }
                         }
                         Spacer()
@@ -225,6 +270,15 @@ struct MaintenanceView: View {
                                 .monospacedDigit()
                                 .foregroundStyle(WebTheme.txt)
                         }
+                        Button {
+                            viewModel.delete(at: IndexSet(integer: index))
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 12))
+                                .foregroundStyle(WebTheme.red.opacity(0.75))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("删除这条保养记录")
                     }
                     .padding(.vertical, 8)
                 }
@@ -239,33 +293,23 @@ struct MaintenanceView: View {
     }
 }
 
-/// 添加维保记录
-struct AddMaintenanceSheet: View {
+/// 修改上次保养（录入保养里程与日期，作为零部件计算基准）
+struct EditLastServiceSheet: View {
     @ObservedObject var viewModel: MaintenanceViewModel
     @Environment(\.dismiss) private var dismiss
 
     @State private var date = Date()
     @State private var odometerText = ""
-    @State private var item = ""
     @State private var costText = ""
     @State private var note = ""
-    @State private var nextOdometerText = ""
-    @State private var hasNextDate = false
-    @State private var nextDate = Date()
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("保养信息") {
-                    DatePicker("日期", selection: $date, displayedComponents: .date)
+                Section("上次保养") {
+                    DatePicker("保养日期", selection: $date, displayedComponents: .date)
                     HStack {
-                        Text("项目")
-                        Spacer()
-                        TextField("如：更换机油机滤", text: $item)
-                            .multilineTextAlignment(.trailing)
-                    }
-                    HStack {
-                        Text("里程表")
+                        Text("保养时里程")
                         Spacer()
                         TextField("km", text: $odometerText)
                             .keyboardType(.decimalPad)
@@ -279,24 +323,16 @@ struct AddMaintenanceSheet: View {
                             .multilineTextAlignment(.trailing)
                     }
                 }
-                Section("下次提醒（可选）") {
-                    HStack {
-                        Text("里程")
-                        Spacer()
-                        TextField("km", text: $nextOdometerText)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                    }
-                    Toggle("按日期提醒", isOn: $hasNextDate)
-                    if hasNextDate {
-                        DatePicker("提醒日期", selection: $nextDate, displayedComponents: .date)
-                    }
-                }
                 Section("备注（可选）") {
-                    TextField("备注", text: $note)
+                    TextField("如：4S 店常规保养", text: $note)
+                }
+                Section {
+                    Text("保存后，各零部件按行业标准周期（机油 5000km/183 天、滤芯 10000km/365 天等）从此基准自动计算状态与剩余量。")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
                 }
             }
-            .navigationTitle("记一笔维保")
+            .navigationTitle("修改上次保养")
             .navigationBarTitleDisplayMode(.inline)
             .scrollContentBackground(.hidden)
             .background(WebConsoleBackground())
@@ -306,29 +342,38 @@ struct AddMaintenanceSheet: View {
                 }
                 ToolbarItem(placement: .topBarLeading) {
                     Button("保存") { save() }
-                        .disabled(!canSave)
+                        .disabled(Double(odometerText) == nil)
                         .bold()
+                }
+            }
+            .onAppear {
+                if let last = viewModel.records.first {
+                    date = last.date
+                    odometerText = String(Int(last.odometerKm))
+                    costText = last.cost.map { String(Int($0)) } ?? ""
+                    note = last.note
                 }
             }
         }
     }
 
-    private var canSave: Bool {
-        !item.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && Double(odometerText) != nil
-    }
-
     private func save() {
         guard let odometer = Double(odometerText) else { return }
         let record = MaintenanceRecord(
+            id: viewModel.records.first?.id ?? UUID().uuidString,
             date: date,
             odometerKm: odometer,
-            item: item.trimmingCharacters(in: .whitespacesAndNewlines),
+            item: viewModel.records.first?.item ?? "常规保养",
             cost: Double(costText),
             note: note.trimmingCharacters(in: .whitespacesAndNewlines),
-            nextOdometerKm: Double(nextOdometerText),
-            nextDate: hasNextDate ? nextDate : nil
+            nextOdometerKm: nil,
+            nextDate: nil
         )
-        viewModel.add(record)
+        if viewModel.records.first != nil {
+            viewModel.updateFirst(record)
+        } else {
+            viewModel.add(record)
+        }
         dismiss()
     }
 }

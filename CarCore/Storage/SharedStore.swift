@@ -8,6 +8,15 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
     case coupe = "运动轿跑"
     case suv = "智能SUV"
 
+    /// 展示名（真实车型名）
+    public var displayName: String {
+        switch self {
+        case .sedan: return "逸动PLUS"
+        case .coupe: return "UNI-V"
+        case .suv: return "CS75PLUS"
+        }
+    }
+
     public var sfSymbol: String {
         switch self {
         case .sedan: return "car"

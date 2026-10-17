@@ -11,6 +11,7 @@ struct FuelTrackerView: View {
     }
 
     @State private var showAddSheet = false
+    @State private var editingRecord: FuelRecord?
 
     var body: some View {
         NavigationStack {
@@ -26,6 +27,7 @@ struct FuelTrackerView: View {
                     } else {
                         recordsList
                     }
+                    algorithmCard
                     Spacer(minLength: 24)
                 }
                 .padding(16)
@@ -45,6 +47,9 @@ struct FuelTrackerView: View {
             }
             .sheet(isPresented: $showAddSheet) {
                 AddFuelSheet(viewModel: viewModel)
+            }
+            .sheet(item: $editingRecord) { record in
+                AddFuelSheet(viewModel: viewModel, editing: record)
             }
         }
     }
@@ -141,11 +146,23 @@ struct FuelTrackerView: View {
                             .padding(.vertical, 10)
                     }
                     HStack(alignment: .top, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 8) {
                             Text(dateText(record.date))
                                 .font(.system(size: 13.5, weight: .bold))
                                 .monospacedDigit()
                                 .foregroundStyle(WebTheme.txt)
+                            // 点名字旁的笔进入编辑（输错可改，也可删）
+                            Button {
+                                editingRecord = record
+                            } label: {
+                                Image(systemName: "pencil")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(WebTheme.blue)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("编辑这条加油记录")
+                        }
                             Text("\(CarStatus.format(record.odometerKm)) km · \(CarStatus.format(record.liters)) L\(record.isFull ? " · 加满" : "")")
                                 .font(.system(size: 11))
                                 .monospacedDigit()
@@ -179,6 +196,15 @@ struct FuelTrackerView: View {
                                 .monospacedDigit()
                                 .foregroundStyle(WebTheme.txt)
                         }
+                        Button {
+                            viewModel.delete(record)
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 12))
+                                .foregroundStyle(WebTheme.red.opacity(0.75))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("删除这条加油记录")
                     }
                     .padding(.vertical, 6)
                 }
@@ -191,11 +217,39 @@ struct FuelTrackerView: View {
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: date)
     }
+
+    // MARK: - 算法与用法说明（网页版同款"满箱法"）
+
+    private var algorithmCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("油耗算法与用法", systemImage: "function")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(WebTheme.txt)
+            Text("算法：满箱法。两次都「加满」时，这两次加油量之和 ÷ 期间行驶里程 × 100 = 该段油耗（L/100km）。")
+                .font(.system(size: 11.5))
+                .foregroundStyle(WebTheme.muted)
+            Text("用法：每次加油都记一笔——输入当时的里程表读数和加油升数（尽量选「加满」）；第二次加满后自动算出这段的真实油耗。没加满的记录只累计油量，不参与油耗计算。")
+                .font(.system(size: 11.5))
+                .foregroundStyle(WebTheme.muted)
+            Text("填错了？点记录日期旁的 ✏️ 修改，或点右侧 🗑 删除重录。")
+                .font(.system(size: 11.5))
+                .foregroundStyle(WebTheme.faint)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(WebTheme.card.opacity(0.7))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(WebTheme.border.opacity(0.6), lineWidth: 1)
+        )
+    }
 }
 
-/// 添加加油记录
+/// 添加 / 编辑加油记录（editing 非空 = 编辑模式）
 struct AddFuelSheet: View {
     @ObservedObject var viewModel: FuelViewModel
+    var editing: FuelRecord?
     @Environment(\.dismiss) private var dismiss
 
     @State private var date = Date()
@@ -239,17 +293,27 @@ struct AddFuelSheet: View {
                     TextField("加油站 / 备注", text: $note)
                 }
             }
-            .navigationTitle("记一笔油耗")
+            .navigationTitle(editing != nil ? "修改加油记录" : "记一笔油耗")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("取消") { dismiss() }
                 }
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("保存") { save() }
+                    Button(editing != nil ? "保存修改" : "保存") { save() }
                         .disabled(!canSave)
                         .bold()
                 }
+            }
+        }
+        .onAppear {
+            if let record = editing {
+                date = record.date
+                odometerText = String(record.odometerKm)
+                litersText = String(record.liters)
+                priceText = record.pricePerLiter.map { String($0) } ?? ""
+                isFull = record.isFull
+                note = record.note
             }
         }
     }
@@ -261,16 +325,29 @@ struct AddFuelSheet: View {
     private func save() {
         guard let odometer = Double(odometerText), let liters = Double(litersText) else { return }
         let price = Double(priceText)
-        let record = FuelRecord(
-            date: date,
-            odometerKm: odometer,
-            liters: liters,
-            pricePerLiter: price,
-            totalCost: price.map { $0 * liters },
-            isFull: isFull,
-            note: note.trimmingCharacters(in: .whitespacesAndNewlines)
-        )
-        viewModel.add(record)
+        let noteText = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        if var record = editing {
+            // 编辑：保留原 id
+            record.date = date
+            record.odometerKm = odometer
+            record.liters = liters
+            record.pricePerLiter = price
+            record.totalCost = price.map { $0 * liters }
+            record.isFull = isFull
+            record.note = noteText
+            viewModel.update(record)
+        } else {
+            let record = FuelRecord(
+                date: date,
+                odometerKm: odometer,
+                liters: liters,
+                pricePerLiter: price,
+                totalCost: price.map { $0 * liters },
+                isFull: isFull,
+                note: noteText
+            )
+            viewModel.add(record)
+        }
         dismiss()
     }
 }

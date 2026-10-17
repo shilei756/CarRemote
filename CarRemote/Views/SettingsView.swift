@@ -86,9 +86,17 @@ struct SettingsView: View {
     }
 
     private var cardStatusText: String {
+        // 站主 = 开发者，最高权限
+        if appState.credentials?.phone == APIConfig.ownerPhone { return "开发者 · 最高权限" }
         guard let cardStatus = appState.cardStatus else { return "校验中" }
         if cardStatus.isRegular { return "正式用户" }
-        if cardStatus.todayOK { return "体验中（今日有效）" }
+        if cardStatus.todayOK { return "体验用户（今日有效）" }
+        if cardStatus.experience {
+            if let hours = cardStatus.expiryHours {
+                return "体验用户（剩余 \(String(format: "%.0f", hours)) 小时）"
+            }
+            return "体验用户"
+        }
         return "未授权"
     }
 
@@ -98,7 +106,7 @@ struct SettingsView: View {
         Section {
             Picker("仪表盘车型", selection: $settings.carModelStyle) {
                 ForEach(CarModelStyle.allCases, id: \.self) { style in
-                    Text(style.rawValue).tag(style)
+                    Text(style.displayName).tag(style)
                 }
             }
             .onChange(of: settings.carModelStyle) { _, _ in
