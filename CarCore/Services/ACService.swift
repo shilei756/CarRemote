@@ -170,22 +170,28 @@ public enum ACService {
         //    下发指令会被网关拒绝（code=40001 服务未注册）。
         //    /api/open/login 服务端会用授权码做完整登录并保存新凭证。
         var accessToken = ""
+        var chain = ""
+        var diag = ""   // 诊断：链路 + 各接口原始返回
         do {
             let loginObject = try await APIClient.postJSON(
                 URL(string: APIConfig.siteBaseURL + "/api/open/login")!,
                 json: ["phone": credentials.phone, "authorize_token": authorizeToken]
             )
+            let loginRaw = (try? JSONSerialization.data(withJSONObject: loginObject)).flatMap { String(data: $0, encoding: .utf8) } ?? "?"
             if let loginDict = loginObject as? [String: Any],
                loginDict.bool("success") == true,
                let token = loginDict.string("access_token"), !token.isEmpty {
                 accessToken = token
+                chain = "login"
             }
+            diag += "login=\(String(loginRaw.prefix(160))); "
         } catch {
-            // 登录链网络异常时退回 refresh 链
+            diag += "login_err=\(error.localizedDescription); "
         }
 
         // 4. 登录链失败时退回库存 refresh_token 刷新（权限可能不足，但保底可查）
         if accessToken.isEmpty {
+            chain = "refresh"
             let tokenObject = try await APIClient.postJSON(
                 URL(string: APIConfig.siteBaseURL + "/api/open/token")!,
                 json: ["phone": credentials.phone, "authorize_token": authorizeToken]
@@ -212,10 +218,12 @@ public enum ACService {
             guard let oauthDict = oauthObject as? [String: Any],
                   let token = oauthDict.string("access_token"), !token.isEmpty else {
                 let message = (oauthObject as? [String: Any])?.string("error") ?? "开放平台凭证刷新失败，请重新扫码开通"
-                throw APIError.server(message)
+                throw APIError.server("\(message) [\(diag)]")
             }
             accessToken = token
+            diag += "scope=\(oauthDict.string("scope") ?? "?"); "
         }
+        diag += "chain=\(chain); "
 
         // 5. 下发指令（逐项对齐网页版 _newACGo：只带这几个头，不带 X-Requested-With）
         guard let executeURL = URL(string: "https://open.iov.changan.com.cn/openc-apigw/vrtm-agent/api/v2/open/car-control/\(command.rawValue)") else {
@@ -244,7 +252,7 @@ public enum ACService {
         if !ok {
             let code = dict["code"].map { "\($0)" } ?? "-"
             let snippet = String(text.prefix(120))
-            message = "\(message) [code=\(code) http=\(status) car=\(car.carId) raw=\(snippet)]"
+            message = "\(message) [code=\(code) http=\(status) \(diag)raw=\(snippet)]"
         }
         return CommandResult(ok: ok, message: message)
     }
