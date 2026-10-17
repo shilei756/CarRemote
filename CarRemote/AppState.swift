@@ -65,6 +65,10 @@ final class AppState: ObservableObject {
             return
         }
         self.credentials = credentials
+        // 关键：从 Keychain 恢复会话时必须回写 App Group 兜底副本。
+        // 覆盖安装场景下 Keychain 保留旧凭据、defaults 里没有（从没重新登录过），
+        // 小组件进程读不到凭据会一直显示「未登录」。
+        SharedStore.saveCredentials(credentials)
         Task { await verifyAccess(credentials) }
     }
 

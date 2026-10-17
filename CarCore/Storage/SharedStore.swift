@@ -348,7 +348,15 @@ public enum SharedStore {
            let creds = try? JSONDecoder().decode(Credentials.self, from: data) {
             return creds
         }
-        return loadCredentialsFromDefaults()
+        if let creds = loadCredentialsFromDefaults() {
+            return creds
+        }
+        // 第三通道：App Group 容器目录文件（个别重签环境下 UserDefaults 失效时兜底）
+        if let data = containerFileData(Key.credentials),
+           let creds = try? JSONDecoder().decode(Credentials.self, from: data) {
+            return creds
+        }
+        return nil
     }
 
     public static func saveCredentials(_ credentials: Credentials?) {
@@ -359,18 +367,48 @@ public enum SharedStore {
         } else {
             KeychainStore.remove(Key.credentials)
         }
-        // 兜底副本
+        // 兜底副本 1：App Group UserDefaults
         if let credentials,
            let data = try? JSONEncoder().encode(credentials) {
             defaults?.set(data, forKey: Key.credentials)
         } else {
             defaults?.removeObject(forKey: Key.credentials)
         }
+        // 兜底副本 2：App Group 容器目录文件
+        if let credentials,
+           let data = try? JSONEncoder().encode(credentials) {
+            writeContainerFile(data, forKey: Key.credentials)
+        } else {
+            writeContainerFile(nil, forKey: Key.credentials)
+        }
     }
 
     private static func loadCredentialsFromDefaults() -> Credentials? {
         guard let data = defaults?.data(forKey: Key.credentials) else { return nil }
         return try? JSONDecoder().decode(Credentials.self, from: data)
+    }
+
+    /// App Group 容器目录文件读写（UserDefaults 读不到时的第二兜底）
+    private static func containerURL() -> URL? {
+        FileManager.default
+            .containerURL(forSecurityApplicationGroupIdentifier: APIConfig.appGroupIdentifier)?
+            .appendingPathComponent("carremote_shared", isDirectory: true)
+    }
+
+    private static func writeContainerFile(_ data: Data?, forKey key: String) {
+        guard let dir = containerURL() else { return }
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent(key + ".bin")
+        if let data {
+            try? data.write(to: url)
+        } else {
+            try? FileManager.default.removeItem(at: url)
+        }
+    }
+
+    private static func containerFileData(_ key: String) -> Data? {
+        guard let url = containerURL()?.appendingPathComponent(key + ".bin") else { return nil }
+        return try? Data(contentsOf: url)
     }
 
     // MARK: 设置
