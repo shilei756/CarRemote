@@ -78,6 +78,29 @@ public enum APIClient {
         try await request(url, method: "GET", headers: headers)
     }
 
+    /// 原始请求：返回（HTTP 状态码, 响应体），不因非 2xx 抛错。
+    /// 用于开放平台这类「错误也用 200/业务码表达」的接口，便于把原始返回透出做诊断。
+    public static func requestRaw(
+        _ url: URL,
+        method: String = "GET",
+        headers: [String: String] = [:],
+        body: Data? = nil
+    ) async throws -> (status: Int, data: Data) {
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.timeoutInterval = 25
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        headers.forEach { request.setValue($1, forHTTPHeaderField: $0) }
+        request.httpBody = body
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            return (status, data)
+        } catch {
+            throw APIError.network(error.localizedDescription)
+        }
+    }
+
     public static func postJSON(_ url: URL, json: [String: Any], headers: [String: String] = [:]) async throws -> Any {
         var merged = ["Content-Type": "application/json"]
         merged.merge(headers) { current, _ in current }

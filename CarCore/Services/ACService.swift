@@ -202,7 +202,7 @@ public enum ACService {
             throw APIError.server(message)
         }
 
-        // 4. 下发指令
+        // 4. 下发指令（逐项对齐网页版 _newACGo）
         guard let executeURL = URL(string: "https://open.iov.changan.com.cn/openc-apigw/vrtm-agent/api/v2/open/car-control/\(command.rawValue)") else {
             throw APIError.invalidURL
         }
@@ -213,19 +213,30 @@ public enum ACService {
             "carId": car.carId
         ]
         let bodyData = try JSONSerialization.data(withJSONObject: body)
-        var headers = APIClient.changanHeaders
-        headers["Host"] = "open.iov.changan.com.cn"
-        headers["x-vcs-nonce"] = "WYYL"
-        headers["x-vcs-user-access-token"] = accessToken
-        headers["x-vcs-timestamp"] = String(Int(Date().timeIntervalSince1970 * 1000))
-        headers["Content-Type"] = "application/json; charset=utf-8"
-        // 关键：开放平台按 UA 识别客户端（网页版同款伪装），缺失时报「服务未注册」
-        headers["User-Agent"] = "okhttp/3.10.0"
-        let executeObject = try await APIClient.request(executeURL, method: "POST", headers: headers, body: bodyData)
-        let dict = executeObject as? [String: Any] ?? [:]
+        // 注意：不要合并 changanHeaders（它带 X-Requested-With: cn.com.changan.cvim
+        // 与 UA okhttp/4.9.0），网页版下发只带下面这几个头。
+        var headers: [String: String] = [
+            "Host": "open.iov.changan.com.cn",
+            "x-vcs-nonce": "WYYL",
+            "x-vcs-user-access-token": accessToken,
+            "x-vcs-timestamp": String(Int(Date().timeIntervalSince1970 * 1000)),
+            "Content-Type": "application/json; charset=utf-8",
+            "User-Agent": "okhttp/3.10.0"
+        ]
+        // iOS 的 URLSession 不允许自定义 Host，手动剔除避免请求被拒
+        headers.removeValue(forKey: "Host")
+        let (status, data) = try await APIClient.requestRaw(executeURL, method: "POST", headers: headers, body: bodyData)
+        let text = String(data: data, encoding: .utf8) ?? ""
+        let dict = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
         let ok = dict.bool("success") == true
-        let message = dict.string("msg") ?? dict.string("message")
+        var message = dict.string("msg") ?? dict.string("message")
             ?? (ok ? "指令已发送" : "车辆未接受指令")
+        if !ok {
+            // 失败时附上诊断信息，便于定位（carId / 状态码 / 原始返回片段）
+            let code = dict["code"].map { "\($0)" } ?? "-"
+            let snippet = String(text.prefix(160))
+            message = "\(message) [code=\(code) http=\(status) car=\(car.carId) raw=\(snippet)]"
+        }
         return CommandResult(ok: ok, message: message)
     }
 }
