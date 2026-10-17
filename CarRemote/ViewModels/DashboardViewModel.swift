@@ -164,9 +164,7 @@ final class DashboardViewModel: ObservableObject {
         // 布局随车况快照一起共享（重签环境下独立通道可能失效）
         if let status = appState?.status {
             SharedStore.saveStatusSnapshot(StatusSnapshot(
-                carName: SharedStore.loadCustomCarName().isEmpty
-                    ? (appState?.carName ?? status.carName)
-                    : SharedStore.loadCustomCarName(),
+                carName: appState?.carName ?? "我的爱车",
                 status: status,
                 widgetCommands: settings.widgetCommands
             ))

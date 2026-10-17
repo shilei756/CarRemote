@@ -48,7 +48,7 @@ struct LayoutEditorSheet: View {
                         HStack(spacing: 12) {
                             Image(systemName: tool.sfSymbol)
                                 .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(Color(hex: tool.colorHex))
+                                .foregroundStyle(Color(hex: UInt(tool.colorHex)))
                                 .frame(width: 26)
                             Text(tool.displayName)
                                 .font(.system(size: 14))
