@@ -18,6 +18,22 @@ public enum CarCommand: String, CaseIterable, Sendable {
     case openAir = "openair"                 // 空调开
     case closeAir = "closeair"               // 空调关
 
+    /// 开放平台（newAC）使用的指令名：与官方 inCall 的 rawValue 大小写不同，
+    /// 必须用驼峰（openAir / closeAir），否则网关返回 code=40001「服务未注册」。
+    public var openPlatformCmd: String {
+        switch self {
+        case .openAir: return "openAir"
+        case .closeAir: return "closeAir"
+        case .unlockDoor: return "unlock"
+        case .lockDoor: return "lock"
+        case .openEngine: return "startEngine"
+        case .closeEngine: return "stopEngine"
+        case .openWindow: return "openWindow"
+        case .closeWindow: return "closeWindow"
+        default: return rawValue
+        }
+    }
+
     public var displayName: String {
         switch self {
         case .flashLight: return "闪灯"

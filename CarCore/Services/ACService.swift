@@ -266,7 +266,8 @@ public enum ACService {
         tokenCandidates.append(("authorizetoken", authorizeToken))
 
         // 4. 下发：每个 token × 每个 carId 依次尝试，40001（服务未注册）换下一个组合
-        guard let executeURL = URL(string: "https://open.iov.changan.com.cn/openc-apigw/vrtm-agent/api/v2/open/car-control/\(command.rawValue)") else {
+        let openCmd = command.openPlatformCmd
+        guard let executeURL = URL(string: "https://open.iov.changan.com.cn/openc-apigw/vrtm-agent/api/v2/open/car-control/\(openCmd)") else {
             throw APIError.invalidURL
         }
         var lastCode = ""
@@ -279,7 +280,7 @@ public enum ACService {
                 let body: [String: Any] = [
                     "mapArgsJson": "{}",
                     "senderType": "APP",
-                    "cmd": command.rawValue,
+                    "cmd": openCmd,
                     "carId": car.carId
                 ]
                 let bodyData = try JSONSerialization.data(withJSONObject: body)
