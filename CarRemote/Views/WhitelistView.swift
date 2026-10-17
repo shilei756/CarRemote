@@ -33,6 +33,8 @@ struct WhitelistView: View {
     /// 使用者列表分页（网页版 WL_PAGE_SIZE = 10）
     private let pageSize = 10
     @State private var userPage = 1
+    /// 白名单列表分页（与使用者列表一致：每页 10 条）
+    @State private var wlPage = 1
 
     @State private var adminPhoneInput = ""
     @State private var wlPhoneInput = ""
@@ -553,8 +555,13 @@ struct WhitelistView: View {
                         .disabled(wlPhoneInput.isEmpty)
                     }
                     if let usage, !usage.whitelist.isEmpty {
+                        let total = usage.whitelist.count
+                        let totalPages = max(1, (total + pageSize - 1) / pageSize)
+                        let page = min(max(wlPage, 1), totalPages)
+                        let start = (page - 1) * pageSize
+                        let slice = Array(usage.whitelist[start..<min(start + pageSize, total)])
                         VStack(spacing: 6) {
-                            ForEach(usage.whitelist, id: \.self) { phone in
+                            ForEach(slice, id: \.self) { phone in
                                 HStack {
                                     Image(systemName: "checkmark.seal.fill")
                                         .font(.system(size: 12))
@@ -578,6 +585,33 @@ struct WhitelistView: View {
                                 .background(WebTheme.card2)
                                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                             }
+                            // 分页条（与使用者列表一致）
+                            HStack(spacing: 14) {
+                                Button {
+                                    wlPage -= 1
+                                } label: {
+                                    Text("‹ 上一页")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(page <= 1 ? WebTheme.faint : WebTheme.blue)
+                                }
+                                .disabled(page <= 1)
+                                Text("\(page) / \(totalPages)")
+                                    .font(.system(size: 10.5))
+                                    .monospacedDigit()
+                                    .foregroundStyle(WebTheme.muted)
+                                Button {
+                                    wlPage += 1
+                                } label: {
+                                    Text("下一页 ›")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(page >= totalPages ? WebTheme.faint : WebTheme.blue)
+                                }
+                                .disabled(page >= totalPages)
+                            }
+                            .padding(.top, 4)
+                            Text("共 \(total) 个 · 每页 \(pageSize) 个")
+                                .font(.system(size: 10))
+                                .foregroundStyle(WebTheme.faint)
                         }
                     } else {
                         Text("授权名单为空 · 开启后只有你和管理员能登录")

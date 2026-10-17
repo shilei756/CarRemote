@@ -121,9 +121,8 @@ struct DashboardView: View {
                             vehicleInfoCard(status: status)
                             quickControlsCard
                             moreControlsCard
-                            if status.location != nil {
-                                locationCard(status: status)
-                            }
+                            // 位置改为点击才查询（对齐网页版），默认只显示入口卡
+                            locationEntryCard
                             moreToolsCard
                         } else {
                             loadingOrEmpty
@@ -135,10 +134,8 @@ struct DashboardView: View {
                 }
             .refreshable {
                 await appState.refreshStatus()
-                viewModel.loadLocation()
             }
             .task {
-                viewModel.loadLocation()
                 if viewModel.acMode == .new {
                     await viewModel.loadACRemainingDays()
                 }
@@ -147,7 +144,6 @@ struct DashboardView: View {
                     try? await Task.sleep(nanoseconds: 30_000_000_000)
                     if Task.isCancelled { break }
                     await appState.refreshStatus()
-                    viewModel.loadLocation()
                 }
             }
             }
@@ -240,6 +236,9 @@ struct DashboardView: View {
             .sheet(isPresented: $viewModel.showWhitelist) {
                 WhitelistView()
                     .environmentObject(appState)
+            }
+            .sheet(isPresented: $viewModel.showLocationDetail) {
+                locationDetailSheet
             }
             .alert("确认执行", isPresented: confirmBinding) {
                 Button("取消", role: .cancel) { viewModel.cancelPending() }
@@ -575,100 +574,179 @@ struct DashboardView: View {
         .webCard()
     }
 
-    // MARK: - 定位卡（网页版 locCard：具体地址 + 城市 + 定位时间 + 紫蓝渐变导航按钮）
+    // MARK: - 定位入口（点击才查询 + 详情弹窗，对齐网页版 locCard 效果）
 
-    private func locationCard(status: CarStatus) -> some View {
-        SectionCard(sakura: false) {
-            HStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(WebTheme.purple.opacity(0.12))
-                        .frame(width: 36, height: 36)
-                    Image(systemName: "location.fill")
-                        .font(.system(size: 14))
-                        .foregroundStyle(WebTheme.purple)
+    private var locationEntryCard: some View {
+        Button {
+            viewModel.queryLocation()
+        } label: {
+            SectionCard(sakura: false) {
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(WebTheme.purple.opacity(0.12))
+                            .frame(width: 36, height: 36)
+                        Image(systemName: "location.fill")
+                            .font(.system(size: 14))
+                            .foregroundStyle(WebTheme.purple)
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("车辆位置")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(WebTheme.txt)
+                        Text("点击查询当前位置")
+                            .font(.system(size: 11))
+                            .foregroundStyle(WebTheme.muted)
+                    }
+                    Spacer()
+                    if viewModel.isLoadingLocation {
+                        ProgressView()
+                            .tint(WebTheme.muted)
+                    } else {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(WebTheme.faint)
+                    }
                 }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("车辆位置")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(WebTheme.txt)
-                    // 主行：官网返回的具体地址（小区/路段），无地址时回退经纬度
-                    Text(locationAddressText(status))
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(WebTheme.txt)
-                        .lineLimit(1)
-                    // 次行：城市 · 定位时间 · 经纬度
-                    Text(locationSubText(status))
-                        .font(.system(size: 10))
-                        .monospacedDigit()
-                        .foregroundStyle(WebTheme.muted)
-                        .lineLimit(1)
-                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("查询车辆位置")
+    }
+
+    /// 位置详情弹窗（网页版 locModal：地址/城市/定位时间/经纬度/车速 + 导航）
+    private var locationDetailSheet: some View {
+        VStack(spacing: 16) {
+            HStack {
+                Text("车辆位置详情")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(WebTheme.txt)
                 Spacer()
-                if viewModel.isLoadingLocation {
+                Button {
+                    viewModel.showLocationDetail = false
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundStyle(WebTheme.faint)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("关闭")
+            }
+            if viewModel.isLoadingLocation && viewModel.locationInfo == nil {
+                VStack(spacing: 10) {
                     ProgressView()
-                        .tint(WebTheme.muted)
-                } else {
+                        .tint(WebTheme.purple)
+                    Text("正在定位车辆…")
+                        .font(.system(size: 12))
+                        .foregroundStyle(WebTheme.muted)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 28)
+            } else if let info = viewModel.locationInfo {
+                VStack(spacing: 0) {
+                    locationDetailRow("地址", icon: "mappin.and.ellipse", value: info.address.isEmpty ? "暂无地址" : info.address)
+                    Divider().overlay(WebTheme.border)
+                    if !info.city.isEmpty {
+                        locationDetailRow("城市", icon: "buildings.2", value: info.city)
+                        Divider().overlay(WebTheme.border)
+                    }
+                    if !info.gpsTime.isEmpty {
+                        locationDetailRow("定位时间", icon: "clock", value: info.gpsTime)
+                        Divider().overlay(WebTheme.border)
+                    }
+                    locationDetailRow("经纬度", icon: "scope", value: String(format: "%.6f, %.6f", info.latitude, info.longitude))
+                    if let speed = info.speed {
+                        Divider().overlay(WebTheme.border)
+                        locationDetailRow("车速", icon: "speedometer", value: String(format: "%.0f km/h", speed))
+                    }
+                }
+                .background(WebTheme.card2)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                HStack(spacing: 10) {
                     Button {
                         viewModel.loadLocation()
                     } label: {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(WebTheme.muted)
-                            .frame(width: 30, height: 30)
-                            .background(WebTheme.card2)
-                            .clipShape(Circle())
+                        HStack(spacing: 5) {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 12, weight: .semibold))
+                            Text("刷新位置")
+                                .font(.system(size: 13, weight: .semibold))
+                        }
+                        .foregroundStyle(WebTheme.txt)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 11)
+                        .background(WebTheme.card2)
+                        .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("刷新位置")
-                }
-                // 网页版 .nav-btn：紫蓝渐变胶囊
-                Button {
-                    viewModel.navigateToCar()
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.triangle.turn.up.right.diamond")
-                            .font(.system(size: 11, weight: .semibold))
-                        Text("导航")
-                            .font(.system(size: 13, weight: .semibold))
+                    Button {
+                        viewModel.navigateToCar()
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "arrow.triangle.turn.up.right.diamond")
+                                .font(.system(size: 12, weight: .semibold))
+                            Text("导航到车")
+                                .font(.system(size: 13, weight: .semibold))
+                        }
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 11)
+                        .background(WebTheme.navGradient)
+                        .clipShape(Capsule())
                     }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 8)
-                    .background(WebTheme.navGradient)
-                    .clipShape(Capsule())
-                    .shadow(color: WebTheme.purple.opacity(0.3), radius: 12, x: 0, y: 4)
+                    .buttonStyle(.plain)
+                }
+            } else {
+                VStack(spacing: 8) {
+                    Image(systemName: "location.slash")
+                        .font(.system(size: 26))
+                        .foregroundStyle(WebTheme.faint)
+                    Text("暂无位置信息，点「刷新位置」重试")
+                        .font(.system(size: 12))
+                        .foregroundStyle(WebTheme.muted)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 22)
+                Button {
+                    viewModel.loadLocation()
+                } label: {
+                    Text("刷新位置")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(WebTheme.txt)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 11)
+                        .background(WebTheme.card2)
+                        .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("导航到车辆位置")
             }
+            Spacer(minLength: 0)
         }
+        .padding(20)
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
     }
 
-    /// 主行地址：优先官网 address；否则「定位中…」/经纬度
-    private func locationAddressText(_ status: CarStatus) -> String {
-        if let info = viewModel.locationInfo, !info.address.isEmpty {
-            return info.address
+    private func locationDetailRow(_ title: String, icon: String, value: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 12))
+                .foregroundStyle(WebTheme.purple)
+                .frame(width: 20)
+            Text(title)
+                .font(.system(size: 12))
+                .foregroundStyle(WebTheme.muted)
+            Spacer()
+            Text(value)
+                .font(.system(size: 12.5, weight: .semibold))
+                .monospacedDigit()
+                .foregroundStyle(WebTheme.txt)
+                .multilineTextAlignment(.trailing)
         }
-        if viewModel.isLoadingLocation { return "定位中…" }
-        if let location = status.location {
-            return String(format: "%.5f, %.5f", location.latitude, location.longitude)
-        }
-        return "暂无位置信息"
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
     }
 
-    /// 次行：城市 · 定位时间 · 经纬度
-    private func locationSubText(_ status: CarStatus) -> String {
-        var parts: [String] = []
-        if let info = viewModel.locationInfo {
-            if !info.city.isEmpty { parts.append(info.city) }
-            if !info.gpsTime.isEmpty { parts.append("定位于 \(info.gpsTime)") }
-        }
-        if let location = status.location {
-            parts.append(String(format: "%.4f, %.4f", location.latitude, location.longitude))
-        }
-        return parts.isEmpty ? "--" : parts.joined(separator: " · ")
-    }
 
     // MARK: - 更多功能（网页版 moreGrid：11 个磁贴）
 
@@ -679,7 +757,7 @@ struct DashboardView: View {
                 spacing: 14
             ) {
                 moreToolTile(name: "查询车况", symbol: "arrow.triangle.2.circlepath", color: WebTheme.blue) {
-                    Task { await appState.refreshStatus(); viewModel.loadLocation() }
+                    Task { await appState.refreshStatus() }
                 }
                 moreToolTile(name: "操作历史", symbol: "clock.arrow.circlepath", color: WebTheme.amber) {
                     viewModel.showHistoryActions = true

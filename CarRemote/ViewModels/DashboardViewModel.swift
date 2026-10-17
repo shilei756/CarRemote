@@ -28,6 +28,8 @@ final class DashboardViewModel: ObservableObject {
     @Published var showTrips = false
     @Published var showEmbed: EmbedTarget?   // "vehicle_status" / "panorama"
     @Published var showWhitelist = false
+    /// 车辆位置详情弹窗（点击位置入口才查询并弹出）
+    @Published var showLocationDetail = false
 
     private weak var appState: AppState?
 
@@ -116,6 +118,12 @@ final class DashboardViewModel: ObservableObject {
     }
 
     // MARK: - 车辆位置
+
+    /// 点击位置入口：查询一次并弹出详情（对齐网页版「点定位 → 弹详情」）
+    func queryLocation() {
+        loadLocation()
+        showLocationDetail = true
+    }
 
     func loadLocation() {
         guard let appState, let credentials = appState.credentials else { return }
