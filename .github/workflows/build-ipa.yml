@@ -103,7 +103,10 @@ jobs:
             sed -i '' "s|WIDGET_PROFILE_UUID|$WIDGET_UUID|g" ExportOptions.plist
             echo "::notice::已加载小组件描述文件，本次构建包含桌面小组件"
           else
-            echo "::notice::未配置 PROVISIONING_PROFILE_WIDGET_BASE64，本次构建不含桌面小组件（其余功能不受影响）"
+            echo "INCLUDE_WIDGET=true" >> "$GITHUB_ENV"
+            echo "UNSIGNED_BUILD=true" >> "$GITHUB_ENV"
+            echo "WIDGET_PROFILE_UUID=UNSIGNED_PLACEHOLDER" >> "$GITHUB_ENV"
+            echo "::notice::未配置小组件描述文件：小组件仍会打包进 IPA（不签名），由全能签重签时自动补签名"
           fi
 
           # 4) 校验签名身份可用
@@ -120,6 +123,19 @@ jobs:
       - name: Archive 编译
         run: |
           set -euo pipefail
+          if [ "${UNSIGNED_BUILD:-}" = "true" ]; then
+            echo "未签名构建：跳过签名，小组件随包输出，由全能签统一重签"
+            xcodebuild archive \
+              -project CarRemote.xcodeproj \
+              -scheme CarRemote \
+              -configuration Release \
+              -destination "generic/platform=iOS" \
+              -archivePath "$RUNNER_TEMP/CarRemote.xcarchive" \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGN_IDENTITY=""
+            exit 0
+          fi
           IDENTITY="$(security find-identity -v -p codesigning "$RUNNER_TEMP/carremote-build.keychain" \
             | grep -o 'iPhone Distribution: [^"]*' | head -n 1)"
           if [ -z "$IDENTITY" ]; then
@@ -140,6 +156,16 @@ jobs:
       - name: 导出 IPA
         run: |
           set -euo pipefail
+          if [ "${UNSIGNED_BUILD:-}" = "true" ]; then
+            echo "未签名构建：直接打包 Payload（无需 exportArchive）"
+            mkdir -p "$RUNNER_TEMP/ipa"
+            cd "$RUNNER_TEMP/CarRemote.xcarchive/Products/Applications"
+            mkdir -p Payload
+            cp -R *.app Payload/
+            zip -qry "$RUNNER_TEMP/ipa/CarRemote.ipa" Payload
+            ls -lh "$RUNNER_TEMP/ipa"
+            exit 0
+          fi
           # 无小组件构建时，从导出配置中移除小组件的映射项
           if [ "${INCLUDE_WIDGET:-}" != "true" ]; then
             python3 - <<'PYEOF'

@@ -24,6 +24,15 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
         case .suv: return "car.front"
         }
     }
+
+    /// 小组件按钮默认配置（闪灯/开锁/闭锁/鸣笛/寻车）
+    public static let defaultWidgetCommands: [String] = [
+        CarCommand.flashLight.rawValue,
+        CarCommand.unlockDoor.rawValue,
+        CarCommand.lockDoor.rawValue,
+        CarCommand.whistle.rawValue,
+        CarCommand.remoteSearchCar.rawValue
+    ]
 }
 
 /// App 主题（与网页版夜间模式对应）
@@ -163,10 +172,12 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var carModelStyle: CarModelStyle
     public var clubNick: String
     public var clubAvatar: String
+    /// 桌面小组件的 5 个控车按钮（CarCommand.rawValue，按槽位顺序）
+    public var widgetCommands: [String]
 
     private enum CodingKeys: String, CodingKey {
         case confirmGateCommands, siriEnabledCommands, siriMasterEnabled,
-             carModelStyle, clubNick, clubAvatar
+             carModelStyle, clubNick, clubAvatar, widgetCommands
     }
 
     public init(confirmGateCommands: Set<String>,
@@ -174,13 +185,15 @@ public struct AppSettings: Codable, Equatable, Sendable {
                 siriMasterEnabled: Bool = true,
                 carModelStyle: CarModelStyle,
                 clubNick: String,
-                clubAvatar: String) {
+                clubAvatar: String,
+                widgetCommands: [String] = CarModelStyle.defaultWidgetCommands) {
         self.confirmGateCommands = confirmGateCommands
         self.siriEnabledCommands = siriEnabledCommands
         self.siriMasterEnabled = siriMasterEnabled
         self.carModelStyle = carModelStyle
         self.clubNick = clubNick
         self.clubAvatar = clubAvatar
+        self.widgetCommands = widgetCommands
     }
 
     /// 旧数据兼容解码：新增字段缺省时给默认值，避免老用户设置丢失
@@ -193,6 +206,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
         carModelStyle = try container.decodeIfPresent(CarModelStyle.self, forKey: .carModelStyle) ?? .sedan
         clubNick = try container.decodeIfPresent(String.self, forKey: .clubNick) ?? ""
         clubAvatar = try container.decodeIfPresent(String.self, forKey: .clubAvatar) ?? ""
+        widgetCommands = try container.decodeIfPresent([String].self, forKey: .widgetCommands)
+            ?? CarModelStyle.defaultWidgetCommands
     }
 
     public static let `default` = AppSettings(

@@ -19,6 +19,7 @@ struct SettingsView: View {
             Form {
                 accountSection
                 appearanceSection
+                widgetSection
                 confirmSection
                 siriSection
                 // 网页版 applyAdminEntry：非管理员不显示管理入口
@@ -124,6 +125,40 @@ struct SettingsView: View {
         } footer: {
             Text("车型仅影响主界面车辆示意图；夜间主题同网页版暗色配色")
         }
+    }
+
+    // MARK: - 小组件按钮自定义
+
+    private var widgetSection: some View {
+        Section {
+            ForEach(0..<5, id: \.self) { index in
+                Picker("按钮 \(index + 1)", selection: widgetCommandBinding(index)) {
+                    ForEach(CarCommand.allCases, id: \.self) { command in
+                        Text(command.displayName).tag(command.rawValue)
+                    }
+                }
+            }
+        } header: {
+            Text("小组件按钮")
+        } footer: {
+            Text("桌面小组件底部的 5 个控车按钮，点一下直接执行（不打开 App）。改完回到桌面等几秒自动刷新。")
+        }
+    }
+
+    private func widgetCommandBinding(_ index: Int) -> Binding<String> {
+        Binding<String>(
+            get: {
+                let commands = settings.widgetCommands
+                return commands.indices.contains(index) ? commands[index] : CarModelStyle.defaultWidgetCommands[index]
+            },
+            set: { newValue in
+                var commands = settings.widgetCommands
+                while commands.count < 5 { commands.append("") }
+                commands[index] = newValue
+                settings.widgetCommands = commands
+                saveSettings()
+            }
+        )
     }
 
     // MARK: - 防误触（默认折叠）

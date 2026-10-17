@@ -3,7 +3,7 @@ import SwiftUI
 import AppIntents
 import CarCore
 
-/// 各尺寸小组件视图
+/// 各尺寸小组件视图：实车图 + 状态 + 5 个自定义控车按钮
 struct CarWidgetEntryView: View {
     @Environment(\.widgetFamily) private var family
     var entry: CarStatusEntry
@@ -11,24 +11,23 @@ struct CarWidgetEntryView: View {
     var body: some View {
         switch family {
         case .systemSmall:
-            SmallWidgetView(snapshot: entry.snapshot)
+            SmallWidgetView(entry: entry)
         case .systemMedium:
-            MediumWidgetView(snapshot: entry.snapshot)
+            MediumWidgetView(entry: entry)
         case .systemLarge:
-            LargeWidgetView(snapshot: entry.snapshot)
+            LargeWidgetView(entry: entry)
         case .accessoryCircular:
-            AccessoryCircularView(snapshot: entry.snapshot)
+            AccessoryCircularView(entry: entry)
         case .accessoryRectangular:
-            AccessoryRectangularView(snapshot: entry.snapshot)
+            AccessoryRectangularView(entry: entry)
         default:
-            SmallWidgetView(snapshot: entry.snapshot)
+            SmallWidgetView(entry: entry)
         }
     }
 }
 
 // MARK: - 公共元素
 
-/// 锁态徽标
 private struct LockBadge: View {
     let isUnlocked: Bool
     var body: some View {
@@ -39,55 +38,113 @@ private struct LockBadge: View {
     }
 }
 
-/// 小组件底部快捷按钮（iOS 17+ 交互式按钮，点按直接执行不打开 App）
+/// 5 个自定义控车按钮（App 内可改：设置 → 小组件按钮）
 private struct QuickControlButtons: View {
-    var body: some View {
-        HStack(spacing: 8) {
-            widgetButton(intent: FlashLightsIntent(), title: "闪灯", symbol: "light.beacon.max.fill", tint: .blue)
-            widgetButton(intent: UnlockCarIntent(), title: "开锁", symbol: "lock.open.fill", tint: .orange)
-            widgetButton(intent: LockCarIntent(), title: "闭锁", symbol: "lock.fill", tint: .green)
-            widgetButton(intent: HonkHornIntent(), title: "鸣笛", symbol: "speaker.wave.2.fill", tint: .purple)
-        }
-    }
+    let commands: [String]
 
-    private func widgetButton<I: AppIntent>(intent: I, title: String, symbol: String, tint: Color) -> some View {
-        Button(intent: intent) {
-            VStack(spacing: 3) {
-                Image(systemName: symbol)
-                    .font(.system(size: 15, weight: .semibold))
-                Text(title)
-                    .font(.system(size: 9, weight: .semibold))
+    var body: some View {
+        HStack(spacing: 5) {
+            ForEach(0..<5, id: \.self) { index in
+                let command = commands.indices.contains(index) ? CarCommand(rawValue: commands[index]) : nil
+                Button(intent: intent(for: index)) {
+                    VStack(spacing: 3) {
+                        Image(systemName: command?.sfSymbol ?? "questionmark")
+                            .font(.system(size: 13, weight: .semibold))
+                        Text(command?.displayName ?? "未设")
+                            .font(.system(size: 8.5, weight: .semibold))
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .background(buttonTint(command).opacity(0.16))
+                    .foregroundStyle(buttonTint(command))
+                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                }
+                .buttonStyle(.plain)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 7)
-            .background(tint.opacity(0.16))
-            .foregroundStyle(tint)
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
-        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func intent(for index: Int) -> some AppIntent {
+        switch index {
+        case 0: WidgetSlot1Intent()
+        case 1: WidgetSlot2Intent()
+        case 2: WidgetSlot3Intent()
+        case 3: WidgetSlot4Intent()
+        default: WidgetSlot5Intent()
+        }
+    }
+
+    private func buttonTint(_ command: CarCommand?) -> Color {
+        switch command {
+        case .flashLight: return .blue
+        case .unlockDoor: return .orange
+        case .lockDoor: return .green
+        case .whistle: return .purple
+        case .remoteSearchCar: return .cyan
+        case .openEngine: return .red
+        case .closeEngine: return .gray
+        case .openAir: return .teal
+        case .closeAir: return .indigo
+        default: return .blue
+        }
     }
 }
 
-/// 无数据占位
-private struct NoDataView: View {
-    var compact = false
+/// 实车图（跟随 App 里选的车型）
+private struct WidgetCarImage: View {
+    let style: CarModelStyle
+    let isUnlocked: Bool
+
+    private var imageName: String {
+        switch style {
+        case .sedan: return "car_yidong"
+        case .coupe: return "car_univ"
+        case .suv: return "car_cs75plus"
+        }
+    }
+
     var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "car.circle")
-                .font(.system(size: compact ? 28 : 40))
-                .foregroundStyle(.secondary)
-            Text(compact ? "打开 App 查看车况" : "暂无车况数据")
-                .font(compact ? .caption2 : .caption)
-                .foregroundStyle(.secondary)
-            Text("登录后自动刷新")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        Image(imageName)
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .accessibilityLabel(isUnlocked ? "车辆图片，已解锁" : "车辆图片，已锁止")
     }
 }
 
-/// 相对时间文本
+/// 状态徽章（绿色车辆正常 / 橙色已开锁 / 红色发动机…）
+private struct StateBadge: View {
+    let summaryText: String
+    let level: String
+
+    init(snapshot: StatusSnapshot) {
+        self.summaryText = snapshot.summaryText
+        self.level = snapshot.level
+    }
+
+    var body: some View {
+        let (text, color): (String, Color) = {
+            switch level {
+            case "door": return ("已开锁", Color.orange)
+            case "engine": return ("发动机运行", Color.red)
+            case "win": return ("车窗未关", Color.blue)
+            default: return ("车辆正常", Color.green)
+            }
+        }()
+        return HStack(spacing: 3) {
+            Circle().fill(color).frame(width: 5, height: 5)
+            Text(text)
+                .font(.system(size: 9, weight: .semibold))
+        }
+        .foregroundStyle(color)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(color.opacity(0.12))
+        .clipShape(Capsule())
+    }
+}
+
 private func relativeTimeText(_ date: Date) -> String {
     let formatter = RelativeDateTimeFormatter()
     formatter.unitsStyle = .short
@@ -95,14 +152,34 @@ private func relativeTimeText(_ date: Date) -> String {
     return formatter.localizedString(for: date, relativeTo: Date())
 }
 
-// MARK: - 小号（主屏）
-
-struct SmallWidgetView: View {
-    let snapshot: StatusSnapshot?
+private struct NoDataView: View {
+    var isLoggedIn: Bool
+    var compact = false
 
     var body: some View {
-        if let snapshot {
-            VStack(alignment: .leading, spacing: 8) {
+        VStack(spacing: 8) {
+            Image(systemName: "car.circle")
+                .font(.system(size: compact ? 28 : 40))
+                .foregroundStyle(.secondary)
+            Text(isLoggedIn ? "暂无车况数据" : "未登录")
+                .font(compact ? .caption2 : .caption)
+                .foregroundStyle(.secondary)
+            Text(isLoggedIn ? "等待刷新，或打开 App 下拉刷新" : "打开 App 登录后自动同步")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - 小号
+
+struct SmallWidgetView: View {
+    let entry: CarStatusEntry
+
+    var body: some View {
+        if let snapshot = entry.snapshot {
+            VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text(snapshot.carName)
                         .font(.caption.bold())
@@ -110,102 +187,85 @@ struct SmallWidgetView: View {
                     Spacer()
                     LockBadge(isUnlocked: snapshot.doorUnlocked)
                 }
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(CarStatus.format(snapshot.remainingRangeKm))
-                        .font(.system(size: 34, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                        .widgetAccentable()
-                    Text("剩余续航 km")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                WidgetCarImage(style: entry.carStyle, isUnlocked: snapshot.doorUnlocked)
+                    .frame(height: 52)
+                    .frame(maxWidth: .infinity)
+                HStack(spacing: 10) {
+                    Label("\(CarStatus.format(snapshot.remainingRangeKm))km", systemImage: "road.lanes")
+                    Label("\(CarStatus.format(snapshot.fuelLeftLiters))L", systemImage: "fuelpump.fill")
                 }
-                HStack(spacing: 12) {
-                    Label("\(CarStatus.format(snapshot.fuelLeftLiters)) L", systemImage: "fuelpump.fill")
-                    Label("\(CarStatus.format(snapshot.totalOdometerKm)) km", systemImage: "speedometer")
-                }
-                .font(.caption2)
+                .font(.system(size: 9))
                 .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
-                QuickControlButtons()
                 Text(relativeTimeText(snapshot.updatedAt))
-                    .font(.system(size: 9))
+                    .font(.system(size: 8))
                     .foregroundStyle(.tertiary)
             }
             .widgetURL(URL(string: APIConfig.urlScheme + "://dashboard"))
         } else {
-            NoDataView(compact: true)
+            NoDataView(isLoggedIn: entry.isLoggedIn, compact: true)
         }
     }
 }
 
-// MARK: - 中号（主屏）
+// MARK: - 中号（主力布局：实车图 + 状态 + 5 按钮）
 
 struct MediumWidgetView: View {
-    let snapshot: StatusSnapshot?
+    let entry: CarStatusEntry
 
     var body: some View {
-        if let snapshot {
-            VStack(spacing: 10) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
+        if let snapshot = entry.snapshot {
+            VStack(spacing: 8) {
+                HStack(alignment: .top, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 5) {
                             Text(snapshot.carName)
-                                .font(.headline)
-                            LockBadge(isUnlocked: snapshot.doorUnlocked)
+                                .font(.system(size: 13, weight: .bold))
+                                .lineLimit(1)
+                            StateBadge(snapshot: snapshot)
                         }
-                        Text(snapshot.summaryText)
-                            .font(.caption)
-                            .foregroundStyle(stateColor(level: snapshot.level))
-                        Text("更新于 \(relativeTimeText(snapshot.updatedAt))")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 6) {
-                        HStack(alignment: .firstTextBaseline, spacing: 2) {
+                        HStack(alignment: .firstTextBaseline, spacing: 3) {
                             Text(CarStatus.format(snapshot.remainingRangeKm))
-                                .font(.system(size: 28, weight: .bold, design: .rounded))
+                                .font(.system(size: 22, weight: .bold, design: .rounded))
                                 .monospacedDigit()
                                 .widgetAccentable()
-                            Text("km")
-                                .font(.caption)
+                            Text("km 续航")
+                                .font(.system(size: 9))
                                 .foregroundStyle(.secondary)
                         }
-                        Text("油量 \(CarStatus.format(snapshot.fuelLeftLiters)) L · 电压 \(CarStatus.format(snapshot.batteryVoltage)) V")
-                            .font(.caption2)
+                        Text("油量 \(CarStatus.format(snapshot.fuelLeftLiters)) L · 里程 \(CarStatus.format(snapshot.totalOdometerKm)) km · 电压 \(CarStatus.format(snapshot.batteryVoltage)) V")
+                            .font(.system(size: 9))
                             .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        Text("更新于 \(relativeTimeText(snapshot.updatedAt))")
+                            .font(.system(size: 8))
+                            .foregroundStyle(.tertiary)
                     }
+                    Spacer(minLength: 0)
+                    WidgetCarImage(style: entry.carStyle, isUnlocked: snapshot.doorUnlocked)
+                        .frame(height: 74)
                 }
-                Spacer(minLength: 0)
-                QuickControlButtons()
+                QuickControlButtons(commands: entry.widgetCommands)
             }
             .widgetURL(URL(string: APIConfig.urlScheme + "://dashboard"))
         } else {
-            NoDataView()
-        }
-    }
-
-    private func stateColor(level: String) -> Color {
-        switch level {
-        case "door": return .orange
-        case "win": return .blue
-        case "engine": return .red
-        default: return .green
+            NoDataView(isLoggedIn: entry.isLoggedIn)
         }
     }
 }
 
-// MARK: - 大号（主屏）
+// MARK: - 大号
 
 struct LargeWidgetView: View {
-    let snapshot: StatusSnapshot?
+    let entry: CarStatusEntry
 
     var body: some View {
-        if let snapshot {
-            VStack(alignment: .leading, spacing: 12) {
+        if let snapshot = entry.snapshot {
+            VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Text(snapshot.carName)
                         .font(.title3.bold())
+                    StateBadge(snapshot: snapshot)
                     Spacer()
                     LockBadge(isUnlocked: snapshot.doorUnlocked)
                     Text(relativeTimeText(snapshot.updatedAt))
@@ -214,10 +274,23 @@ struct LargeWidgetView: View {
                 }
 
                 HStack(spacing: 12) {
-                    WidgetStat(title: "续航", value: CarStatus.format(snapshot.remainingRangeKm), unit: "km", symbol: "road.lanes", tint: .green)
-                    WidgetStat(title: "油量", value: CarStatus.format(snapshot.fuelLeftLiters), unit: "L", symbol: "fuelpump", tint: .orange)
-                    WidgetStat(title: "总里程", value: CarStatus.format(snapshot.totalOdometerKm), unit: "km", symbol: "speedometer", tint: .blue)
-                    WidgetStat(title: "电压", value: CarStatus.format(snapshot.batteryVoltage), unit: "V", symbol: "bolt.fill", tint: .yellow)
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(alignment: .firstTextBaseline, spacing: 2) {
+                            Text(CarStatus.format(snapshot.remainingRangeKm))
+                                .font(.system(size: 26, weight: .bold, design: .rounded))
+                                .monospacedDigit()
+                                .widgetAccentable()
+                            Text("km 续航")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        Text("油量 \(CarStatus.format(snapshot.fuelLeftLiters)) L · 电压 \(CarStatus.format(snapshot.batteryVoltage)) V")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    WidgetCarImage(style: entry.carStyle, isUnlocked: snapshot.doorUnlocked)
+                        .frame(height: 84)
                 }
 
                 // 胎压四轮
@@ -233,7 +306,7 @@ struct LargeWidgetView: View {
                             Text(CarStatus.format(value))
                                 .font(.system(size: 13, weight: .semibold, design: .rounded))
                                 .monospacedDigit()
-                                .foregroundStyle(isLowPressure(value) ? .red : .primary)
+                                .foregroundStyle(isLowPressure(value) ? Color.red : Color.primary)
                             Text("kPa")
                                 .font(.system(size: 8))
                                 .foregroundStyle(.tertiary)
@@ -245,16 +318,12 @@ struct LargeWidgetView: View {
                     }
                 }
 
-                Text(snapshot.summaryText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
                 Spacer(minLength: 0)
-                QuickControlButtons()
+                QuickControlButtons(commands: entry.widgetCommands)
             }
             .widgetURL(URL(string: APIConfig.urlScheme + "://dashboard"))
         } else {
-            NoDataView()
+            NoDataView(isLoggedIn: entry.isLoggedIn)
         }
     }
 
@@ -264,42 +333,13 @@ struct LargeWidgetView: View {
     }
 }
 
-/// 大号小组件数值格
-private struct WidgetStat: View {
-    let title: String
-    let value: String
-    let unit: String
-    let symbol: String
-    let tint: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Label(title, systemImage: symbol)
-                .font(.system(size: 9))
-                .foregroundStyle(.secondary)
-            HStack(alignment: .firstTextBaseline, spacing: 1) {
-                Text(value)
-                    .font(.system(size: 17, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-                Text(unit)
-                    .font(.system(size: 8))
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(8)
-        .background(Color(.tertiarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-    }
-}
-
 // MARK: - 锁屏（圆形）
 
 struct AccessoryCircularView: View {
-    let snapshot: StatusSnapshot?
+    let entry: CarStatusEntry
 
     var body: some View {
-        if let snapshot, let range = snapshot.remainingRangeKm {
+        if let snapshot = entry.snapshot, let range = snapshot.remainingRangeKm {
             Gauge(value: min(max(range / 600, 0), 1)) {
                 Image(systemName: snapshot.doorUnlocked ? "lock.open.fill" : "lock.fill")
             } currentValueLabel: {
@@ -320,10 +360,10 @@ struct AccessoryCircularView: View {
 // MARK: - 锁屏（矩形）
 
 struct AccessoryRectangularView: View {
-    let snapshot: StatusSnapshot?
+    let entry: CarStatusEntry
 
     var body: some View {
-        if let snapshot {
+        if let snapshot = entry.snapshot {
             VStack(alignment: .leading, spacing: 2) {
                 HStack {
                     Text(snapshot.carName)
@@ -351,7 +391,7 @@ struct AccessoryRectangularView: View {
                     .foregroundStyle(.secondary)
             }
         } else {
-            Label("打开 App 查看车况", systemImage: "car.circle")
+            Label(entry.isLoggedIn ? "打开 App 查看车况" : "打开 App 登录", systemImage: "car.circle")
                 .font(.caption)
                 .widgetAccentable()
         }
