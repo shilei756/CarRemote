@@ -158,9 +158,30 @@ public enum ACService {
         let (authorizeToken, updated) = try await AuthService.validAccessToken(for: credentials)
         SharedStore.saveCredentials(updated)
 
-        // 2. 车辆列表：账号下可能有多条车辆记录（不同 ID 形态），
-        //    「服务未注册」往往就是 carId 不对，下发时逐个尝试。
-        let cars = try await CarService.fetchCars(accessToken: authorizeToken)
+        var diag = ""
+        // 2. 车辆候选：客户端 /user/cars + 服务端 /api/siri/cars（站点凭证查的，
+        //    与网页版一致）。「服务未注册」往往就是 carId 不对，全部进入候选。
+        var cars = try await CarService.fetchCars(accessToken: authorizeToken)
+        do {
+            let siriObject = try await APIClient.postJSON(
+                URL(string: APIConfig.siteBaseURL + "/api/siri/cars")!,
+                json: ["phone": credentials.phone, "pin": credentials.pin]
+            )
+            if let dict = siriObject as? [String: Any], dict.bool("success") == true,
+               let array = dict["cars"] as? [[String: Any]] {
+                let serverCars: [CarInfo] = array.compactMap { item in
+                    guard let id = item.string("carId"), !id.isEmpty else { return nil }
+                    let name = item.string("name") ?? ""
+                    return CarInfo(carId: id, displayName: name)
+                }
+                if !serverCars.isEmpty {
+                    diag += "serverCars=\(serverCars.map { $0.carId }.joined(separator: ",")); "
+                    // 服务端列表（网页版视角）放前面优先尝试，去重合并
+                    let clientIds = Set(cars.map { $0.carId })
+                    cars = serverCars + cars.filter { !clientIds.contains($0.carId) }
+                }
+            }
+        } catch { diag += "siriCars.err=\(error.localizedDescription); " }
         guard !cars.isEmpty else {
             throw APIError.server("未获取到车辆信息")
         }
@@ -192,7 +213,6 @@ public enum ACService {
         }
 
         var tokenCandidates: [(label: String, token: String)] = []
-        var diag = ""
 
         // A. 网页版同款链路
         do {
