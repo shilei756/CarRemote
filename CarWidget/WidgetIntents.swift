@@ -20,19 +20,53 @@ enum WidgetSlotRunner {
 
     @MainActor
     static func perform(slot: Int) async -> String {
-        guard let credentials = SharedStore.loadCredentials() else {
-            return "请先在「长安控车」App 中登录"
+        let text: String
+        let ok: Bool
+        if let credentials = SharedStore.loadCredentials(),
+           let command = command(forSlot: slot) {
+            do {
+                let result = try await CarService.execute(command: command, credentials: credentials)
+                ok = result.ok
+                text = result.ok ? "\(command.displayName)指令已发送" : "\(command.displayName)失败：\(result.message)"
+            } catch {
+                ok = false
+                text = "\(command.displayName)失败：\(error.localizedDescription)"
+            }
+        } else if SharedStore.loadCredentials() == nil {
+            text = "请先在「长安控车」App 中登录"
+            ok = false
+        } else {
+            text = "请在 App「设置 → 小组件按钮」中配置该按钮"
+            ok = false
         }
-        guard let command = command(forSlot: slot) else {
-            return "请在 App「设置 → 小组件按钮」中配置该按钮"
+        // 结果落盘并刷新时间线：小组件界面显示绿✓/红✗横幅作为点击反馈
+        Self.saveFeedback(text: text, ok: ok)
+        WidgetCenter.shared.reloadAllTimelines()
+        return text
+    }
+
+    // MARK: 执行结果反馈（小组件进程本地存储，时间线渲染时读取）
+
+    struct LastAction: Codable {
+        let text: String
+        let ok: Bool
+        let at: Date
+    }
+
+    private static let feedbackKey = "widget.lastAction"
+
+    static func saveFeedback(text: String, ok: Bool) {
+        if let data = try? JSONEncoder().encode(LastAction(text: text, ok: ok, at: Date())) {
+            UserDefaults.standard.set(data, forKey: feedbackKey)
         }
-        do {
-            let result = try await CarService.execute(command: command, credentials: credentials)
-            WidgetCenter.shared.reloadAllTimelines()
-            return result.ok ? "\(command.displayName)指令已发送" : "\(command.displayName)失败：\(result.message)"
-        } catch {
-            return "\(command.displayName)失败：\(error.localizedDescription)"
-        }
+    }
+
+    /// 90 秒内的执行结果（用于小组件横幅反馈）
+    static func lastAction() -> LastAction? {
+        guard let data = UserDefaults.standard.data(forKey: feedbackKey),
+              let action = try? JSONDecoder().decode(LastAction.self, from: data),
+              Date().timeIntervalSince(action.at) < 90 else { return nil }
+        return action
     }
 }
 

@@ -38,6 +38,26 @@ private struct LockBadge: View {
     }
 }
 
+/// 按钮执行结果横幅（点击反馈）：绿✓ / 红✗ + 指令文案，90 秒内显示
+private struct ActionFeedbackBanner: View {
+    var body: some View {
+        if let action = WidgetSlotRunner.lastAction() {
+            HStack(spacing: 4) {
+                Image(systemName: action.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
+                    .font(.system(size: 9, weight: .bold))
+                Text(action.text)
+                    .font(.system(size: 9, weight: .semibold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(action.ok ? Color.green : Color.red)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 4)
+            .background((action.ok ? Color.green : Color.red).opacity(0.12))
+            .clipShape(Capsule())
+        }
+    }
+}
+
 /// 5 个自定义控车按钮（App 内可改：设置 → 小组件按钮）
 private struct QuickControlButtons: View {
     let commands: [String]
@@ -255,7 +275,10 @@ struct MediumWidgetView: View {
                     WidgetCarImage(style: entry.carStyle, isUnlocked: snapshot.doorUnlocked)
                         .frame(height: 74)
                 }
-                QuickControlButtons(commands: entry.widgetCommands)
+                VStack(spacing: 4) {
+                    ActionFeedbackBanner()
+                    QuickControlButtons(commands: entry.widgetCommands)
+                }
             }
             .widgetURL(URL(string: APIConfig.urlScheme + "://dashboard"))
         } else {
@@ -329,7 +352,10 @@ struct LargeWidgetView: View {
                 }
 
                 Spacer(minLength: 0)
-                QuickControlButtons(commands: entry.widgetCommands)
+                VStack(spacing: 4) {
+                    ActionFeedbackBanner()
+                    QuickControlButtons(commands: entry.widgetCommands)
+                }
             }
             .widgetURL(URL(string: APIConfig.urlScheme + "://dashboard"))
         } else {
