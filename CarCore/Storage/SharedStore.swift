@@ -411,6 +411,14 @@ public enum SharedStore {
         return try? Data(contentsOf: url)
     }
 
+    /// 凭据三条通道的诊断（小组件「未登录」界面显示，用于远程定位数据通道断点）
+    public static func credentialsDiagnostics() -> String {
+        let kc = KeychainStore.get(Key.credentials) != nil
+        let dg = defaults?.data(forKey: Key.credentials) != nil
+        let cf = containerFileData(Key.credentials) != nil
+        return "诊断 钥匙串\(kc ? "✓" : "✗") 共享存储\(dg ? "✓" : "✗") 容器文件\(cf ? "✓" : "✗")"
+    }
+
     // MARK: 设置（App Group 为主，Keychain/容器文件镜像兜底——小组件读按钮配置用）
 
     public static func loadSettings() -> AppSettings {

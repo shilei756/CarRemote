@@ -171,6 +171,12 @@ private struct NoDataView: View {
             Text(isLoggedIn ? "等待刷新，或打开 App 下拉刷新" : "打开 App 登录后自动同步")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
+            if !isLoggedIn {
+                // 数据通道诊断：截图发给开发者定位是哪条共享通道断了
+                Text(SharedStore.credentialsDiagnostics())
+                    .font(.system(size: 7))
+                    .foregroundStyle(.tertiary)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
