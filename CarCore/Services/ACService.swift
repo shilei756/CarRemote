@@ -179,18 +179,23 @@ public enum ACService {
             throw APIError.server(message)
         }
 
-        // 3. 开放平台刷新 access_token
-        guard var oauthComponents = URLComponents(string: "https://open.iov.changan.com.cn/oauth/token") else {
+        // 3. 开放平台刷新 access_token（必须 POST 表单；GET 会返回 405 method_not_allowed）
+        guard let oauthURL = URL(string: "https://open.iov.changan.com.cn/oauth/token") else {
             throw APIError.invalidURL
         }
-        oauthComponents.queryItems = [
-            URLQueryItem(name: "redict_uri", value: ""),
-            URLQueryItem(name: "refresh_token", value: refreshToken),
-            URLQueryItem(name: "grant_type", value: "refresh_token"),
-            URLQueryItem(name: "client_secret", value: "YjIzNWFmZDMxMzAwNDc4NQ=="),
-            URLQueryItem(name: "client_id", value: "b235afd313004785bfde580c188c47bb")
-        ]
-        let oauthObject = try await APIClient.getJSON(oauthComponents.url!)
+        let oauthForm = APIClient.formData([
+            ("redict_uri", ""),
+            ("refresh_token", refreshToken),
+            ("grant_type", "refresh_token"),
+            ("client_secret", "YjIzNWFmZDMxMzAwNDc4NQ=="),
+            ("client_id", "b235afd313004785bfde580c188c47bb")
+        ])
+        let oauthObject = try await APIClient.request(
+            oauthURL,
+            method: "POST",
+            headers: ["Content-Type": "application/x-www-form-urlencoded"],
+            body: oauthForm.data(using: String.Encoding.utf8)
+        )
         guard let oauthDict = oauthObject as? [String: Any],
               let accessToken = oauthDict.string("access_token"), !accessToken.isEmpty else {
             let message = (oauthObject as? [String: Any])?.string("error") ?? "开放平台凭证刷新失败，请重新扫码开通"
