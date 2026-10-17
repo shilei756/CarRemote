@@ -45,6 +45,7 @@ struct DashboardView: View {
     }
 
     @State private var showWallpaperSheet = false
+    @State private var showWebAC = false
     @State private var showNameEditor = false
     @State private var nameDraft = ""
 
@@ -229,6 +230,11 @@ struct DashboardView: View {
                 } else {
                     PanoramaSheet()
                         .environmentObject(appState)
+                }
+            }
+            .sheet(isPresented: $showWebAC) {
+                if let credentials = SharedStore.loadCredentials() {
+                    WebACSheet(credentials: credentials)
                 }
             }
             .sheet(isPresented: $viewModel.showWhitelist) {
@@ -532,6 +538,17 @@ struct DashboardView: View {
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(WebTheme.txt)
                 Spacer(minLength: 8)
+                Button {
+                    showWebAC = true
+                } label: {
+                    HStack(spacing: 2) {
+                        Image(systemName: "safari")
+                            .font(.system(size: 9))
+                        Text("网页版")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .foregroundStyle(WebTheme.green)
+                }
                 Text("空调")
                     .font(.system(size: 10))
                     .foregroundStyle(WebTheme.faint)
