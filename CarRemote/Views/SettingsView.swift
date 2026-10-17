@@ -120,15 +120,32 @@ struct SettingsView: View {
             .onChange(of: appTheme) { _, newValue in
                 ThemeManager.shared.set(newValue)
             }
+            // 油箱总容量（油量百分比/进度条基准）
+            HStack {
+                Text("油箱总容量")
+                Spacer()
+                TextField("50", value: Binding(
+                    get: { settings.tankCapacityL },
+                    set: { newValue in
+                        let clamped = min(max(newValue, 20), 120)
+                        settings.tankCapacityL = clamped
+                        saveSettings()
+                    }
+                ), format: .number.precision(.fractionLength(0...1)))
+                .keyboardType(.decimalPad)
+                .multilineTextAlignment(.trailing)
+                .frame(width: 70)
+                Text("L")
+                    .foregroundStyle(.secondary)
+            }
         } header: {
             Text("外观")
         } footer: {
-            Text("车型仅影响主界面车辆示意图；夜间主题同网页版暗色配色")
+            Text("车型仅影响主界面车辆示意图；油箱总容量用于油量百分比与油条，逸动PLUS 约 53L、UNI-V 约 51L、CS75PLUS 约 58L")
         }
     }
 
     // MARK: - 小组件按钮自定义
-
     private var widgetSection: some View {
         Section {
             ForEach(0..<5, id: \.self) { index in

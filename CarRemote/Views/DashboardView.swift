@@ -50,8 +50,6 @@ struct DashboardView: View {
 
     private var settings: AppSettings { SharedStore.loadSettings() }
 
-    /// 油箱容积估算（长安逸动PLUS/UNI-V 约 50L），用于油量百分比进度条
-    private let tankCapacityL = 50.0
 
     var body: some View {
         NavigationStack {
@@ -357,6 +355,10 @@ struct DashboardView: View {
                             .font(.system(size: 11))
                             .monospacedDigit()
                             .foregroundStyle(WebTheme.muted)
+                        Text("/ \(CarStatus.format(SharedStore.loadSettings().tankCapacityL))L 油箱")
+                            .font(.system(size: 10))
+                            .monospacedDigit()
+                            .foregroundStyle(WebTheme.faint)
                         Spacer()
                         Text(CarStatus.format(status.remainingRangeKm))
                             .font(.system(size: 14, weight: .bold))
@@ -368,7 +370,7 @@ struct DashboardView: View {
                     }
                     // 油量条（网页版 .ftrack）
                     WebTrack(
-                        fraction: (status.fuelLeftLiters ?? 0) / tankCapacityL,
+                        fraction: (status.fuelLeftLiters ?? 0) / SharedStore.loadSettings().tankCapacityL,
                         fill: LinearGradient(colors: [WebTheme.amber, WebTheme.amber.opacity(0.7)], startPoint: .leading, endPoint: .trailing),
                         height: 4
                     )
@@ -487,7 +489,9 @@ struct DashboardView: View {
 
     private func fuelPercent(_ liters: Double?) -> Int {
         guard let liters else { return 0 }
-        return Int(min(max((liters / tankCapacityL) * 100, 0), 100).rounded())
+        let capacity = SharedStore.loadSettings().tankCapacityL
+        guard capacity > 0 else { return 0 }
+        return Int(min(max((liters / capacity) * 100, 0), 100).rounded())
     }
 
     /// 电瓶电压告警：低于 11.8V 或高于 14.8V 视为异常（燃油车常见区间）
@@ -500,8 +504,9 @@ struct DashboardView: View {
     // MARK: - 快捷控车（网页版 quickCard：闪灯/开锁/闭锁/鸣笛，中间两个为描边大钮）
 
     private var quickControlsCard: some View {
-        HStack(alignment: .top, spacing: 0) {
-            ForEach(Array(CarCommand.primaryCommands.enumerated()), id: \.element) { index, command in
+        let commands = SharedStore.loadSettings().orderedQuickCommands
+        return HStack(alignment: .top, spacing: 0) {
+            ForEach(Array(commands.enumerated()), id: \.element) { index, command in
                 ControlButtonView(
                     command: command,
                     isPrimary: command == .unlockDoor || command == .lockDoor,
@@ -558,7 +563,7 @@ struct DashboardView: View {
                 columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 5),
                 spacing: 14
             ) {
-                ForEach(Array(CarCommand.extraCommands.enumerated()), id: \.element) { _, command in
+                ForEach(Array(SharedStore.loadSettings().orderedMoreCommands.enumerated()), id: \.element) { _, command in
                     CompactControlButton(
                         command: command,
                         isExecuting: viewModel.executingCommand == command
@@ -748,45 +753,23 @@ struct DashboardView: View {
     }
 
 
-    // MARK: - 更多功能（网页版 moreGrid：11 个磁贴）
+    // MARK: - 更多功能（网页版 moreGrid：磁贴顺序支持自定义）
 
     private var moreToolsCard: some View {
-        SectionCard(title: "更多功能", sakura: false) {
+        let tools = SharedStore.loadSettings().orderedMoreTools
+        return SectionCard(title: "更多功能", sakura: false) {
             LazyVGrid(
                 columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4),
                 spacing: 14
             ) {
-                moreToolTile(name: "查询车况", symbol: "arrow.triangle.2.circlepath", color: WebTheme.blue) {
-                    Task { await appState.refreshStatus() }
-                }
-                moreToolTile(name: "操作历史", symbol: "clock.arrow.circlepath", color: WebTheme.amber) {
-                    viewModel.showHistoryActions = true
-                }
-                moreToolTile(name: "消息记录", symbol: "bubble.left.and.text.bubble.right", color: Color(hex: 0x06b6d4)) {
-                    viewModel.showMessages = true
-                }
-                moreToolTile(name: "我的行程", symbol: "road.lanes", color: WebTheme.purple) {
-                    viewModel.showTrips = true
-                }
-                moreToolTile(name: "空调开通", symbol: "qrcode", color: WebTheme.green) {
-                    viewModel.showACQR = true
-                }
-                moreToolTile(name: "车辆状态", symbol: "gauge.with.dots.needle.33percent", color: WebTheme.blue) {
-                    viewModel.showEmbed = .vehicleStatus
-                }
-                moreToolTile(name: "360全景", symbol: "camera.rotate", color: WebTheme.green) {
-                    viewModel.showEmbed = .panorama
-                }
-                moreToolTile(name: "智能维保", symbol: "wrench.and.screwdriver", color: Color(hex: 0xea580c)) {
-                    TabRouter.shared.select(.maintenance)
-                }
-                moreToolTile(name: "背景壁纸", symbol: "photo.on.rectangle.angled", color: Color(hex: 0xdb2777)) {
-                    showWallpaperSheet = true
-                }
-                // 网页版 applyAdminEntry：仅管理员可见管理入口
-                if appState.isAdminUser {
-                    moreToolTile(name: "白名单管理", symbol: "person.2.shield", color: WebTheme.red) {
-                        viewModel.showWhitelist = true
+                ForEach(tools, id: \.self) { tool in
+                    // 白名单管理仅管理员可见
+                    if tool != .whitelist || appState.isAdminUser {
+                        moreToolTile(name: tool.displayName,
+                                     symbol: tool.sfSymbol,
+                                     color: Color(hex: UInt(tool.colorHex))) {
+                            handleTool(tool)
+                        }
                     }
                 }
             }
@@ -795,6 +778,37 @@ struct DashboardView: View {
         .sheet(isPresented: $showWallpaperSheet) {
             WallpaperSheet()
                 .environmentObject(appState)
+        }
+        .sheet(isPresented: $viewModel.showLayoutEditor) {
+            LayoutEditorSheet(viewModel: viewModel)
+        }
+    }
+
+    /// 磁贴点击分发
+    private func handleTool(_ tool: MoreTool) {
+        switch tool {
+        case .refreshStatus:
+            Task { await appState.refreshStatus() }
+        case .history:
+            viewModel.showHistoryActions = true
+        case .messages:
+            viewModel.showMessages = true
+        case .trips:
+            viewModel.showTrips = true
+        case .acActivate:
+            viewModel.showACQR = true
+        case .vehicleStatus:
+            viewModel.showEmbed = .vehicleStatus
+        case .panorama:
+            viewModel.showEmbed = .panorama
+        case .maintenance:
+            TabRouter.shared.select(.maintenance)
+        case .wallpaper:
+            showWallpaperSheet = true
+        case .customize:
+            viewModel.showLayoutEditor = true
+        case .whitelist:
+            viewModel.showWhitelist = true
         }
     }
 

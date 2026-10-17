@@ -174,10 +174,19 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var clubAvatar: String
     /// 桌面小组件的 5 个控车按钮（CarCommand.rawValue，按槽位顺序）
     public var widgetCommands: [String]
+    /// 首页「快捷控车」4 个按钮的顺序（CarCommand.rawValue，自定义布局）
+    public var quickCommands: [String]
+    /// 首页「更多控车」指令的顺序
+    public var moreCommands: [String]
+    /// 首页「更多功能」磁贴的顺序（MoreTool.rawValue）
+    public var moreTools: [String]
+    /// 油箱总容量（升），用于油量百分比/进度条
+    public var tankCapacityL: Double
 
     private enum CodingKeys: String, CodingKey {
         case confirmGateCommands, siriEnabledCommands, siriMasterEnabled,
-             carModelStyle, clubNick, clubAvatar, widgetCommands
+             carModelStyle, clubNick, clubAvatar, widgetCommands,
+             quickCommands, moreCommands, moreTools, tankCapacityL
     }
 
     public init(confirmGateCommands: Set<String>,
@@ -186,7 +195,11 @@ public struct AppSettings: Codable, Equatable, Sendable {
                 carModelStyle: CarModelStyle,
                 clubNick: String,
                 clubAvatar: String,
-                widgetCommands: [String] = CarModelStyle.defaultWidgetCommands) {
+                widgetCommands: [String] = CarModelStyle.defaultWidgetCommands,
+                quickCommands: [String] = CarCommand.primaryCommands.map { $0.rawValue },
+                moreCommands: [String] = CarCommand.extraCommands.map { $0.rawValue },
+                moreTools: [String] = MoreTool.defaultOrder.map { $0.rawValue },
+                tankCapacityL: Double = 50) {
         self.confirmGateCommands = confirmGateCommands
         self.siriEnabledCommands = siriEnabledCommands
         self.siriMasterEnabled = siriMasterEnabled
@@ -194,6 +207,10 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.clubNick = clubNick
         self.clubAvatar = clubAvatar
         self.widgetCommands = widgetCommands
+        self.quickCommands = quickCommands
+        self.moreCommands = moreCommands
+        self.moreTools = moreTools
+        self.tankCapacityL = tankCapacityL
     }
 
     /// 旧数据兼容解码：新增字段缺省时给默认值，避免老用户设置丢失
@@ -208,6 +225,47 @@ public struct AppSettings: Codable, Equatable, Sendable {
         clubAvatar = try container.decodeIfPresent(String.self, forKey: .clubAvatar) ?? ""
         widgetCommands = try container.decodeIfPresent([String].self, forKey: .widgetCommands)
             ?? CarModelStyle.defaultWidgetCommands
+        quickCommands = try container.decodeIfPresent([String].self, forKey: .quickCommands)
+            ?? CarCommand.primaryCommands.map { $0.rawValue }
+        moreCommands = try container.decodeIfPresent([String].self, forKey: .moreCommands)
+            ?? CarCommand.extraCommands.map { $0.rawValue }
+        moreTools = try container.decodeIfPresent([String].self, forKey: .moreTools)
+            ?? MoreTool.defaultOrder.map { $0.rawValue }
+        tankCapacityL = try container.decodeIfPresent(Double.self, forKey: .tankCapacityL) ?? 50
+    }
+
+    // MARK: 自定义顺序的解析（含补齐/过滤非法值，保证渲染永远有内容）
+
+    /// 快捷控车按钮（按自定义顺序，缺省/非法回收为默认集合）
+    public var orderedQuickCommands: [CarCommand] {
+        let parsed = quickCommands.compactMap { CarCommand(rawValue: $0) }
+        let unique = parsed.reduce(into: [CarCommand]()) { result, cmd in
+            if !result.contains(cmd) { result.append(cmd) }
+        }
+        return unique.isEmpty ? CarCommand.primaryCommands : unique
+    }
+
+    /// 更多控车指令（按自定义顺序）
+    public var orderedMoreCommands: [CarCommand] {
+        let parsed = moreCommands.compactMap { CarCommand(rawValue: $0) }
+        let unique = parsed.reduce(into: [CarCommand]()) { result, cmd in
+            if !result.contains(cmd) { result.append(cmd) }
+        }
+        return unique.isEmpty ? CarCommand.extraCommands : unique
+    }
+
+    /// 更多功能磁贴（按自定义顺序，只保留可见项）
+    public var orderedMoreTools: [MoreTool] {
+        let parsed = moreTools.compactMap { MoreTool(rawValue: $0) }
+        let unique = parsed.reduce(into: [MoreTool]()) { result, tool in
+            if !result.contains(tool) { result.append(tool) }
+        }
+        // 补齐缺失项（新增磁贴后老用户也能看到）
+        var merged = unique
+        for tool in MoreTool.defaultOrder where !merged.contains(tool) {
+            merged.append(tool)
+        }
+        return merged
     }
 
     public static let `default` = AppSettings(

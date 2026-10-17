@@ -151,6 +151,40 @@ final class DashboardViewModel: ObservableObject {
         objectWillChange.send()
     }
 
+    /// 自定义布局弹窗
+    @Published var showLayoutEditor = false
+
+    /// 保存自定义布局（控车按钮顺序 + 更多功能磁贴顺序），并立即刷新小组件
+    func saveLayout(quick: [CarCommand], more: [CarCommand], tools: [MoreTool]) {
+        var settings = SharedStore.loadSettings()
+        settings.quickCommands = quick.map { $0.rawValue }
+        settings.moreCommands = more.map { $0.rawValue }
+        settings.moreTools = tools.map { $0.rawValue }
+        SharedStore.saveSettings(settings)
+        // 布局随车况快照一起共享（重签环境下独立通道可能失效）
+        if let status = appState?.status {
+            SharedStore.saveStatusSnapshot(StatusSnapshot(
+                carName: SharedStore.loadCustomCarName().isEmpty
+                    ? (appState?.carName ?? status.carName)
+                    : SharedStore.loadCustomCarName(),
+                status: status,
+                widgetCommands: settings.widgetCommands
+            ))
+        }
+        WidgetCenter.shared.reloadAllTimelines()
+        objectWillChange.send()
+    }
+
+    /// 恢复默认布局
+    func resetLayout() {
+        var settings = SharedStore.loadSettings()
+        settings.quickCommands = CarCommand.primaryCommands.map { $0.rawValue }
+        settings.moreCommands = CarCommand.extraCommands.map { $0.rawValue }
+        settings.moreTools = MoreTool.defaultOrder.map { $0.rawValue }
+        SharedStore.saveSettings(settings)
+        objectWillChange.send()
+    }
+
     // MARK: - 导航到车（高德 URI，与网页版一致）
 
     func navigateToCar() {
