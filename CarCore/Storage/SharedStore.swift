@@ -411,36 +411,67 @@ public enum SharedStore {
         return try? Data(contentsOf: url)
     }
 
-    // MARK: 设置
+    // MARK: 设置（App Group 为主，Keychain/容器文件镜像兜底——小组件读按钮配置用）
 
     public static func loadSettings() -> AppSettings {
-        guard let data = defaults?.data(forKey: Key.settings),
-              let settings = try? JSONDecoder().decode(AppSettings.self, from: data) else {
-            return .default
+        if let data = defaults?.data(forKey: Key.settings),
+           let settings = try? JSONDecoder().decode(AppSettings.self, from: data) {
+            return settings
         }
-        return settings
+        if let data = containerFileData(Key.settings),
+           let settings = try? JSONDecoder().decode(AppSettings.self, from: data) {
+            return settings
+        }
+        if let json = KeychainStore.get(Key.settings),
+           let data = json.data(using: .utf8),
+           let settings = try? JSONDecoder().decode(AppSettings.self, from: data) {
+            return settings
+        }
+        return .default
     }
 
     public static func saveSettings(_ settings: AppSettings) {
         guard let data = try? JSONEncoder().encode(settings) else { return }
         defaults?.set(data, forKey: Key.settings)
+        writeContainerFile(data, forKey: Key.settings)
+        if let json = String(data: data, encoding: .utf8) {
+            KeychainStore.set(json, forKey: Key.settings)
+        }
     }
 
-    // MARK: 车况快照
+    // MARK: 车况快照（App Group 为主，Keychain/容器文件镜像兜底——重签环境下 App Group 可能失效）
 
     public static func loadStatusSnapshot() -> StatusSnapshot? {
-        guard let data = defaults?.data(forKey: Key.statusSnapshot) else { return nil }
-        return try? JSONDecoder().decode(StatusSnapshot.self, from: data)
+        if let data = defaults?.data(forKey: Key.statusSnapshot),
+           let snapshot = try? JSONDecoder().decode(StatusSnapshot.self, from: data) {
+            return snapshot
+        }
+        if let data = containerFileData(Key.statusSnapshot),
+           let snapshot = try? JSONDecoder().decode(StatusSnapshot.self, from: data) {
+            return snapshot
+        }
+        if let json = KeychainStore.get(Key.statusSnapshot),
+           let data = json.data(using: .utf8),
+           let snapshot = try? JSONDecoder().decode(StatusSnapshot.self, from: data) {
+            return snapshot
+        }
+        return nil
     }
 
     public static func saveStatusSnapshot(_ snapshot: StatusSnapshot) {
         guard let data = try? JSONEncoder().encode(snapshot) else { return }
         defaults?.set(data, forKey: Key.statusSnapshot)
+        writeContainerFile(data, forKey: Key.statusSnapshot)
+        if let json = String(data: data, encoding: .utf8) {
+            KeychainStore.set(json, forKey: Key.statusSnapshot)
+        }
     }
 
     /// 退出登录时清空快照（小组件展示「未登录」）
     public static func clearStatusSnapshot() {
         defaults?.removeObject(forKey: Key.statusSnapshot)
+        writeContainerFile(nil, forKey: Key.statusSnapshot)
+        KeychainStore.remove(Key.statusSnapshot)
     }
 
     // MARK: 油耗记录（本地，与网页版 localStorage 方案对应）
