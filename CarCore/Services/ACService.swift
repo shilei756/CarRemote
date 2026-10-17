@@ -158,9 +158,10 @@ public enum ACService {
         let (authorizeToken, updated) = try await AuthService.validAccessToken(for: credentials)
         SharedStore.saveCredentials(updated)
 
-        // 2. 车辆 ID
+        // 2. 车辆列表：账号下可能有多条车辆记录（不同 ID 形态），
+        //    「服务未注册」往往就是 carId 不对，下发时逐个尝试。
         let cars = try await CarService.fetchCars(accessToken: authorizeToken)
-        guard let car = cars.first else {
+        guard !cars.isEmpty else {
             throw APIError.server("未获取到车辆信息")
         }
 
@@ -237,16 +238,10 @@ public enum ACService {
         diag += "chain=\(chain); "
 
         // 5. 下发指令（逐项对齐网页版 _newACGo：只带这几个头，不带 X-Requested-With）
+        //    对每个候选 carId 依次尝试，「服务未注册」(40001) 换下一辆，直到成功。
         guard let executeURL = URL(string: "https://open.iov.changan.com.cn/openc-apigw/vrtm-agent/api/v2/open/car-control/\(command.rawValue)") else {
             throw APIError.invalidURL
         }
-        let body: [String: Any] = [
-            "mapArgsJson": "{}",
-            "senderType": "APP",
-            "cmd": command.rawValue,
-            "carId": car.carId
-        ]
-        let bodyData = try JSONSerialization.data(withJSONObject: body)
         let headers: [String: String] = [
             "x-vcs-nonce": "WYYL",
             "x-vcs-user-access-token": accessToken,
@@ -254,17 +249,32 @@ public enum ACService {
             "Content-Type": "application/json; charset=utf-8",
             "User-Agent": "okhttp/3.10.0"
         ]
-        let (status, data) = try await APIClient.requestRaw(executeURL, method: "POST", headers: headers, body: bodyData)
-        let text = String(data: data, encoding: .utf8) ?? ""
-        let dict = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
-        let ok = dict.bool("success") == true
-        var message = dict.string("msg") ?? dict.string("message")
-            ?? (ok ? "指令已发送" : "车辆未接受指令")
-        if !ok {
-            let code = dict["code"].map { "\($0)" } ?? "-"
-            let snippet = String(text.prefix(120))
-            message = "\(message) [code=\(code) http=\(status) \(diag)raw=\(snippet)]"
+        var lastCode = ""
+        var lastRaw = ""
+        var lastMessage = "车辆未接受指令"
+        var ok = false
+        for car in cars {
+            let body: [String: Any] = [
+                "mapArgsJson": "{}",
+                "senderType": "APP",
+                "cmd": command.rawValue,
+                "carId": car.carId
+            ]
+            let bodyData = try JSONSerialization.data(withJSONObject: body)
+            let (status, data) = try await APIClient.requestRaw(executeURL, method: "POST", headers: headers, body: bodyData)
+            let text = String(data: data, encoding: .utf8) ?? ""
+            let dict = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+            ok = dict.bool("success") == true
+            lastMessage = dict.string("msg") ?? dict.string("message") ?? (ok ? "指令已发送" : "车辆未接受指令")
+            lastCode = dict["code"].map { "\($0)" } ?? "-"
+            lastRaw = String(text.prefix(120))
+            if ok || lastCode != "40001" { break }
         }
-        return CommandResult(ok: ok, message: message)
+        if !ok {
+            let carIds = cars.map { $0.carId }.joined(separator: ",")
+            diag += "cars=\(carIds); "
+            lastMessage = "\(lastMessage) [code=\(lastCode) \(diag)raw=\(lastRaw)]"
+        }
+        return CommandResult(ok: ok, message: ok ? lastMessage : lastMessage)
     }
 }
