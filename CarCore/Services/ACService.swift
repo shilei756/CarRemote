@@ -219,6 +219,8 @@ public enum ACService {
         headers["x-vcs-user-access-token"] = accessToken
         headers["x-vcs-timestamp"] = String(Int(Date().timeIntervalSince1970 * 1000))
         headers["Content-Type"] = "application/json; charset=utf-8"
+        // 关键：开放平台按 UA 识别客户端（网页版同款伪装），缺失时报「服务未注册」
+        headers["User-Agent"] = "okhttp/3.10.0"
         let executeObject = try await APIClient.request(executeURL, method: "POST", headers: headers, body: bodyData)
         let dict = executeObject as? [String: Any] ?? [:]
         let ok = dict.bool("success") == true
