@@ -61,11 +61,11 @@ enum WidgetSlotRunner {
         }
     }
 
-    /// 90 秒内的执行结果（用于小组件横幅反馈）
+    /// 35 秒内的执行结果（用于小组件横幅反馈；WidgetKit 最小重绘粒度为分钟级，无法 2 秒消失）
     static func lastAction() -> LastAction? {
         guard let data = UserDefaults.standard.data(forKey: feedbackKey),
               let action = try? JSONDecoder().decode(LastAction.self, from: data),
-              Date().timeIntervalSince(action.at) < 90 else { return nil }
+              Date().timeIntervalSince(action.at) < 35 else { return nil }
         return action
     }
 }

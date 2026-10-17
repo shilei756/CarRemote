@@ -149,7 +149,12 @@ final class AppState: ObservableObject {
             SharedStore.saveCredentials(updatedCredentials)
             self.status = status
             self.statusUpdatedAt = Date()
-            SharedStore.saveStatusSnapshot(StatusSnapshot(carName: car.displayName, status: status))
+            SharedStore.saveStatusSnapshot(StatusSnapshot(
+                carName: car.displayName,
+                status: status,
+                // 按钮配置随快照共享（重签环境下独立通道可能失效）
+                widgetCommands: SharedStore.loadSettings().widgetCommands
+            ))
             applyCarName()
             errorMessage = nil
             // 车况快照已更新，立即刷新桌面小组件

@@ -260,8 +260,10 @@ public struct StatusSnapshot: Codable, Equatable, Sendable {
     public var engineRunning: Bool
     public var tirePressures: [Double?]
     public var updatedAt: Date
+    /// 小组件按钮配置（随快照共享：重签环境下独立通道可能失效，快照通道已验证可用）
+    public var widgetCommands: [String]?
 
-    public init(carName: String, status: CarStatus) {
+    public init(carName: String, status: CarStatus, widgetCommands: [String]? = nil) {
         self.carName = carName
         self.remainingRangeKm = status.remainingRangeKm
         self.fuelLeftLiters = status.fuelLeftLiters
@@ -275,9 +277,10 @@ public struct StatusSnapshot: Codable, Equatable, Sendable {
         self.engineRunning = status.engineRunning
         self.tirePressures = status.tirePressures.map { $0.valueKPa }
         self.updatedAt = Date()
+        self.widgetCommands = widgetCommands
     }
 
-    public init(carName: String) {
+    public init(carName: String, widgetCommands: [String]? = nil) {
         self.carName = carName
         // 注意：Bool 是非可选类型，不会自动置 nil，必须显式初始化，
         // 否则报 "return from initializer without initializing all stored properties"
@@ -293,6 +296,7 @@ public struct StatusSnapshot: Codable, Equatable, Sendable {
         self.engineRunning = false
         self.tirePressures = [nil, nil, nil, nil]
         self.updatedAt = .distantPast
+        self.widgetCommands = widgetCommands
     }
 
     public var summaryText: String {

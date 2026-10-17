@@ -4,7 +4,7 @@ import CarCore
 
 /// 小组件时间线条目：车况快照 + 用户自定义的 5 个控车按钮 + 车型外观
 struct CarStatusEntry: TimelineEntry {
-    let date: Date
+    var date: Date
     let snapshot: StatusSnapshot?
     let widgetCommands: [String]
     let carStyle: CarModelStyle
@@ -33,8 +33,13 @@ struct CarWidgetProvider: TimelineProvider {
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<CarStatusEntry>) -> Void) {
         let entry = makeEntry(refresh: true)
+        // 第二个条目：横幅过期后重绘一次，自动清掉执行反馈横幅
+        // （WidgetKit 无法 2 秒重绘，横幅实际显示时长≈下一条目的到达时间）
+        let bannerClearDate = Calendar.current.date(byAdding: .second, value: 40, to: Date()) ?? Date()
+        var clearEntry = entry
+        clearEntry.date = bannerClearDate
         let nextUpdate = Calendar.current.date(byAdding: .minute, value: 30, to: Date()) ?? Date()
-        completion(Timeline(entries: [entry], policy: .after(nextUpdate)))
+        completion(Timeline(entries: [entry, clearEntry], policy: .after(nextUpdate)))
     }
 
     private func makeEntry(refresh: Bool) -> CarStatusEntry {
@@ -59,9 +64,12 @@ struct CarWidgetProvider: TimelineProvider {
         // 凭据读不到时保留快照继续展示：既能显示车况，
         // 也便于定位数据通道断在哪一环（按钮点击时会提示去 App 登录）
 
+        // 按钮配置兜底链：设置通道 → 快照内携带的配置（重签环境下设置通道可能失效）→ 默认
         var commands = settings.widgetCommands
         if commands.count != 5 {
-            // 兼容脏数据：不足/超出 5 个时用默认值补齐
+            commands = snapshot?.widgetCommands ?? []
+        }
+        if commands.count != 5 {
             commands = Array(CarModelStyle.defaultWidgetCommands.prefix(5))
             while commands.count < 5 {
                 commands.append(CarCommand.remoteSearchCar.rawValue)
