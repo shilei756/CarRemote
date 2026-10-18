@@ -1026,7 +1026,7 @@ struct ACTempSheet: View {
                     .accessibilityLabel("降低目标温度")
 
                     Text("\(temp)°C")
-                        .font(.system(size: 34, weight: .extrabold))
+                        .font(.system(size: 34, weight: .heavy))
                         .monospacedDigit()
                         .foregroundStyle(WebTheme.txt)
                         .frame(minWidth: 120)
