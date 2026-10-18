@@ -238,6 +238,10 @@ struct DashboardView: View {
             .sheet(isPresented: $viewModel.showLocationDetail) {
                 locationDetailSheet
             }
+            .sheet(isPresented: $viewModel.showACTempModal) {
+                ACTempSheet(viewModel: viewModel)
+                    .environmentObject(appState)
+            }
             .alert("确认执行", isPresented: confirmBinding) {
                 Button("取消", role: .cancel) { viewModel.cancelPending() }
                 Button("确认执行", role: .destructive) { viewModel.confirmPending() }
@@ -464,11 +468,12 @@ struct DashboardView: View {
 
                 // 右列：俯视小车图 + 四角胎压签（网页版 car_top_real 40x97 居中 + .tpv 四角）
                 ZStack {
-                    Image("car_car_top")
+                    Image(settings.carModelStyle.topImageName)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .frame(width: 40, height: 97)
                         .opacity(0.9)
+                        .accessibilityLabel("\(settings.carModelStyle.displayName) 俯视图")
                 }
                 .frame(width: 88, height: 104)
                 .overlay(alignment: .topLeading) {
@@ -975,5 +980,140 @@ struct MoreControlsSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+    }
+}
+
+// MARK: - 开空调调温弹窗（网页版 acTempModal：16~32°C，默认温度 = 上次使用 > 车机当前设定 > 24）
+
+struct ACTempSheet: View {
+    @EnvironmentObject private var appState: AppState
+    @ObservedObject var viewModel: DashboardViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var temp = 24
+    @State private var initialized = false
+
+    var body: some View {
+        ZStack {
+            WebConsoleBackground()
+            VStack(spacing: 16) {
+                Text("开启空调")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(WebTheme.txt)
+                    .padding(.top, 20)
+
+                // 车机当前设定温度（网页版 acTempCarVal）
+                Text("车机当前设定温度 \(CarStatus.format(appState.status?.acTempC))°C，可在下方选择目标温度一并下发")
+                    .font(.system(size: 11))
+                    .foregroundStyle(WebTheme.faint)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+
+                // − / 温度 / ＋（网页版 acTempAdjust：16~32 钳制）
+                HStack(spacing: 24) {
+                    Button {
+                        temp = max(16, temp - 1)
+                    } label: {
+                        Image(systemName: "minus")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(WebTheme.txt)
+                            .frame(width: 48, height: 48)
+                            .background(WebTheme.card2)
+                            .clipShape(Circle())
+                            .overlay(Circle().strokeBorder(WebTheme.border, lineWidth: 1))
+                    }
+                    .disabled(temp <= 16)
+                    .accessibilityLabel("降低目标温度")
+
+                    Text("\(temp)°C")
+                        .font(.system(size: 34, weight: .extrabold))
+                        .monospacedDigit()
+                        .foregroundStyle(WebTheme.txt)
+                        .frame(minWidth: 120)
+                        .accessibilityLabel("目标温度 \(temp) 摄氏度")
+
+                    Button {
+                        temp = min(32, temp + 1)
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(WebTheme.txt)
+                            .frame(width: 48, height: 48)
+                            .background(WebTheme.card2)
+                            .clipShape(Circle())
+                            .overlay(Circle().strokeBorder(WebTheme.border, lineWidth: 1))
+                    }
+                    .disabled(temp >= 32)
+                    .accessibilityLabel("升高目标温度")
+                }
+
+                Text("16 ~ 32°C ｜ 部分车型支持预设温度，不支持时空调将按车机设定开启")
+                    .font(.system(size: 10))
+                    .foregroundStyle(WebTheme.faint)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+
+                Spacer()
+
+                HStack(spacing: 12) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Text("取消")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(WebTheme.muted)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 13)
+                            .background(WebTheme.card2)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("取消，不执行")
+
+                    Button {
+                        confirm()
+                    } label: {
+                        HStack(spacing: 6) {
+                            if viewModel.executingCommand == .openAir {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                    .tint(.white)
+                            }
+                            Text("开启空调")
+                                .font(.system(size: 14, weight: .bold))
+                        }
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 13)
+                        .background(WebTheme.blue)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(viewModel.executingCommand != nil)
+                    .accessibilityLabel("确认以 \(temp) 摄氏度开启空调")
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
+            }
+        }
+        .onAppear {
+            guard !initialized else { return }
+            temp = viewModel.defaultACTemp(currentCarTemp: appState.status?.acTempC)
+            initialized = true
+        }
+        .onChange(of: viewModel.executingCommand) { _, newValue in
+            // 指令执行完毕（成功或失败）自动关闭，结果由 toast 提示
+            if newValue == nil, initialized {
+                dismiss()
+            }
+        }
+    }
+
+    /// 确认：防误触开启时先弹确认框（confirmPending 会带上温度），否则直接下发
+    private func confirm() {
+        viewModel.confirmACTemp(temp)
+        if viewModel.pendingConfirm == nil {
+            dismiss()
+        }
     }
 }

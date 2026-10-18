@@ -9,6 +9,10 @@ struct SettingsView: View {
     @State private var settings: AppSettings = SharedStore.loadSettings()
     @State private var showLogoutConfirm = false
     @State private var showWhitelist = false
+    // 折叠状态：账号 / 外观 / 小组件默认收起（反馈：我的页太长的，先看核心信息）
+    @State private var accountExpanded = false
+    @State private var appearanceExpanded = false
+    @State private var widgetExpanded = false
     // 折叠状态：高危操作与 Siri 语音默认收起（反馈 #7）
     @State private var confirmExpanded = false
     @State private var siriExpanded = false
@@ -119,35 +123,39 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - 账号
+    // MARK: - 账号（默认折叠）
 
     private var accountSection: some View {
         Section {
-            HStack {
-                Text("手机号")
-                Spacer()
-                Text(appState.credentials?.maskedPhone ?? "--")
-                    .foregroundStyle(.secondary)
-            }
-            HStack {
-                Text("授权状态")
-                Spacer()
-                Text(cardStatusText)
-                    .foregroundStyle(.secondary)
-            }
-            if let cardStatus = appState.cardStatus, let expiry = cardStatus.expiryText {
+            DisclosureGroup(isExpanded: $accountExpanded) {
                 HStack {
-                    Text("有效期")
+                    Text("手机号")
                     Spacer()
-                    Text(expiry)
+                    Text(appState.credentials?.maskedPhone ?? "--")
                         .foregroundStyle(.secondary)
                 }
+                HStack {
+                    Text("授权状态")
+                    Spacer()
+                    Text(cardStatusText)
+                        .foregroundStyle(.secondary)
+                }
+                if let cardStatus = appState.cardStatus, let expiry = cardStatus.expiryText {
+                    HStack {
+                        Text("有效期")
+                        Spacer()
+                        Text(expiry)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Button("退出登录", role: .destructive) {
+                    showLogoutConfirm = true
+                }
+            } label: {
+                Text("账号")
             }
-            Button("退出登录", role: .destructive) {
-                showLogoutConfirm = true
-            }
-        } header: {
-            Text("账号")
+        } footer: {
+            Text("登录手机号、授权状态与退出登录入口")
         }
     }
 
@@ -166,62 +174,68 @@ struct SettingsView: View {
         return "未授权"
     }
 
-    // MARK: - 车型外观 / 主题
+    // MARK: - 车型外观 / 主题（默认折叠）
 
     private var appearanceSection: some View {
         Section {
-            Picker("仪表盘车型", selection: $settings.carModelStyle) {
-                ForEach(CarModelStyle.allCases, id: \.self) { style in
-                    Text(style.displayName).tag(style)
-                }
-            }
-            .onChange(of: settings.carModelStyle) { _, _ in
-                saveSettings()
-            }
-            Picker("主题", selection: $appTheme) {
-                Text("浅色（经典）").tag(AppTheme.light)
-                Text("夜间").tag(AppTheme.dark)
-            }
-            .onChange(of: appTheme) { _, newValue in
-                ThemeManager.shared.set(newValue)
-            }
-            // 油箱总容量（油量百分比/进度条基准）
-            HStack {
-                Text("油箱总容量")
-                Spacer()
-                TextField("50", value: Binding(
-                    get: { settings.tankCapacityL },
-                    set: { newValue in
-                        let clamped = min(max(newValue, 20), 120)
-                        settings.tankCapacityL = clamped
-                        saveSettings()
+            DisclosureGroup(isExpanded: $appearanceExpanded) {
+                Picker("仪表盘车型", selection: $settings.carModelStyle) {
+                    ForEach(CarModelStyle.allCases, id: \.self) { style in
+                        Text(style.displayName).tag(style)
                     }
-                ), format: .number.precision(.fractionLength(0...1)))
-                .keyboardType(.decimalPad)
-                .multilineTextAlignment(.trailing)
-                .frame(width: 70)
-                Text("L")
-                    .foregroundStyle(.secondary)
+                }
+                .onChange(of: settings.carModelStyle) { _, newStyle in
+                    // 油箱容积联动车型默认值（网页版 CAR_MODELS.tank：切换车型时油量百分比基准随之变化）
+                    settings.tankCapacityL = newStyle.tankCapacityL
+                    saveSettings()
+                }
+                Picker("主题", selection: $appTheme) {
+                    Text("浅色（经典）").tag(AppTheme.light)
+                    Text("夜间").tag(AppTheme.dark)
+                }
+                .onChange(of: appTheme) { _, newValue in
+                    ThemeManager.shared.set(newValue)
+                }
+                // 油箱总容量（油量百分比/进度条基准）
+                HStack {
+                    Text("油箱总容量")
+                    Spacer()
+                    TextField("50", value: Binding(
+                        get: { settings.tankCapacityL },
+                        set: { newValue in
+                            let clamped = min(max(newValue, 20), 120)
+                            settings.tankCapacityL = clamped
+                            saveSettings()
+                        }
+                    ), format: .number.precision(.fractionLength(0...1)))
+                    .keyboardType(.decimalPad)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 70)
+                    Text("L")
+                        .foregroundStyle(.secondary)
+                }
+            } label: {
+                Text("外观")
             }
-        } header: {
-            Text("外观")
         } footer: {
-            Text("车型仅影响主界面车辆示意图；油箱总容量用于油量百分比与油条，逸动PLUS 约 53L、UNI-V 约 51L、CS75PLUS 约 58L")
+            Text("切换车型会同步油箱容积基准（逸动PLUS 53L、UNI-V 51L、CS75PLUS 58L、UNI-K 56L、CS75 20款 58L），油量百分比与油条按此换算；下方仍可手动修改")
         }
     }
 
-    // MARK: - 小组件按钮自定义
+    // MARK: - 小组件按钮自定义（默认折叠）
     private var widgetSection: some View {
         Section {
-            ForEach(0..<5, id: \.self) { index in
-                Picker("按钮 \(index + 1)", selection: widgetCommandBinding(index)) {
-                    ForEach(CarCommand.allCases, id: \.self) { command in
-                        Text(command.displayName).tag(command.rawValue)
+            DisclosureGroup(isExpanded: $widgetExpanded) {
+                ForEach(0..<5, id: \.self) { index in
+                    Picker("按钮 \(index + 1)", selection: widgetCommandBinding(index)) {
+                        ForEach(CarCommand.allCases, id: \.self) { command in
+                            Text(command.displayName).tag(command.rawValue)
+                        }
                     }
                 }
+            } label: {
+                Text("小组件按钮")
             }
-        } header: {
-            Text("小组件按钮")
         } footer: {
             Text("桌面小组件底部的 5 个控车按钮，点一下直接执行（不打开 App）。改完回到桌面等几秒自动刷新。")
         }

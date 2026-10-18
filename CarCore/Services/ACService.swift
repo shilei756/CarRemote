@@ -153,7 +153,9 @@ public enum ACService {
     }
 
     /// 通过长安开放平台执行空调指令（网页版 newAC）
-    public static func executeOfficial(command: CarCommand, credentials: Credentials) async throws -> CommandResult {
+    /// - Parameters:
+    ///   - temperature: 开空调目标温度（16~32，网页版调温弹窗随指令下发；nil 时不下发温度）
+    public static func executeOfficial(command: CarCommand, credentials: Credentials, temperature: Int? = nil) async throws -> CommandResult {
         // 1. 授权码（inCall access_token，与 AuthService.validAccessToken 同一接口）
         let (authorizeToken, updated) = try await AuthService.validAccessToken(for: credentials)
         SharedStore.saveCredentials(updated)
@@ -277,8 +279,16 @@ public enum ACService {
         var attemptLog = ""
         outer: for candidate in tokenCandidates {
             for car in cars {
+                // mapArgsJson：开空调带目标温度（网页版 confirmAcTemp：{"temperature":"24"}），其余为空
+                let mapArgs: String
+                if command == .openAir, let temperature, (16...32).contains(temperature) {
+                    mapArgs = (try? JSONSerialization.data(withJSONObject: ["temperature": String(temperature)]))
+                        .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+                } else {
+                    mapArgs = "{}"
+                }
                 let body: [String: Any] = [
-                    "mapArgsJson": "{}",
+                    "mapArgsJson": mapArgs,
                     "senderType": "APP",
                     "cmd": openCmd,
                     "carId": car.carId

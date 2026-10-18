@@ -13,7 +13,7 @@ struct CarStatusEntry: TimelineEntry {
     static var placeholder: CarStatusEntry {
         CarStatusEntry(date: Date(), snapshot: nil,
                        widgetCommands: CarModelStyle.defaultWidgetCommands,
-                       carStyle: .sedan, isLoggedIn: true)
+                       carStyle: .yidong, isLoggedIn: true)
     }
 }
 

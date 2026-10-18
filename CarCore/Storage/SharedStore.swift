@@ -2,26 +2,66 @@ import Foundation
 
 // MARK: - 本地设置
 
-/// 仪表盘车型外观
+/// 仪表盘车型外观（与网页版 CAR_MODELS 一一对应：侧视大图 + 俯视小图 + 油箱容积）
 public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
-    case sedan = "三厢轿车"
-    case coupe = "运动轿跑"
-    case suv = "智能SUV"
+    case yidong = "yidong"                  // 逸动PLUS
+    case yidongWhite = "yidong_white"       // 逸动PLUS 白色
+    case univ = "univ"                      // UNI-V
+    case cs75 = "cs75"                      // CS75PLUS
+    case univK = "univ_k"                   // UNI-K
+    case cs7520 = "cs75_20"                 // CS75 20款
 
-    /// 展示名（真实车型名）
+    /// 展示名（网页版 CAR_MODELS.name）
     public var displayName: String {
         switch self {
-        case .sedan: return "逸动PLUS"
-        case .coupe: return "UNI-V"
-        case .suv: return "CS75PLUS"
+        case .yidong: return "逸动PLUS"
+        case .yidongWhite: return "逸动PLUS 白色"
+        case .univ: return "UNI-V"
+        case .cs75: return "CS75PLUS"
+        case .univK: return "UNI-K"
+        case .cs7520: return "CS75 20款"
         }
     }
 
     public var sfSymbol: String {
         switch self {
-        case .sedan: return "car"
-        case .coupe: return "car.rear"
-        case .suv: return "car.front"
+        case .yidong, .yidongWhite: return "car"
+        case .univ: return "car.rear"
+        case .cs75, .univK, .cs7520: return "car.front"
+        }
+    }
+
+    /// 侧视大图资源名（网页版 /static/img/*_side.png）
+    public var sideImageName: String {
+        switch self {
+        case .yidong: return "car_yidong"
+        case .yidongWhite: return "car_yidong_white"
+        case .univ: return "car_univ"
+        case .cs75: return "car_cs75plus"
+        case .univK: return "car_univ_k"
+        case .cs7520: return "car_cs75_20"
+        }
+    }
+
+    /// 俯视小图资源名（网页版 /static/img/*_top.png，车况卡右侧）
+    public var topImageName: String {
+        switch self {
+        case .yidong: return "car_top_yidong"
+        case .yidongWhite: return "car_top_yidong_white"
+        case .univ: return "car_top_univ"
+        case .cs75: return "car_top_cs75plus"
+        case .univK: return "car_top_univ_k"
+        case .cs7520: return "car_top_cs75_20"
+        }
+    }
+
+    /// 油箱容积 L（网页版 CAR_MODELS.tank：切换车型时联动油量百分比）
+    public var tankCapacityL: Double {
+        switch self {
+        case .yidong, .yidongWhite: return 53
+        case .univ: return 51
+        case .cs75, .cs7520: return 58
+        case .univK: return 56
         }
     }
 
@@ -220,7 +260,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         siriEnabledCommands = try container.decodeIfPresent(Set<String>.self, forKey: .siriEnabledCommands)
             ?? Set(CarCommand.allCases.map { $0.rawValue })
         siriMasterEnabled = try container.decodeIfPresent(Bool.self, forKey: .siriMasterEnabled) ?? true
-        carModelStyle = try container.decodeIfPresent(CarModelStyle.self, forKey: .carModelStyle) ?? .sedan
+        carModelStyle = try container.decodeIfPresent(CarModelStyle.self, forKey: .carModelStyle) ?? .yidong
         clubNick = try container.decodeIfPresent(String.self, forKey: .clubNick) ?? ""
         clubAvatar = try container.decodeIfPresent(String.self, forKey: .clubAvatar) ?? ""
         widgetCommands = try container.decodeIfPresent([String].self, forKey: .widgetCommands)
@@ -272,7 +312,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         confirmGateCommands: ["UnLockDoor", "LockDoor", "OpenEngine", "CloseEngine"],
         siriEnabledCommands: Set(CarCommand.allCases.map { $0.rawValue }),
         siriMasterEnabled: true,
-        carModelStyle: .sedan,
+        carModelStyle: .yidong,
         clubNick: "",
         clubAvatar: ""
     )
@@ -395,6 +435,7 @@ public enum SharedStore {
         static let sakuraEnabled = "carremote.sakuraEnabled"
         static let acActivationExpire = "carremote.acActivationExpire"
         static let acOpenRefreshToken = "carremote.acOpenRefreshToken"
+        static let acLastTemp = "carremote.acLastTemp"
         static let serverBaseURL = "carremote.serverBaseURL"
         static let mythTheme = "carremote.mythTheme"
         static let customCarName = "carremote.customCarName"
@@ -608,6 +649,20 @@ public enum SharedStore {
 
     public static func saveACOpenRefreshToken(_ token: String?) {
         defaults?.set(token ?? "", forKey: Key.acOpenRefreshToken)
+    }
+
+    /// 上次开空调选择的温度（网页版 localStorage ac_last_temp，16~32 有效）
+    public static func loadACLastTemp() -> Int? {
+        guard let t = defaults?.integer(forKey: Key.acLastTemp), (16...32).contains(t) else { return nil }
+        return t
+    }
+
+    public static func saveACLastTemp(_ temp: Int?) {
+        if let temp, (16...32).contains(temp) {
+            defaults?.set(temp, forKey: Key.acLastTemp)
+        } else {
+            defaults?.removeObject(forKey: Key.acLastTemp)
+        }
     }
 
     /// 用户自定义车辆名称（左上角 DIY，空串表示跟随官网原名）

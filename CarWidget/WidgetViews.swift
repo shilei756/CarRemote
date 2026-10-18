@@ -122,11 +122,7 @@ private struct WidgetCarImage: View {
     let isUnlocked: Bool
 
     private var imageName: String {
-        switch style {
-        case .sedan: return "car_yidong"
-        case .coupe: return "car_univ"
-        case .suv: return "car_cs75plus"
-        }
+        style.sideImageName
     }
 
     var body: some View {

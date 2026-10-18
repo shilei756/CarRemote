@@ -21,6 +21,10 @@ final class DashboardViewModel: ObservableObject {
     @Published var showACQR = false
     /// 空调开通剩余天数（nil = 未开通或查询失败，界面隐藏）
     @Published var acRemainingDays: Int?
+    /// 开空调调温弹窗（新版链路，网页版 openAcTempModal）
+    @Published var showACTempModal = false
+    /// 防误触确认待执行的开空调目标温度（调温弹窗确认后仍需二次确认时携带）
+    @Published var pendingTemp: Int?
 
     // 更多功能面板
     @Published var showHistoryActions = false
@@ -44,8 +48,12 @@ final class DashboardViewModel: ObservableObject {
 
     // MARK: - 指令执行
 
-    /// 点击控车按钮：高危操作先弹防误触确认
+    /// 点击控车按钮：新版链路开空调先弹调温窗（网页版 openAcTempModal），高危操作先弹防误触确认
     func execute(_ command: CarCommand) {
+        if command == .openAir, acMode == .new {
+            showACTempModal = true
+            return
+        }
         if settings.needsConfirm(command: command) {
             pendingConfirm = command
             return
@@ -56,14 +64,37 @@ final class DashboardViewModel: ObservableObject {
     func confirmPending() {
         guard let command = pendingConfirm else { return }
         pendingConfirm = nil
-        run(command)
+        let temp = pendingTemp
+        pendingTemp = nil
+        run(command, temperature: temp)
     }
 
     func cancelPending() {
         pendingConfirm = nil
+        pendingTemp = nil
     }
 
-    private func run(_ command: CarCommand) {
+    /// 调温弹窗默认温度（网页版优先级）：上次使用 > 车机当前设定 > 24
+    func defaultACTemp(currentCarTemp: Double?) -> Int {
+        if let saved = SharedStore.loadACLastTemp() { return saved }
+        if let currentCarTemp, currentCarTemp >= 10, currentCarTemp <= 40 {
+            return Int(currentCarTemp.rounded())
+        }
+        return 24
+    }
+
+    /// 调温弹窗「开启空调」：记住温度 →（开了防误触则先确认）→ 随指令下发
+    func confirmACTemp(_ temp: Int) {
+        SharedStore.saveACLastTemp(temp)
+        if settings.needsConfirm(command: .openAir) {
+            pendingConfirm = .openAir
+            pendingTemp = temp
+            return
+        }
+        run(.openAir, temperature: temp)
+    }
+
+    private func run(_ command: CarCommand, temperature: Int? = nil) {
         guard let appState, let credentials = appState.credentials else { return }
         executingCommand = command
         Task {
@@ -72,12 +103,12 @@ final class DashboardViewModel: ObservableObject {
                 let result: CommandResult
                 if (command == .openAir || command == .closeAir), acMode == .new {
                     // 空调新版链路（网页版 newAC：开放平台，需已扫码开通）
-                    result = try await ACService.executeOfficial(command: command, credentials: credentials)
+                    result = try await ACService.executeOfficial(command: command, credentials: credentials, temperature: temperature)
                 } else {
                     // 其余指令与空调官方版（网页版 performAction：直连长安链路）
                     result = try await CarService.execute(command: command, credentials: credentials)
                 }
-                toast = toastText(command: command, result: result)
+                toast = toastText(command: command, result: result, temperature: temperature)
                 WidgetCenter.shared.reloadAllTimelines()
                 if result.ok {
                     await appState.refreshStatus()
@@ -93,8 +124,11 @@ final class DashboardViewModel: ObservableObject {
         }
     }
 
-    private func toastText(command: CarCommand, result: CommandResult) -> String {
+    private func toastText(command: CarCommand, result: CommandResult, temperature: Int? = nil) -> String {
         if result.ok {
+            if command == .openAir, let temperature {
+                return "✅ 开空调指令已发送（目标 \(temperature)°C）"
+            }
             return "✅ \(command.displayName)指令已发送"
         }
         return "❌ \(command.displayName)失败：\(result.message)"

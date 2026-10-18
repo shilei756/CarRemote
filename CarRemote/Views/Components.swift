@@ -251,20 +251,11 @@ struct CarVisualView: View {
     let isUnlocked: Bool
 
     var body: some View {
-        Image(carImageName)
+        Image(style.sideImageName)
             .resizable()
             .aspectRatio(contentMode: .fit)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(isUnlocked ? "车辆图片，当前已解锁" : "车辆图片，当前已锁止")
-    }
-
-    /// 车型侧视图映射（与网页版 /static/img/ 图片一一对应）
-    private var carImageName: String {
-        switch style {
-        case .sedan: return "car_yidong"        // 逸动PLUS（网页版 car_side.png）
-        case .coupe: return "car_univ"          // UNI-V（网页版 univ_side.png）
-        case .suv: return "car_cs75plus"        // CS75PLUS（网页版 cs75plus_side.png）
-        }
+            .accessibilityLabel(isUnlocked ? "\(style.displayName) 车辆图片，当前已解锁" : "\(style.displayName) 车辆图片，当前已锁止")
     }
 }
 

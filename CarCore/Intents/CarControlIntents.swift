@@ -15,7 +15,13 @@ public enum CarIntentRunner {
             return "请先在「长安控车」App 中登录"
         }
         do {
-            let result = try await CarService.execute(command: command, credentials: credentials)
+            // 空调与 App 内保持一致：新版模式走开放平台链路（Siri 无调温弹窗，按车机默认设定）
+            let result: CommandResult
+            if (command == .openAir || command == .closeAir), SharedStore.loadACMode() == .new {
+                result = try await ACService.executeOfficial(command: command, credentials: credentials)
+            } else {
+                result = try await CarService.execute(command: command, credentials: credentials)
+            }
             WidgetCenter.shared.reloadAllTimelines()
             if result.ok {
                 return "\(command.displayName)指令已发送"
