@@ -37,6 +37,13 @@ final class AppState: ObservableObject {
     @Published var mythTheme: MythTheme? {
         didSet { SharedStore.saveMythTheme(mythTheme) }
     }
+    /// 权限被吊销 / 体验到期时弹出的不可关闭浮层（对齐网页版 revokedMask）
+    @Published var accessBlock: AccessBlock?
+    /// 不可关闭浮层的数据
+    struct AccessBlock: Equatable {
+        var title: String
+        var message: String
+    }
 
     private var foregroundBeated = false
 
@@ -88,6 +95,7 @@ final class AppState: ObservableObject {
             await reportUsage()
             await refreshAdminRole()
             await refreshStatus()
+            startAccessMonitor()
         }
     }
 
@@ -122,15 +130,64 @@ final class AppState: ObservableObject {
         status = nil
         statusUpdatedAt = nil
         isAdminUser = false
+        accessBlock = nil
+        stopAccessMonitor()
         phase = .loggedOut
+    }
+
+    /// 强制退出（体验到期 / 被移出白名单）：清凭据并提示，不保留会话
+    func forceLogout(message: String) {
+        accessBlock = nil
+        logout()
+        errorMessage = message
+    }
+
+    // MARK: - 权限复查（对齐网页版：每 60 秒 + 回前台各查一次）
+
+    private var accessTimer: Timer?
+
+    func startAccessMonitor() {
+        stopAccessMonitor()
+        accessTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            Task { await self?.recheckAccess() }
+        }
+    }
+
+    func stopAccessMonitor() {
+        accessTimer?.invalidate()
+        accessTimer = nil
+    }
+
+    /// 复查账号权限。发现无权使用时盖上不可关闭浮层，只留「退出登录」。
+    func recheckAccess() async {
+        guard phase == .ready, let credentials else { return }
+        // 卡密到期（体验用户 24 小时）
+        if let status = try? await CardService.status(phone: credentials.phone) {
+            if !status.authorized {
+                accessBlock = AccessBlock(
+                    title: "体验权限已到期",
+                    message: status.message ?? "体验卡自激活起 24 小时有效，已到期。请重新输入卡密或联系站主开通。"
+                )
+                stopAccessMonitor()
+                return
+            }
+        }
+        // 被移出白名单 / 被拉黑
+        if let ok = await CardService.authStatus(phone: credentials.phone, pin: credentials.pin), ok == false {
+            accessBlock = AccessBlock(title: "账号已无法继续使用", message: "当前账号的授权已被撤销，请重新登录或联系站主。")
+            stopAccessMonitor()
+        }
     }
     // MARK: - 前台 / 用量上报
 
     func handleForeground() async {
-        guard phase == .ready, !foregroundBeated else { return }
-        foregroundBeated = true
-        await reportUsage()
+        guard phase == .ready else { return }
+        if !foregroundBeated {
+            foregroundBeated = true
+            await reportUsage()
+        }
         await refreshStatus()
+        await recheckAccess()
     }
 
     private func reportUsage() async {

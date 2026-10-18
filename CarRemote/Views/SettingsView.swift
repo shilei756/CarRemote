@@ -13,6 +13,9 @@ struct SettingsView: View {
     @State private var confirmExpanded = false
     @State private var siriExpanded = false
     @State private var appTheme: AppTheme = SharedStore.loadAppTheme()
+    // 服务器地址（仅站主可见）
+    @State private var serverDraft: String = APIConfig.siteBaseURL
+    @State private var serverSavedTip = false
 
     var body: some View {
         NavigationStack {
@@ -22,6 +25,10 @@ struct SettingsView: View {
                 widgetSection
                 confirmSection
                 siriSection
+                // 服务器地址：仅站主账号可见（换域名免发版）
+                if appState.credentials?.phone == APIConfig.ownerPhone {
+                    serverSection
+                }
                 // 网页版 applyAdminEntry：非管理员不显示管理入口
                 if appState.isAdminUser {
                     adminSection
@@ -51,6 +58,64 @@ struct SettingsView: View {
                     await appState.refreshAdminRole()
                 }
             }
+        }
+    }
+
+    // MARK: - 服务器地址（仅站主）
+
+    private var serverSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("当前地址")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(WebTheme.txt)
+                Text(APIConfig.siteBaseURL)
+                    .font(.system(size: 10).monospaced())
+                    .foregroundStyle(WebTheme.faint)
+                    .textSelection(.enabled)
+            }
+            TextField("新域名，如 new.example.com", text: $serverDraft)
+                .keyboardType(.URL)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            HStack(spacing: 12) {
+                Button {
+                    let trimmed = serverDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                    SharedStore.saveServerBaseURL(trimmed.isEmpty ? nil : trimmed)
+                    serverDraft = trimmed
+                    withAnimation { serverSavedTip = true }
+                } label: {
+                    Text("保存并切换")
+                        .font(.system(size: 13, weight: .bold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 9)
+                        .background(WebTheme.blue)
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 9))
+                }
+                Button {
+                    SharedStore.saveServerBaseURL(nil)
+                    serverDraft = APIConfig.defaultSiteBaseURL
+                    withAnimation { serverSavedTip = true }
+                } label: {
+                    Text("恢复默认")
+                        .font(.system(size: 13, weight: .bold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 9)
+                        .background(WebTheme.card)
+                        .foregroundStyle(WebTheme.txt)
+                        .clipShape(RoundedRectangle(cornerRadius: 9))
+                }
+            }
+            if serverSavedTip {
+                Text("已保存，下次请求立即生效（建议重启 App 一次）。若新域名不通，改回默认地址即可恢复。")
+                    .font(.system(size: 10))
+                    .foregroundStyle(WebTheme.green)
+            }
+        } header: {
+            Text("服务器地址")
+        } footer: {
+            Text("只有站主账号（\(APIConfig.ownerPhone)）能看到此项。换域名/迁移后端时在此填入新地址即可，无需重新出包。注意：新域名必须仍指向同一套数据库，否则登录态、卡密、白名单都会失效。")
         }
     }
 

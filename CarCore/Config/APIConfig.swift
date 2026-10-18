@@ -9,7 +9,12 @@ public enum APIConfig {
     // MARK: - 站主自有后端
 
     /// 你的网站（提供登录 / 卡密 / 白名单 / 圈子 / 加密代理）
-    public static let siteBaseURL = "https://a9db267525c1cf6b2.app.workbuddy.host"
+    /// 默认后端地址（换域名时站主可在 App 设置里覆盖，见 SharedStore.loadServerBaseURL）
+    public static let defaultSiteBaseURL = "https://a9db267525c1cf6b2.app.workbuddy.host"
+    /// 当前后端地址：站主自定义优先，否则用默认。全 App 统一走这里。
+    public static var siteBaseURL: String {
+        SharedStore.loadServerBaseURL() ?? defaultSiteBaseURL
+    }
 
     /// 卡密获取联系方式（展示在体验网关页面）
     public static let ownerContactQQ = "2317665079"

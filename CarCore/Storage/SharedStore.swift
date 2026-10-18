@@ -395,6 +395,7 @@ public enum SharedStore {
         static let sakuraEnabled = "carremote.sakuraEnabled"
         static let acActivationExpire = "carremote.acActivationExpire"
         static let acOpenRefreshToken = "carremote.acOpenRefreshToken"
+        static let serverBaseURL = "carremote.serverBaseURL"
         static let mythTheme = "carremote.mythTheme"
         static let customCarName = "carremote.customCarName"
     }
@@ -577,6 +578,25 @@ public enum SharedStore {
 
     public static func saveACActivationExpire(_ date: Date?) {
         defaults?.set(date, forKey: Key.acActivationExpire)
+    }
+
+    /// 自定义服务器地址（换域名时站主在设置里手填，免发版）。空 = 用默认地址。
+    public static func loadServerBaseURL() -> String? {
+        let t = defaults?.string(forKey: Key.serverBaseURL)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !t.isEmpty else { return nil }
+        // 规范化：补协议、去末尾斜杠，避免拼 URL 出错
+        var url = t
+        if !url.hasPrefix("http://") && !url.hasPrefix("https://") {
+            url = "https://" + url
+        }
+        while url.hasSuffix("/") { url.removeLast() }
+        return url
+    }
+
+    public static func saveServerBaseURL(_ url: String?) {
+        defaults?.set(url?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+                      forKey: Key.serverBaseURL)
     }
 
     /// 开放平台最新 refresh_token（oauth 每次刷新都会轮换，必须存回本地，

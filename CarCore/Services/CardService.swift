@@ -64,6 +64,15 @@ public enum CardService {
         )
     }
 
+    /// 账号是否仍被允许使用（网页版 /api/auth/status：移出白名单 / 卡密到期 /
+    /// 被拉黑时 ok=false）。网络异常时返回 nil（不误伤，下次再查）。
+    public static func authStatus(phone: String, pin: String) async -> Bool? {
+        guard let url = URL(string: APIConfig.siteBaseURL + "/api/auth/status") else { return nil }
+        guard let object = try? await APIClient.postJSON(url, json: ["phone": phone, "pin": pin]),
+              let dict = object as? [String: Any] else { return nil }
+        return dict.bool("ok")
+    }
+
     /// 验证卡密，成功返回 true
     public static func verify(phone: String, code: String) async throws -> Bool {
         guard let url = URL(string: APIConfig.siteBaseURL + "/api/card/verify") else {
