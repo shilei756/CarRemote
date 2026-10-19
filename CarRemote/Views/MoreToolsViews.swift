@@ -21,7 +21,7 @@ struct ACQRScanSheet: View {
     @State private var pollTask: Task<Void, Never>?
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             ZStack {
                 WebConsoleBackground()
                 VStack(spacing: 16) {
@@ -99,9 +99,8 @@ struct ACQRScanSheet: View {
                 }
                 .padding(.top, 20)
             }
-            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: CompatToolbarPlacement.topTrailing) {
                     Button("关闭") { dismiss() }
                         .foregroundStyle(WebTheme.blue)
                 }
@@ -197,7 +196,7 @@ struct ControlHistorySheet: View {
     @State private var errorText: String?
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             ZStack {
                 WebConsoleBackground()
                 Group {
@@ -250,10 +249,9 @@ struct ControlHistorySheet: View {
                     }
                 }
             }
-            .navigationTitle("操作历史")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle("操作历史")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: CompatToolbarPlacement.topTrailing) {
                     Button("关闭") { dismiss() }.foregroundStyle(WebTheme.blue)
                 }
             }
@@ -287,7 +285,7 @@ struct MessageHistorySheet: View {
     @State private var errorText: String?
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             ZStack {
                 WebConsoleBackground()
                 Group {
@@ -328,10 +326,9 @@ struct MessageHistorySheet: View {
                     }
                 }
             }
-            .navigationTitle("消息记录")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle("消息记录")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: CompatToolbarPlacement.topTrailing) {
                     Button("关闭") { dismiss() }.foregroundStyle(WebTheme.blue)
                 }
             }
@@ -365,7 +362,7 @@ struct TripHistorySheet: View {
     @State private var errorText: String?
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             ZStack {
                 WebConsoleBackground()
                 Group {
@@ -427,10 +424,9 @@ struct TripHistorySheet: View {
                     }
                 }
             }
-            .navigationTitle("我的行程")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle("我的行程")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: CompatToolbarPlacement.topTrailing) {
                     Button("关闭") { dismiss() }.foregroundStyle(WebTheme.blue)
                 }
             }
@@ -479,7 +475,7 @@ struct EmbedWebSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             ZStack {
                 WebConsoleBackground()
                 if let url = embedURL {
@@ -489,10 +485,9 @@ struct EmbedWebSheet: View {
                     EmptyStateView(systemImage: "globe", title: "暂不可用", message: "请先登录后重试")
                 }
             }
-            .navigationTitle(key == "vehicle_status" ? "车辆状态" : "360全景")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle(key == "vehicle_status" ? "车辆状态" : "360全景")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: CompatToolbarPlacement.topTrailing) {
                     Button("关闭") { dismiss() }.foregroundStyle(WebTheme.blue)
                 }
             }
@@ -530,7 +525,7 @@ struct WallpaperSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             ZStack {
                 WebConsoleBackground()
                 ScrollView {
@@ -559,10 +554,9 @@ struct WallpaperSheet: View {
                     .padding(16)
                 }
             }
-            .navigationTitle("背景壁纸")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle("背景壁纸")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: CompatToolbarPlacement.topTrailing) {
                     Button("完成") {
                         SharedStore.saveSakuraEnabled(sakuraEnabled)
                         dismiss()

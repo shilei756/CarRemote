@@ -20,7 +20,7 @@ targets:
   CarWidget:
     type: app-extension
     platform: iOS
-    deploymentTarget: "18.0"
+    deploymentTarget: "17.0"
     sources:
       - path: CarWidget
         excludes:

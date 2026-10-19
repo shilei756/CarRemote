@@ -22,7 +22,7 @@ struct SettingsView: View {
     @State private var serverSavedTip = false
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             Form {
                 accountSection
                 appearanceSection
@@ -40,10 +40,9 @@ struct SettingsView: View {
                 clubProfileSection
                 aboutSection
             }
-            .scrollContentBackground(.hidden)
+            .hideScrollBackground()
             .background(WebConsoleBackground())
-            .navigationTitle("我的")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle("我的")
             .alert("退出登录", isPresented: $showLogoutConfirm) {
                 Button("取消", role: .cancel) {}
                 Button("退出", role: .destructive) {
@@ -184,7 +183,7 @@ struct SettingsView: View {
                         Text(style.displayName).tag(style)
                     }
                 }
-                .onChange(of: settings.carModelStyle) { _, newStyle in
+                .compatOnChange(of: settings.carModelStyle) { newStyle in
                     // 油箱容积联动车型默认值（网页版 CAR_MODELS.tank：切换车型时油量百分比基准随之变化）
                     settings.tankCapacityL = newStyle.tankCapacityL
                     saveSettings()
@@ -193,7 +192,7 @@ struct SettingsView: View {
                     Text("浅色（经典）").tag(AppTheme.light)
                     Text("夜间").tag(AppTheme.dark)
                 }
-                .onChange(of: appTheme) { _, newValue in
+                .compatOnChange(of: appTheme) { newValue in
                     ThemeManager.shared.set(newValue)
                 }
                 // 油箱总容量（油量百分比/进度条基准）
@@ -380,8 +379,8 @@ struct SettingsView: View {
         } footer: {
             Text("发布动态时展示的昵称与头像，留空则显示脱敏手机号")
         }
-        .onChange(of: settings.clubNick) { _, _ in saveSettings() }
-        .onChange(of: settings.clubAvatar) { _, _ in saveSettings() }
+        .compatOnChange(of: settings.clubNick) { _ in saveSettings() }
+        .compatOnChange(of: settings.clubAvatar) { _ in saveSettings() }
     }
 
     // MARK: - 关于

@@ -13,7 +13,7 @@ struct MaintenanceView: View {
     @State private var showEditLastService = false
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             ScrollView {
                 VStack(spacing: 12) {
                     headerCard
@@ -27,10 +27,9 @@ struct MaintenanceView: View {
                 .padding(.top, 8)
             }
             .background(WebConsoleBackground())
-            .navigationTitle("智能维保")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle("智能维保")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: CompatToolbarPlacement.topTrailing) {
                     Button("修改上次保养") { showEditLastService = true }
                         .font(.system(size: 13, weight: .semibold))
                 }
@@ -304,7 +303,7 @@ struct EditLastServiceSheet: View {
     @State private var note = ""
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             Form {
                 Section("上次保养") {
                     DatePicker("保养日期", selection: $date, displayedComponents: .date)
@@ -332,15 +331,14 @@ struct EditLastServiceSheet: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .navigationTitle("修改上次保养")
-            .navigationBarTitleDisplayMode(.inline)
-            .scrollContentBackground(.hidden)
+            .inlineTitle("修改上次保养")
+            .hideScrollBackground()
             .background(WebConsoleBackground())
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: CompatToolbarPlacement.topTrailing) {
                     Button("取消") { dismiss() }
                 }
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: CompatToolbarPlacement.topLeading) {
                     Button("保存") { save() }
                         .disabled(Double(odometerText) == nil)
                         .bold()

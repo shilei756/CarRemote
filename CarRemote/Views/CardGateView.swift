@@ -15,7 +15,7 @@ struct CardGateView: View {
     @FocusState private var codeFocused: Bool
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             ZStack {
                 WebLoginBackground()
                 ScrollView {
@@ -166,7 +166,7 @@ struct CardGateView: View {
 /// 联系站主
 struct ContactOwnerSheet: View {
     var body: some View {
-        NavigationStack {
+        NavStack {
             ZStack {
                 WebConsoleBackground()
                 ScrollView {
@@ -192,9 +192,8 @@ struct ContactOwnerSheet: View {
                     .padding(24)
                 }
             }
-            .navigationTitle("联系站主")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle("联系站主")
         }
-        .presentationDetents([.medium])
+        .compatMediumDetent()
     }
 }

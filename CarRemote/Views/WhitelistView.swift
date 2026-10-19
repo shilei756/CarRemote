@@ -66,15 +66,14 @@ struct WhitelistView: View {
     // MARK: -  body
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             ZStack {
                 WebConsoleBackground()
                 content
             }
-            .navigationTitle("白名单管理")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle("白名单管理")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: CompatToolbarPlacement.topTrailing) {
                     Button("关闭") { dismiss() }
                         .foregroundStyle(WebTheme.blue)
                 }
@@ -89,7 +88,7 @@ struct WhitelistView: View {
                 secondaryButton: .cancel()
             )
         }
-        .onChange(of: banner) { _, newValue in
+        .compatOnChange(of: banner) { newValue in
             if newValue != nil {
                 Task {
                     try? await Task.sleep(nanoseconds: 3_000_000_000)

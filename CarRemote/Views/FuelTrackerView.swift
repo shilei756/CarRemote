@@ -14,7 +14,7 @@ struct FuelTrackerView: View {
     @State private var editingRecord: FuelRecord?
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             ScrollView {
                 VStack(spacing: 16) {
                     summaryCard
@@ -33,10 +33,9 @@ struct FuelTrackerView: View {
                 .padding(16)
             }
             .background(WebConsoleBackground())
-            .navigationTitle("油耗统计")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle("油耗统计")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: CompatToolbarPlacement.topTrailing) {
                     Button {
                         showAddSheet = true
                     } label: {
@@ -260,7 +259,7 @@ struct AddFuelSheet: View {
     @State private var note = ""
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             Form {
                 Section("加油信息") {
                     DatePicker("日期", selection: $date, displayedComponents: .date)
@@ -293,13 +292,12 @@ struct AddFuelSheet: View {
                     TextField("加油站 / 备注", text: $note)
                 }
             }
-            .navigationTitle(editing != nil ? "修改加油记录" : "记一笔油耗")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle(editing != nil ? "修改加油记录" : "记一笔油耗")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: CompatToolbarPlacement.topTrailing) {
                     Button("取消") { dismiss() }
                 }
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: CompatToolbarPlacement.topLeading) {
                     Button(editing != nil ? "保存修改" : "保存") { save() }
                         .disabled(!canSave)
                         .bold()

@@ -5,6 +5,7 @@ import Foundation
 // MARK: - 统一控车 Intent（Siri 重新设计）
 
 /// 控车指令选项（Siri / 快捷指令的参数枚举，对应 CarCommand）
+@available(iOS 16.0, *)
 public enum CarCommandOption: String, AppEnum, CaseIterable, Sendable {
     case unlockDoor
     case lockDoor
@@ -67,6 +68,7 @@ public enum CarCommandOption: String, AppEnum, CaseIterable, Sendable {
 
 /// 统一控车指令：Siri 说「控制车辆」→ 追问要控制什么 → 高危操作语音确认后执行。
 /// 相比逐条 Intent，一条指令覆盖全部控车能力，快捷指令 App 中也可选择具体指令。
+@available(iOS 16.0, *)
 public struct ControlCarIntent: AppIntent {
     public static var title: LocalizedStringResource = "控制车辆"
     public static var description: IntentDescription = "向你的爱车发送任意控车指令（开锁、闭锁、空调、车窗、点火等）"

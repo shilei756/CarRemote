@@ -35,6 +35,7 @@ public enum CarIntentRunner {
 
 // MARK: - 开锁
 
+@available(iOS 16.0, *)
 public struct UnlockCarIntent: AppIntent {
     public static var title: LocalizedStringResource = "解锁车辆"
     public static var description: IntentDescription = "向你的爱车发送解锁指令"
@@ -50,6 +51,7 @@ public struct UnlockCarIntent: AppIntent {
 
 // MARK: - 闭锁
 
+@available(iOS 16.0, *)
 public struct LockCarIntent: AppIntent {
     public static var title: LocalizedStringResource = "锁定车辆"
     public static var description: IntentDescription = "向你的爱车发送闭锁指令"
@@ -65,6 +67,7 @@ public struct LockCarIntent: AppIntent {
 
 // MARK: - 闪灯
 
+@available(iOS 16.0, *)
 public struct FlashLightsIntent: AppIntent {
     public static var title: LocalizedStringResource = "闪灯"
     public static var description: IntentDescription = "让车辆闪灯，便于寻车"
@@ -80,6 +83,7 @@ public struct FlashLightsIntent: AppIntent {
 
 // MARK: - 鸣笛
 
+@available(iOS 16.0, *)
 public struct HonkHornIntent: AppIntent {
     public static var title: LocalizedStringResource = "鸣笛"
     public static var description: IntentDescription = "让车辆鸣笛，便于寻车"
@@ -95,6 +99,7 @@ public struct HonkHornIntent: AppIntent {
 
 // MARK: - 寻车
 
+@available(iOS 16.0, *)
 public struct FindCarIntent: AppIntent {
     public static var title: LocalizedStringResource = "寻车"
     public static var description: IntentDescription = "让车辆闪灯鸣笛，帮你找到停车位置"
@@ -110,6 +115,7 @@ public struct FindCarIntent: AppIntent {
 
 // MARK: - 点火（高危）
 
+@available(iOS 16.0, *)
 public struct StartEngineIntent: AppIntent {
     public static var title: LocalizedStringResource = "远程点火"
     public static var description: IntentDescription = "远程启动发动机（高危操作）"
@@ -131,6 +137,7 @@ public struct StartEngineIntent: AppIntent {
 
 // MARK: - 熄火（高危）
 
+@available(iOS 16.0, *)
 public struct StopEngineIntent: AppIntent {
     public static var title: LocalizedStringResource = "远程熄火"
     public static var description: IntentDescription = "远程关闭发动机（高危操作）"
@@ -152,6 +159,7 @@ public struct StopEngineIntent: AppIntent {
 
 // MARK: - 关窗
 
+@available(iOS 16.0, *)
 public struct CloseWindowsIntent: AppIntent {
     public static var title: LocalizedStringResource = "关闭车窗"
     public static var description: IntentDescription = "关闭所有车窗"
@@ -167,6 +175,7 @@ public struct CloseWindowsIntent: AppIntent {
 
 // MARK: - 空调开 / 关
 
+@available(iOS 16.0, *)
 public struct OpenACIntent: AppIntent {
     public static var title: LocalizedStringResource = "打开空调"
     public static var description: IntentDescription = "远程开启空调"
@@ -180,6 +189,7 @@ public struct OpenACIntent: AppIntent {
     }
 }
 
+@available(iOS 16.0, *)
 public struct CloseACIntent: AppIntent {
     public static var title: LocalizedStringResource = "关闭空调"
     public static var description: IntentDescription = "远程关闭空调"

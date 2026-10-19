@@ -7,7 +7,7 @@ struct LoginView: View {
     @StateObject private var viewModel = LoginViewModel()
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             ScrollView {
                 VStack(spacing: 24) {
                     header

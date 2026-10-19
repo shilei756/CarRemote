@@ -52,7 +52,7 @@ struct DashboardView: View {
 
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             ZStack {
                 WebConsoleBackground()
                 ScrollView {
@@ -188,10 +188,10 @@ struct DashboardView: View {
                     .padding(.horizontal, 20)
                     Spacer()
                 }
-                .presentationDetents([.height(260)])
+                .compatHeight260Detent()
             }
             .toast(viewModel.toast)
-            .onChange(of: viewModel.toast) { _, newValue in
+            .compatOnChange(of: viewModel.toast) { newValue in
                 if newValue != nil {
                     Task {
                         try? await Task.sleep(nanoseconds: 2_500_000_000)
@@ -733,8 +733,8 @@ struct DashboardView: View {
             Spacer(minLength: 0)
         }
         .padding(20)
-        .presentationDetents([.medium])
-        .presentationDragIndicator(.visible)
+        .compatMediumDetent()
+        .compatDragIndicator()
     }
 
     private func locationDetailRow(_ title: String, icon: String, value: String) -> some View {
@@ -950,7 +950,7 @@ struct MoreControlsSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             ZStack {
                 WebConsoleBackground()
                 ScrollView {
@@ -970,16 +970,15 @@ struct MoreControlsSheet: View {
                     .padding(20)
                 }
             }
-            .navigationTitle("更多控车")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle("更多控车")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: CompatToolbarPlacement.topTrailing) {
                     Button("完成") { dismiss() }
                         .foregroundStyle(WebTheme.blue)
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .compatMediumLargeDetents()
     }
 }
 
@@ -1101,7 +1100,7 @@ struct ACTempSheet: View {
             temp = viewModel.defaultACTemp(currentCarTemp: appState.status?.acTempC)
             initialized = true
         }
-        .onChange(of: viewModel.executingCommand) { _, newValue in
+        .compatOnChange(of: viewModel.executingCommand) { newValue in
             // 指令执行完毕（成功或失败）自动关闭，结果由 toast 提示
             if newValue == nil, initialized {
                 dismiss()

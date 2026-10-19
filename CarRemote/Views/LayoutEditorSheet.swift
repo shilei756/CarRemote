@@ -15,7 +15,7 @@ struct LayoutEditorSheet: View {
     @State private var tools: [MoreTool] = []
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             Form {
                 Section {
                     ForEach(quick, id: \.self) { command in
@@ -65,24 +65,23 @@ struct LayoutEditorSheet: View {
                 }
             }
             .environment(\.editMode, .constant(.active))
-            .navigationTitle("自定义布局")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle("自定义布局")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: CompatToolbarPlacement.topLeading) {
                     Button("恢复默认") {
                         viewModel.resetLayout()
                         reload()
                     }
                     .font(.system(size: 14))
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: CompatToolbarPlacement.topTrailing) {
                     Button("保存") {
                         viewModel.saveLayout(quick: quick, more: more, tools: tools)
                         dismiss()
                     }
                     .font(.system(size: 14, weight: .semibold))
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: CompatToolbarPlacement.topTrailing) {
                     Button("完成") { dismiss() }
                         .font(.system(size: 14))
                 }

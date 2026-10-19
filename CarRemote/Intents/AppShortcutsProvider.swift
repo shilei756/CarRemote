@@ -10,6 +10,7 @@ import CarCore
 /// - 总开关在 App「设置 → Siri 语音控制」，关闭后所有语音指令立即失效。
 ///
 /// 注意：Apple 限制每个 App 最多注册 10 个 App Shortcut。
+@available(iOS 16.0, *)
 struct CarAppShortcuts: AppShortcutsProvider {
 
     @AppShortcutsBuilder

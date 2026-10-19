@@ -21,7 +21,7 @@ name: CarRemote
 options:
   bundleIdPrefix: app.copper1249
   deploymentTarget:
-    iOS: "18.0"
+    iOS: "15.0"
   createIntermediateGroups: true
   transitivelyLinkDependencies: false
 
@@ -43,9 +43,9 @@ settings:
     # ---- 通用构建设置 ----
     SWIFT_VERSION: "5.0"
     SWIFT_STRICT_CONCURRENCY: minimal
-    MARKETING_VERSION: "1.0.1"
+    MARKETING_VERSION: "1.0.2"
     CURRENT_PROJECT_VERSION: "1"
-    IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "15.0"
     SDKROOT: iphoneos
     TARGETED_DEVICE_FAMILY: "1"
     ENABLE_BITCODE: NO
@@ -58,7 +58,7 @@ targets:
   CarRemote:
     type: application
     platform: iOS
-    deploymentTarget: "18.0"
+    deploymentTarget: "15.0"
     sources:
       - path: CarRemote
         excludes:
@@ -97,7 +97,7 @@ targets:
   CarCore:
     type: framework
     platform: iOS
-    deploymentTarget: "18.0"
+    deploymentTarget: "15.0"
     sources:
       - path: CarCore
         excludes:

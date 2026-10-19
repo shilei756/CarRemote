@@ -4,6 +4,7 @@ import Foundation
 
 /// 查询车况（Siri / 快捷指令复用）。
 /// 执行后会刷新本地快照，桌面小组件同步更新。
+@available(iOS 16.0, *)
 public struct CarStatusIntent: AppIntent {
     public static var title: LocalizedStringResource = "查询车况"
     public static var description: IntentDescription = "查询车辆续航、油量、里程与安全状态"

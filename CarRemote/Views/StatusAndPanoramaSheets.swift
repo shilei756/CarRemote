@@ -63,7 +63,7 @@ struct VehicleStatusSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             ZStack {
                 WebConsoleBackground()
                 ScrollView {
@@ -85,10 +85,9 @@ struct VehicleStatusSheet: View {
                     .padding(.top, 8)
                 }
             }
-            .navigationTitle("车辆状态")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle("车辆状态")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: CompatToolbarPlacement.topTrailing) {
                     Button("关闭") { dismiss() }.foregroundStyle(WebTheme.blue)
                 }
             }
@@ -256,7 +255,7 @@ struct PanoramaSheet: View {
     private let posLabels = ["前视", "左视", "右视", "后视"]
 
     var body: some View {
-        NavigationStack {
+        NavStack {
             ZStack {
                 WebConsoleBackground()
                 ScrollView {
@@ -270,10 +269,9 @@ struct PanoramaSheet: View {
                     .padding(.top, 8)
                 }
             }
-            .navigationTitle("360全景")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle("360全景")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: CompatToolbarPlacement.topTrailing) {
                     Button("关闭") {
                         pollTask?.cancel()
                         dismiss()
@@ -288,7 +286,7 @@ struct PanoramaSheet: View {
                 ImageViewerSheet(url: item.url)
             }
             .toast(toast)
-            .onChange(of: toast) { _, newValue in
+            .compatOnChange(of: toast) { newValue in
                 if newValue != nil {
                     Task {
                         try? await Task.sleep(nanoseconds: 2_500_000_000)
