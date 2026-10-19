@@ -27,10 +27,10 @@ enum WidgetSlotRunner {
             do {
                 let result = try await CarService.execute(command: command, credentials: credentials)
                 ok = result.ok
-                text = result.ok ? "\(command.displayName)指令已发送" : "\(command.displayName)失败：\(result.message)"
+                text = result.ok ? "\(command.displayName)成功" : "\(command.displayName)失败：\(CarIntentRunner.cleanReason(result.message))"
             } catch {
                 ok = false
-                text = "\(command.displayName)失败：\(error.localizedDescription)"
+                text = "\(command.displayName)失败：\(CarIntentRunner.cleanReason(error.localizedDescription))"
             }
         } else if SharedStore.loadCredentials() == nil {
             text = "请先在「长安控车」App 中登录"

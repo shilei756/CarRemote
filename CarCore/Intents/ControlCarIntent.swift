@@ -89,7 +89,7 @@ public struct ControlCarIntent: AppIntent {
         if cmd.isDangerous {
             try await confirmDangerous(IntentDialog("确认要执行「\(cmd.displayName)」吗？"))
         }
-        let message = await CarIntentRunner.run(command: cmd)
-        return .result(dialog: IntentDialog(stringLiteral: message))
+        let outcome = await CarIntentRunner.run(command: cmd)
+        return .result(dialog: IntentDialog(stringLiteral: outcome.speech))
     }
 }

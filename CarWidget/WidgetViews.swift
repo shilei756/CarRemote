@@ -1,5 +1,6 @@
 import WidgetKit
 import SwiftUI
+import UIKit
 import AppIntents
 import CarCore
 
@@ -126,10 +127,20 @@ private struct WidgetCarImage: View {
     }
 
     var body: some View {
-        Image(imageName)
-            .resizable()
-            .aspectRatio(contentMode: .fit)
-            .accessibilityLabel(isUnlocked ? "车辆图片，已解锁" : "车辆图片，已锁止")
+        Group {
+            if UIImage(named: imageName) != nil {
+                Image(imageName)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            } else {
+                // 资源缺失兜底：显示车型 SF 图标，避免小组件出现空白
+                Image(systemName: style.sfSymbol)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityLabel(isUnlocked ? "车辆图片，已解锁" : "车辆图片，已锁止")
     }
 }
 

@@ -4,15 +4,27 @@ import Foundation
 
 /// 控车 Intent 的公共执行逻辑：
 /// 读取本地凭据 → 检查设置中的语音开关 → 执行指令 → 刷新小组件。
+/// 执行结果统一为 Outcome.speech（Siri 朗读 / 快捷指令展示 / 小组件横幅三处同源）。
 public enum CarIntentRunner {
 
-    public static func run(command: CarCommand) async -> String {
+    /// 指令执行结果：ok = 车机平台是否接受；speech = 成功/失败明确播报文本
+    public struct Outcome {
+        public let ok: Bool
+        public let speech: String
+
+        public init(ok: Bool, speech: String) {
+            self.ok = ok
+            self.speech = speech
+        }
+    }
+
+    public static func run(command: CarCommand) async -> Outcome {
         let settings = SharedStore.loadSettings()
         guard settings.siriAllows(command: command) else {
-            return "「\(command.displayName)」尚未在 App 的「设置 → 语音命令」中开放"
+            return Outcome(ok: false, speech: "「\(command.displayName)」尚未在 App 的「设置 → 语音命令」中开放")
         }
         guard let credentials = SharedStore.loadCredentials() else {
-            return "请先在「长安控车」App 中登录"
+            return Outcome(ok: false, speech: "请先在「长安控车」App 中登录")
         }
         do {
             // 空调与 App 内保持一致：新版模式走开放平台链路（Siri 无调温弹窗，按车机默认设定）
@@ -24,12 +36,19 @@ public enum CarIntentRunner {
             }
             WidgetCenter.shared.reloadAllTimelines()
             if result.ok {
-                return "\(command.displayName)指令已发送"
+                return Outcome(ok: true, speech: "\(command.displayName)成功")
             }
-            return "\(command.displayName)失败：\(result.message)"
+            return Outcome(ok: false, speech: "\(command.displayName)失败：\(cleanReason(result.message))")
         } catch {
-            return "\(command.displayName)失败：\(error.localizedDescription)"
+            return Outcome(ok: false, speech: "\(command.displayName)失败：\(cleanReason(error.localizedDescription))")
         }
+    }
+
+    /// 失败原因清洗：取首行去空白，空则给默认文案（避免播报裸 error 或空串）
+    public static func cleanReason(_ raw: String) -> String {
+        let firstLine = raw.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+        let trimmed = firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "请检查网络后重试" : trimmed
     }
 }
 
@@ -44,8 +63,8 @@ public struct UnlockCarIntent: AppIntent {
     public init() {}
 
     public func perform() async throws -> some IntentResult & ProvidesDialog {
-        let message = await CarIntentRunner.run(command: .unlockDoor)
-        return .result(dialog: IntentDialog(stringLiteral: message))
+        let outcome = await CarIntentRunner.run(command: .unlockDoor)
+        return .result(dialog: IntentDialog(stringLiteral: outcome.speech))
     }
 }
 
@@ -60,8 +79,8 @@ public struct LockCarIntent: AppIntent {
     public init() {}
 
     public func perform() async throws -> some IntentResult & ProvidesDialog {
-        let message = await CarIntentRunner.run(command: .lockDoor)
-        return .result(dialog: IntentDialog(stringLiteral: message))
+        let outcome = await CarIntentRunner.run(command: .lockDoor)
+        return .result(dialog: IntentDialog(stringLiteral: outcome.speech))
     }
 }
 
@@ -76,8 +95,8 @@ public struct FlashLightsIntent: AppIntent {
     public init() {}
 
     public func perform() async throws -> some IntentResult & ProvidesDialog {
-        let message = await CarIntentRunner.run(command: .flashLight)
-        return .result(dialog: IntentDialog(stringLiteral: message))
+        let outcome = await CarIntentRunner.run(command: .flashLight)
+        return .result(dialog: IntentDialog(stringLiteral: outcome.speech))
     }
 }
 
@@ -92,8 +111,8 @@ public struct HonkHornIntent: AppIntent {
     public init() {}
 
     public func perform() async throws -> some IntentResult & ProvidesDialog {
-        let message = await CarIntentRunner.run(command: .whistle)
-        return .result(dialog: IntentDialog(stringLiteral: message))
+        let outcome = await CarIntentRunner.run(command: .whistle)
+        return .result(dialog: IntentDialog(stringLiteral: outcome.speech))
     }
 }
 
@@ -108,8 +127,8 @@ public struct FindCarIntent: AppIntent {
     public init() {}
 
     public func perform() async throws -> some IntentResult & ProvidesDialog {
-        let message = await CarIntentRunner.run(command: .remoteSearchCar)
-        return .result(dialog: IntentDialog(stringLiteral: message))
+        let outcome = await CarIntentRunner.run(command: .remoteSearchCar)
+        return .result(dialog: IntentDialog(stringLiteral: outcome.speech))
     }
 }
 
@@ -126,8 +145,8 @@ public struct StartEngineIntent: AppIntent {
     public func perform() async throws -> some IntentResult & ProvidesDialog {
         // 高危操作：Siri 语音确认后执行（iOS 18+ 用新版 API，16/17 用废弃但可用的旧 API）
         try await confirmDangerous(IntentDialog("确认要远程启动发动机吗？"))
-        let message = await CarIntentRunner.run(command: .openEngine)
-        return .result(dialog: IntentDialog(stringLiteral: message))
+        let outcome = await CarIntentRunner.run(command: .openEngine)
+        return .result(dialog: IntentDialog(stringLiteral: outcome.speech))
     }
 }
 
@@ -144,8 +163,8 @@ public struct StopEngineIntent: AppIntent {
     public func perform() async throws -> some IntentResult & ProvidesDialog {
         // 高危操作：Siri 语音确认后执行（iOS 18+ 用新版 API，16/17 用废弃但可用的旧 API）
         try await confirmDangerous(IntentDialog("确认要远程关闭发动机吗？"))
-        let message = await CarIntentRunner.run(command: .closeEngine)
-        return .result(dialog: IntentDialog(stringLiteral: message))
+        let outcome = await CarIntentRunner.run(command: .closeEngine)
+        return .result(dialog: IntentDialog(stringLiteral: outcome.speech))
     }
 }
 
@@ -160,8 +179,8 @@ public struct CloseWindowsIntent: AppIntent {
     public init() {}
 
     public func perform() async throws -> some IntentResult & ProvidesDialog {
-        let message = await CarIntentRunner.run(command: .closeWindow)
-        return .result(dialog: IntentDialog(stringLiteral: message))
+        let outcome = await CarIntentRunner.run(command: .closeWindow)
+        return .result(dialog: IntentDialog(stringLiteral: outcome.speech))
     }
 }
 
@@ -176,8 +195,8 @@ public struct OpenACIntent: AppIntent {
     public init() {}
 
     public func perform() async throws -> some IntentResult & ProvidesDialog {
-        let message = await CarIntentRunner.run(command: .openAir)
-        return .result(dialog: IntentDialog(stringLiteral: message))
+        let outcome = await CarIntentRunner.run(command: .openAir)
+        return .result(dialog: IntentDialog(stringLiteral: outcome.speech))
     }
 }
 
@@ -190,7 +209,7 @@ public struct CloseACIntent: AppIntent {
     public init() {}
 
     public func perform() async throws -> some IntentResult & ProvidesDialog {
-        let message = await CarIntentRunner.run(command: .closeAir)
-        return .result(dialog: IntentDialog(stringLiteral: message))
+        let outcome = await CarIntentRunner.run(command: .closeAir)
+        return .result(dialog: IntentDialog(stringLiteral: outcome.speech))
     }
 }
