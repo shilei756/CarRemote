@@ -87,11 +87,7 @@ public struct ControlCarIntent: AppIntent {
         let cmd = command.command
         // 高危操作（开锁/闭锁/点火/熄火）先语音确认，取消则直接结束
         if cmd.isDangerous {
-            try await requestConfirmation(
-                conditions: [],
-                actionName: .continue,
-                dialog: IntentDialog("确认要执行「\(cmd.displayName)」吗？")
-            )
+            try await confirmDangerous(IntentDialog("确认要执行「\(cmd.displayName)」吗？"))
         }
         let message = await CarIntentRunner.run(command: cmd)
         return .result(dialog: IntentDialog(stringLiteral: message))

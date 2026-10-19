@@ -124,12 +124,8 @@ public struct StartEngineIntent: AppIntent {
     public init() {}
 
     public func perform() async throws -> some IntentResult & ProvidesDialog {
-        // 高危操作：Siri 语音确认后执行
-        try await requestConfirmation(
-            conditions: [],
-            actionName: .continue,
-            dialog: IntentDialog("确认要远程启动发动机吗？")
-        )
+        // 高危操作：Siri 语音确认后执行（iOS 18+ 用新版 API，16/17 用废弃但可用的旧 API）
+        try await confirmDangerous(IntentDialog("确认要远程启动发动机吗？"))
         let message = await CarIntentRunner.run(command: .openEngine)
         return .result(dialog: IntentDialog(stringLiteral: message))
     }
@@ -146,12 +142,8 @@ public struct StopEngineIntent: AppIntent {
     public init() {}
 
     public func perform() async throws -> some IntentResult & ProvidesDialog {
-        // 高危操作：Siri 语音确认后执行
-        try await requestConfirmation(
-            conditions: [],
-            actionName: .continue,
-            dialog: IntentDialog("确认要远程关闭发动机吗？")
-        )
+        // 高危操作：Siri 语音确认后执行（iOS 18+ 用新版 API，16/17 用废弃但可用的旧 API）
+        try await confirmDangerous(IntentDialog("确认要远程关闭发动机吗？"))
         let message = await CarIntentRunner.run(command: .closeEngine)
         return .result(dialog: IntentDialog(stringLiteral: message))
     }
