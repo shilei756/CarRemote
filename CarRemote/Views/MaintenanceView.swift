@@ -341,7 +341,7 @@ struct EditLastServiceSheet: View {
                 ToolbarItem(placement: CompatToolbarPlacement.topLeading) {
                     Button("保存") { save() }
                         .disabled(Double(odometerText) == nil)
-                        .bold()
+                        .font(.system(size: 17, weight: .bold))
                 }
             }
             .onAppear {

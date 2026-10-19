@@ -125,3 +125,17 @@ enum CompatToolbarPlacement {
         return .navigationBarLeading
     }
 }
+
+// MARK: 字体
+
+extension Font {
+    /// 网页版 .num 数字字体：等宽数字 + 圆体加粗。
+    /// `system(_:design:weight:)` 组合是 iOS 16+，iOS 15 用 `Font.bold()` 补粗（iOS 13+）
+    static var webNumFont: Font {
+        if #available(iOS 16.0, *) {
+            return .system(.body, design: .rounded, weight: .bold)
+        } else {
+            return .system(.body, design: .rounded).bold()
+        }
+    }
+}

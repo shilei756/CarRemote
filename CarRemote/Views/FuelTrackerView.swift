@@ -300,7 +300,7 @@ struct AddFuelSheet: View {
                 ToolbarItem(placement: CompatToolbarPlacement.topLeading) {
                     Button(editing != nil ? "保存修改" : "保存") { save() }
                         .disabled(!canSave)
-                        .bold()
+                        .font(.system(size: 17, weight: .bold))
                 }
             }
         }

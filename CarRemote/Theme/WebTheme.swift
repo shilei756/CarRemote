@@ -171,9 +171,9 @@ extension View {
 // MARK: - 等宽数字（.num: font-variant-numeric: tabular-nums）
 
 extension View {
-    /// 网页版 .num 数字字体：等宽数字 + 圆体
+    /// 网页版 .num 数字字体：等宽数字 + 圆体（iOS 15 兼容见 Compatibility.swift）
     func webNum() -> some View {
-        font(.system(.body, design: .rounded, weight: .bold))
+        font(.webNumFont)
             .monospacedDigit()
     }
 }
