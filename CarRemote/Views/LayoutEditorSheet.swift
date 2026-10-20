@@ -93,11 +93,11 @@ struct LayoutEditorSheet: View {
                     }
                     .font(.system(size: 14, weight: .semibold))
                 }
-                if !isPushed {
-                    ToolbarItem(placement: CompatToolbarPlacement.topTrailing) {
-                        Button("完成") { dismiss() }
-                            .font(.system(size: 14))
-                    }
+                // 说明：ToolbarContentBuilder 在 iOS 15 不支持条件语句（buildIf 仅 iOS 16+），
+                // 故「完成」按钮始终显示；推入模式下点「完成」等同关闭子页（pop），行为一致。
+                ToolbarItem(placement: CompatToolbarPlacement.topTrailing) {
+                    Button("完成") { dismiss() }
+                        .font(.system(size: 14))
                 }
             }
     }

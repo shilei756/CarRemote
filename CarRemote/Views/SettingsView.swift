@@ -166,14 +166,15 @@ struct SettingsView: View {
             rowDivider
             // 夜间模式（行内切换，不进入子页）
             actionRow(symbol: "moon.fill", tint: Color.indigo,
-                      title: "夜间模式", subtitle: "夜间自动切换深色界面") {
-                let next: AppTheme = appTheme == .dark ? .light : .dark
-                appTheme = next
-                ThemeManager.shared.set(next)
-            } trailing: {
+                      title: "夜间模式", subtitle: "夜间自动切换深色界面",
+                      trailing: {
                 Text(appTheme == .dark ? "已开启" : "已关闭")
                     .font(.system(size: 12))
                     .foregroundStyle(WebTheme.muted)
+            }) {
+                let next: AppTheme = appTheme == .dark ? .light : .dark
+                appTheme = next
+                ThemeManager.shared.set(next)
             }
             rowDivider
             // 背景壁纸
@@ -209,12 +210,13 @@ struct SettingsView: View {
             rowDivider
             // Siri 语音控制
             linkRow(symbol: "waveform", tint: WebTheme.blue,
-                    title: "Siri 语音控制", subtitle: "对 Siri 说短语即可控车") {
-                SiriSettingsPage(settings: $settings)
-            } trailing: {
+                    title: "Siri 语音控制", subtitle: "对 Siri 说短语即可控车",
+                    trailing: {
                 Text(settings.siriMasterEnabled ? "已开启" : "已关闭")
                     .font(.system(size: 12))
                     .foregroundStyle(WebTheme.muted)
+            }) {
+                SiriSettingsPage(settings: $settings)
             }
             rowDivider
             // 圈子资料
@@ -287,8 +289,8 @@ struct SettingsView: View {
     /// 行内动作的行（点击执行闭包，不进入子页）
     private func actionRow<Trailing: View>(
         symbol: String, tint: Color, title: String, subtitle: String,
-        action: @escaping () -> Void,
-        @ViewBuilder trailing: () -> Trailing = { EmptyView() }
+        @ViewBuilder trailing: () -> Trailing = { EmptyView() },
+        action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             HStack(spacing: 12) {
