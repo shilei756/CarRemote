@@ -513,6 +513,8 @@ struct EmbedWebSheet: View {
 struct WallpaperSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appState: AppState
+    /// true = 由「我的」页 NavigationLink 推入（不自带 NavStack、点选即时保存）
+    var isPushed = false
     @State private var sakuraEnabled = SharedStore.loadSakuraEnabled()
     /// 神兽主题授权（网页版 /myth/check）
     @State private var mythAllowed = false
@@ -525,53 +527,67 @@ struct WallpaperSheet: View {
     }
 
     var body: some View {
-        NavStack {
-            ZStack {
-                WebConsoleBackground()
-                ScrollView {
-                    VStack(spacing: 14) {
-                        wallpaperOption(
-                            title: "樱花飘落",
-                            subtitle: "卡片顶部花瓣缓缓飘落（网页版默认）",
-                            symbol: "snowflake",
-                            selected: sakuraEnabled
-                        ) {
-                            sakuraEnabled = true
-                        }
-                        wallpaperOption(
-                            title: "纯净背景",
-                            subtitle: "仅保留浅色背景与光晕，无花瓣动画",
-                            symbol: "circle",
-                            selected: !sakuraEnabled
-                        ) {
-                            sakuraEnabled = false
-                        }
-                        if mythAllowed {
-                            mythSection
-                        }
-                        Spacer(minLength: 32)
-                    }
-                    .padding(16)
+        Group {
+            if isPushed {
+                ZStack {
+                    WebConsoleBackground()
+                    ScrollView { options }
                 }
-            }
-            .inlineTitle("背景壁纸")
-            .toolbar {
-                ToolbarItem(placement: CompatToolbarPlacement.topTrailing) {
-                    Button("完成") {
-                        SharedStore.saveSakuraEnabled(sakuraEnabled)
-                        dismiss()
+            } else {
+                NavStack {
+                    ZStack {
+                        WebConsoleBackground()
+                        ScrollView { options }
                     }
-                    .foregroundStyle(WebTheme.blue)
+                    .inlineTitle("背景壁纸")
+                    .toolbar {
+                        ToolbarItem(placement: CompatToolbarPlacement.topTrailing) {
+                            Button("完成") {
+                                SharedStore.saveSakuraEnabled(sakuraEnabled)
+                                dismiss()
+                            }
+                            .foregroundStyle(WebTheme.blue)
+                        }
+                    }
                 }
-            }
-            .task {
-                // 网页版 mythEntry：服务端授权判定后才显示神兽主题区
-                guard !mythChecked, let phone = appState.credentials?.phone else { return }
-                mythChecked = true
-                let access = await MythService.check(phone: phone)
-                mythAllowed = access.allowed
             }
         }
+        .task {
+            // 网页版 mythEntry：服务端授权判定后才显示神兽主题区
+            guard !mythChecked, let phone = appState.credentials?.phone else { return }
+            mythChecked = true
+            let access = await MythService.check(phone: phone)
+            mythAllowed = access.allowed
+        }
+    }
+
+    /// 壁纸选项（push 模式下点选即时保存）
+    private var options: some View {
+        VStack(spacing: 14) {
+            wallpaperOption(
+                title: "樱花飘落",
+                subtitle: "卡片顶部花瓣缓缓飘落（网页版默认）",
+                symbol: "snowflake",
+                selected: sakuraEnabled
+            ) {
+                sakuraEnabled = true
+                if isPushed { SharedStore.saveSakuraEnabled(true) }
+            }
+            wallpaperOption(
+                title: "纯净背景",
+                subtitle: "仅保留浅色背景与光晕，无花瓣动画",
+                symbol: "circle",
+                selected: !sakuraEnabled
+            ) {
+                sakuraEnabled = false
+                if isPushed { SharedStore.saveSakuraEnabled(false) }
+            }
+            if mythAllowed {
+                mythSection
+            }
+            Spacer(minLength: 32)
+        }
+        .padding(16)
     }
 
     /// 神兽主题区（网页版 mythPage：四张主题卡 + 恢复经典默认）

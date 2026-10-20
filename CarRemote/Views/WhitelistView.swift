@@ -7,6 +7,8 @@ import CarCore
 struct WhitelistView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
+    /// true = 由「我的」页 NavigationLink 推入（不自带 NavStack、不显示关闭按钮）
+    var isPushed = false
 
     // MARK: - 面板状态机（对应网页版 wlInitBox / wlSelfInitBox / wlLoginStep / wlPanelStep）
 
@@ -66,16 +68,26 @@ struct WhitelistView: View {
     // MARK: -  body
 
     var body: some View {
-        NavStack {
-            ZStack {
-                WebConsoleBackground()
-                content
-            }
-            .inlineTitle("白名单管理")
-            .toolbar {
-                ToolbarItem(placement: CompatToolbarPlacement.topTrailing) {
-                    Button("关闭") { dismiss() }
-                        .foregroundStyle(WebTheme.blue)
+        Group {
+            if isPushed {
+                ZStack {
+                    WebConsoleBackground()
+                    content
+                }
+                .inlineTitle("白名单管理")
+            } else {
+                NavStack {
+                    ZStack {
+                        WebConsoleBackground()
+                        content
+                    }
+                    .inlineTitle("白名单管理")
+                    .toolbar {
+                        ToolbarItem(placement: CompatToolbarPlacement.topTrailing) {
+                            Button("关闭") { dismiss() }
+                                .foregroundStyle(WebTheme.blue)
+                        }
+                    }
                 }
             }
         }

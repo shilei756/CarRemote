@@ -8,6 +8,8 @@ import CarCore
 /// 全部支持拖动排序，右上角保存 / 左上角恢复默认。
 struct LayoutEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
+    /// true = 由「我的」页 NavigationLink 推入（不自带 NavStack、不显示「完成」）
+    var isPushed = false
     @ObservedObject var viewModel: DashboardViewModel
 
     @State private var quick: [CarCommand] = []
@@ -15,8 +17,18 @@ struct LayoutEditorSheet: View {
     @State private var tools: [MoreTool] = []
 
     var body: some View {
-        NavStack {
-            Form {
+        Group {
+            if isPushed {
+                editor
+            } else {
+                NavStack { editor }
+            }
+        }
+        .onAppear { reload() }
+    }
+
+    private var editor: some View {
+        Form {
                 Section {
                     ForEach(quick, id: \.self) { command in
                         commandRow(command)
@@ -81,13 +93,13 @@ struct LayoutEditorSheet: View {
                     }
                     .font(.system(size: 14, weight: .semibold))
                 }
-                ToolbarItem(placement: CompatToolbarPlacement.topTrailing) {
-                    Button("完成") { dismiss() }
-                        .font(.system(size: 14))
+                if !isPushed {
+                    ToolbarItem(placement: CompatToolbarPlacement.topTrailing) {
+                        Button("完成") { dismiss() }
+                            .font(.system(size: 14))
+                    }
                 }
             }
-        }
-        .onAppear { reload() }
     }
 
     private func commandRow(_ command: CarCommand) -> some View {

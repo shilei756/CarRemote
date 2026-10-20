@@ -57,10 +57,9 @@ private struct StatusGroup<Content: View>: View {
     }
 }
 
-/// 车辆状态详情（原生重写网页版 /vehicle_status）
-struct VehicleStatusSheet: View {
+/// 车辆状态页（原生重写网页版 /vehicle_status；已独立为底部「车况」标签页）
+struct VehicleStatusPage: View {
     @EnvironmentObject private var appState: AppState
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavStack {
@@ -77,7 +76,7 @@ struct VehicleStatusSheet: View {
                         } else {
                             EmptyStateView(systemImage: "gauge.with.dots.needle.33percent",
                                            title: "暂无车况数据",
-                                           message: "请先在主页获取车况")
+                                           message: "下拉或稍候自动获取车况")
                         }
                         Spacer(minLength: 24)
                     }
@@ -86,9 +85,13 @@ struct VehicleStatusSheet: View {
                 }
             }
             .inlineTitle("车辆状态")
-            .toolbar {
-                ToolbarItem(placement: CompatToolbarPlacement.topTrailing) {
-                    Button("关闭") { dismiss() }.foregroundStyle(WebTheme.blue)
+            .refreshable {
+                await appState.refreshStatus()
+            }
+            .task {
+                // 进入页面先刷一次（控车页 30 秒轮询仍在后台持续更新）
+                if appState.statusUpdatedAt == nil {
+                    await appState.refreshStatus()
                 }
             }
         }

@@ -1,7 +1,7 @@
 import SwiftUI
 import CarCore
 
-/// 主界面：五个标签（控车 / 圈子 / 油耗 / 维保 / 我的）
+/// 主界面：五个标签（控车 / 车况 / 油耗 / 维保 / 我的）
 /// 样式照搬网页版控制台（浅色 + 白卡 + 樱花花瓣 + 浮动车图）
 struct MainTabView: View {
     @EnvironmentObject private var appState: AppState
@@ -14,6 +14,11 @@ struct MainTabView: View {
                     Label("控车", systemImage: "car.circle.fill")
                 }
                 .tag(TabRouter.Tab.control)
+            VehicleStatusPage()
+                .tabItem {
+                    Label("车况", systemImage: "gauge.with.dots.needle.bottom.50percent")
+                }
+                .tag(TabRouter.Tab.status)
             FuelTrackerView(appState: appState)
                 .tabItem {
                     Label("油耗", systemImage: "fuelpump.fill")
@@ -221,15 +226,10 @@ struct DashboardView: View {
                 TripHistorySheet()
                     .environmentObject(appState)
             }
-            .sheet(item: $viewModel.showEmbed) { target in
-                // 原生 UI（替代内嵌网页）
-                if target.key == "vehicle_status" {
-                    VehicleStatusSheet()
-                        .environmentObject(appState)
-                } else {
-                    PanoramaSheet()
-                        .environmentObject(appState)
-                }
+            .sheet(item: $viewModel.showEmbed) { _ in
+                // 原生 UI（替代内嵌网页）；车况已独立成 tab，此处仅剩 360 全景
+                PanoramaSheet()
+                    .environmentObject(appState)
             }
             .sheet(isPresented: $viewModel.showWhitelist) {
                 WhitelistView()
@@ -803,7 +803,8 @@ struct DashboardView: View {
         case .acActivate:
             viewModel.showACQR = true
         case .vehicleStatus:
-            viewModel.showEmbed = .vehicleStatus
+            // 车况已独立成底部「车况」标签页
+            TabRouter.shared.select(.status)
         case .panorama:
             viewModel.showEmbed = .panorama
         case .maintenance:
