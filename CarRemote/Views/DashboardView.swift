@@ -1,7 +1,7 @@
 import SwiftUI
 import CarCore
 
-/// 主界面：五个标签（控车 / 车况 / 油耗 / 维保 / 我的）
+/// 主界面：标签（控车 / 车况 / 油耗 / 维保 / 我的 / 蓝牙钥匙）
 /// 样式照搬网页版控制台（浅色 + 白卡 + 樱花花瓣 + 浮动车图）
 struct MainTabView: View {
     @EnvironmentObject private var appState: AppState
@@ -34,6 +34,11 @@ struct MainTabView: View {
                     Label("我的", systemImage: "person.crop.circle.fill")
                 }
                 .tag(TabRouter.Tab.profile)
+            CarKeyView()
+                .tabItem {
+                    Label("蓝牙钥匙", systemImage: "key.horizontal.fill")
+                }
+                .tag(TabRouter.Tab.carkey)
         }
         .tint(WebTheme.blue)
     }

@@ -33,6 +33,14 @@
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>用于蓝牙车钥匙连接车辆模块，实现无感解锁/上锁与近场控车</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>用于蓝牙车钥匙连接车辆模块</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>bluetooth-central</string>
+	</array>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>保存 360 全景照片到相册时使用</string>
 	<key>LSRequiresIPhoneOS</key>
