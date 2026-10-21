@@ -33,7 +33,7 @@ struct CarKeySettingsView: View {
     // MARK: 连接参数
 
     private var connectionSection: some View {
-        SectionCard(title: "连接参数", subtitle: "GATT 服务与特征值 UUID（默认来自逆向）") {
+        CarKeySectionCard(title: "连接参数", subtitle: "GATT 服务与特征值 UUID（默认来自逆向）") {
             uuidRow("主服务 UUID", text: $store.config.serviceUUID)
             uuidRow("写入特征 UUID", text: $store.config.writeUUID)
             uuidRow("通知特征 UUID", text: $store.config.notifyUUID)
@@ -59,7 +59,7 @@ struct CarKeySettingsView: View {
     // MARK: 无钥匙进入
 
     private var pkeSection: some View {
-        SectionCard(title: "无钥匙进入（RSSI 判定）",
+        CarKeySectionCard(title: "无钥匙进入（RSSI 判定）",
                     subtitle: "靠近（信号强）自动解锁，远离（信号弱）自动上锁。前台有效。") {
             Toggle("靠近自动解锁", isOn: $store.config.autoUnlock)
             Toggle("远离自动上锁", isOn: $store.config.autoLock)
@@ -86,7 +86,7 @@ struct CarKeySettingsView: View {
     // MARK: 安全
 
     private var securitySection: some View {
-        SectionCard(title: "安全", subtitle: "部分车型需先验证操作密码") {
+        CarKeySectionCard(title: "安全", subtitle: "部分车型需先验证操作密码") {
             SecureField("操作密码（可选）", text: $store.config.password)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
@@ -99,7 +99,7 @@ struct CarKeySettingsView: View {
     // MARK: 指令帧
 
     private var framesSection: some View {
-        SectionCard(title: "指令帧（hex）",
+        CarKeySectionCard(title: "指令帧（hex）",
                     subtitle: "每个动作下发的 hex 帧，默认值为逆向出的 7X 序列样式，按实车验证微调。") {
             ForEach(CarKeyAction.allCases) { action in
                 VStack(alignment: .leading, spacing: 4) {
@@ -152,7 +152,7 @@ struct CarKeySettingsView: View {
     }
 }
 
-private struct SectionCard<Content: View>: View {
+private struct CarKeySectionCard<Content: View>: View {
     let title: String
     let subtitle: String
     @ViewBuilder let content: () -> Content

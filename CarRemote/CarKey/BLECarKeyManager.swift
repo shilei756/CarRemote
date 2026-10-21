@@ -111,7 +111,7 @@ final class BLECarKeyManager: NSObject, ObservableObject {
         guard let p = central.retrievePeripherals(withIdentifiers: [id]).first else { return }
         peripheral = p
         p.delegate = self
-        set { self.connectionState = .connecting; self.connectedName = store.config.bondedName }
+        set { self.connectionState = .connecting; self.connectedName = self.store.config.bondedName }
         central.connect(p, options: nil)
     }
 
@@ -279,7 +279,7 @@ extension BLECarKeyManager: CBPeripheralDelegate {
     }
 
     func peripheral(_ peripheral: CBPeripheral,
-                                didDiscoverCharacteristicsFor service: CBPeripheral,
+                                didDiscoverCharacteristicsFor service: CBService,
                                 error: Error?) {
         guard error == nil else { log("发现特征失败：\(error!.localizedDescription)"); return }
         let cfg = store.config
