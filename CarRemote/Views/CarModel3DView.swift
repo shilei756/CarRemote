@@ -1,5 +1,6 @@
 import SwiftUI
 import SceneKit
+import CarCore
 
 // =============================================================
 // 真实 3D 车模查看器（SceneKit）
