@@ -55,18 +55,6 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
         }
     }
 
-    /// 3D 车模 OBJ 资源名（SceneKit 原生加载，手动旋转/缩放，无动画）
-    /// 真实车型数据（Sketchfab CC-BY 免费模型转换）：逸动PLUS / UNI-V / CS75PLUS / UNI-K / CS75
-    public var model3DName: String {
-        switch self {
-        case .yidong, .yidongWhite: return "eado_plus"
-        case .univ: return "uni_v"
-        case .cs75: return "cs75plus"
-        case .univK: return "uni_k"
-        case .cs7520: return "cs75"
-        }
-    }
-
     /// 油箱容积 L（网页版 CAR_MODELS.tank：切换车型时联动油量百分比）
     public var tankCapacityL: Double {
         switch self {

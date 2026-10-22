@@ -277,9 +277,12 @@ struct DashboardView: View {
 
     private func carStage(status: CarStatus) -> some View {
         VStack(spacing: 0) {
-            CarVisual3DView(style: settings.carModelStyle, isUnlocked: status.doorUnlocked)
+            Image(settings.carModelStyle.sideImageName)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
                 .frame(height: 200)
                 .padding(.horizontal, 20)
+                .accessibilityLabel("\(settings.carModelStyle.displayName) 车辆图片")
 
             // 椭圆阴影（网页版 .car-shadow：径向渐变椭圆呼吸）
             Ellipse()
