@@ -250,7 +250,6 @@ final class TabRouter: ObservableObject {
         case fuel = 2
         case maintenance = 3
         case profile = 4
-        case carkey = 5
     }
 
     @Published var selectedTab: Tab = .control
