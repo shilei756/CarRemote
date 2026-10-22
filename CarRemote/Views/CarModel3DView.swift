@@ -44,7 +44,7 @@ struct CarModel3DView: UIViewRepresentable {
         let view = ModelSCNView()
         view.backgroundColor = .clear
         view.allowsCameraControl = true           // 手动旋转 / 捏合缩放，无自动动画
-        view.autoenablesDefaultLighting = true     // 自带灯光，保证模型可见
+        view.autoenablesDefaultLighting = false    // 改用手动三灯布光，避免白车漆过曝
         view.antialiasingMode = .multisampling4X
         view.preferredFramesPerSecond = 30
         loadModel(into: view, modelName: modelName, coordinator: context.coordinator)
@@ -71,6 +71,7 @@ struct CarModel3DView: UIViewRepresentable {
         cameraNode.position = dir * 100             // 先放远处，fitCamera 精算距离
         cameraNode.look(at: SCNVector3Zero)
         scene.rootNode.addChildNode(cameraNode)
+        addLights(to: scene.rootNode)
         scene.rootNode.enumerateChildNodes { node, _ in
             guard let geo = node.geometry else { return }
             for material in geo.materials {
@@ -90,6 +91,25 @@ struct CarModel3DView: UIViewRepresentable {
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
+
+    /// 三灯布光：弱环境光保底 + 右前上主光塑形 + 左后补光提暗部。
+    /// 白色车漆在全亮自动光下会过曝成死白（实测 >250 像素过半），
+    /// 受控光照下车漆保持 170~210 的层次，深色车窗/轮毂细节同步凸显。
+    private func addLights(to root: SCNNode) {
+        func lightNode(_ type: SCNLight.LightType, intensity: CGFloat, position: SCNVector3) -> SCNNode {
+            let light = SCNLight()
+            light.type = type
+            light.intensity = intensity
+            light.castsShadow = false
+            let node = SCNNode()
+            node.light = light
+            node.position = position
+            return node
+        }
+        root.addChildNode(lightNode(.ambient, intensity: 250, position: SCNVector3Zero))
+        root.addChildNode(lightNode(.directional, intensity: 600, position: SCNVector3(3, 5, 4)))
+        root.addChildNode(lightNode(.directional, intensity: 200, position: SCNVector3(-4, 1, -2)))
+    }
 
     /// 按模型包围盒投影自动拟合相机距离：
     /// 使车模约占画面 90%（任意视口宽高比自适应，车模始终与 2D 图片观感一致地充满画布）
