@@ -55,6 +55,18 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
         }
     }
 
+    /// 3D 车模 OBJ 资源名（SceneKit 原生加载，手动旋转/缩放，无动画）
+    /// 默认复用「逸动PLUS 白色」同款轿车模型（白色为同车漆色差异）
+    public var model3DName: String {
+        switch self {
+        case .yidong, .yidongWhite: return "changan_sedan"
+        case .univ: return "changan_sports"
+        case .cs75: return "changan_suv"
+        case .univK: return "changan_suv_lux"
+        case .cs7520: return "changan_wagon"
+        }
+    }
+
     /// 油箱容积 L（网页版 CAR_MODELS.tank：切换车型时联动油量百分比）
     public var tankCapacityL: Double {
         switch self {
@@ -220,13 +232,19 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var moreCommands: [String]
     /// 首页「更多功能」磁贴的顺序（MoreTool.rawValue）
     public var moreTools: [String]
+    /// 被隐藏（屏蔽）的项：不在主界面显示。键为对应 rawValue，三类互不相通。
+    public var hiddenQuickCommands: Set<String>
+    public var hiddenMoreCommands: Set<String>
+    public var hiddenTools: Set<String>
     /// 油箱总容量（升），用于油量百分比/进度条
     public var tankCapacityL: Double
 
     private enum CodingKeys: String, CodingKey {
         case confirmGateCommands, siriEnabledCommands, siriMasterEnabled,
              carModelStyle, clubNick, clubAvatar, widgetCommands,
-             quickCommands, moreCommands, moreTools, tankCapacityL
+             quickCommands, moreCommands, moreTools,
+             hiddenQuickCommands, hiddenMoreCommands, hiddenTools,
+             tankCapacityL
     }
 
     public init(confirmGateCommands: Set<String>,
@@ -239,6 +257,9 @@ public struct AppSettings: Codable, Equatable, Sendable {
                 quickCommands: [String] = CarCommand.primaryCommands.map { $0.rawValue },
                 moreCommands: [String] = CarCommand.extraCommands.map { $0.rawValue },
                 moreTools: [String] = MoreTool.defaultOrder.map { $0.rawValue },
+                hiddenQuickCommands: Set<String> = [],
+                hiddenMoreCommands: Set<String> = [],
+                hiddenTools: Set<String> = [],
                 tankCapacityL: Double = 50) {
         self.confirmGateCommands = confirmGateCommands
         self.siriEnabledCommands = siriEnabledCommands
@@ -250,6 +271,9 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.quickCommands = quickCommands
         self.moreCommands = moreCommands
         self.moreTools = moreTools
+        self.hiddenQuickCommands = hiddenQuickCommands
+        self.hiddenMoreCommands = hiddenMoreCommands
+        self.hiddenTools = hiddenTools
         self.tankCapacityL = tankCapacityL
     }
 
@@ -271,6 +295,9 @@ public struct AppSettings: Codable, Equatable, Sendable {
             ?? CarCommand.extraCommands.map { $0.rawValue }
         moreTools = try container.decodeIfPresent([String].self, forKey: .moreTools)
             ?? MoreTool.defaultOrder.map { $0.rawValue }
+        hiddenQuickCommands = try container.decodeIfPresent(Set<String>.self, forKey: .hiddenQuickCommands) ?? []
+        hiddenMoreCommands = try container.decodeIfPresent(Set<String>.self, forKey: .hiddenMoreCommands) ?? []
+        hiddenTools = try container.decodeIfPresent(Set<String>.self, forKey: .hiddenTools) ?? []
         tankCapacityL = try container.decodeIfPresent(Double.self, forKey: .tankCapacityL) ?? 50
     }
 
@@ -308,6 +335,21 @@ public struct AppSettings: Codable, Equatable, Sendable {
         return merged
     }
 
+    /// 快捷控车按钮（已剔除被隐藏项，仅用于主界面渲染）
+    public var visibleQuickCommands: [CarCommand] {
+        orderedQuickCommands.filter { !hiddenQuickCommands.contains($0.rawValue) }
+    }
+
+    /// 更多控车指令（已剔除被隐藏项，仅用于主界面渲染）
+    public var visibleMoreCommands: [CarCommand] {
+        orderedMoreCommands.filter { !hiddenMoreCommands.contains($0.rawValue) }
+    }
+
+    /// 更多功能磁贴（已剔除被隐藏项，仅用于主界面渲染）
+    public var visibleMoreTools: [MoreTool] {
+        orderedMoreTools.filter { !hiddenTools.contains($0.rawValue) }
+    }
+
     public static let `default` = AppSettings(
         confirmGateCommands: ["UnLockDoor", "LockDoor", "OpenEngine", "CloseEngine"],
         siriEnabledCommands: Set(CarCommand.allCases.map { $0.rawValue }),
@@ -339,6 +381,39 @@ public struct AppSettings: Codable, Equatable, Sendable {
         } else {
             siriEnabledCommands.insert(command.rawValue)
         }
+    }
+
+    // MARK: 屏蔽（隐藏）开关：被隐藏项不在主界面显示
+
+    public mutating func toggleHiddenQuick(command: CarCommand) {
+        if hiddenQuickCommands.contains(command.rawValue) {
+            hiddenQuickCommands.remove(command.rawValue)
+        } else {
+            hiddenQuickCommands.insert(command.rawValue)
+        }
+    }
+
+    public mutating func toggleHiddenMore(command: CarCommand) {
+        if hiddenMoreCommands.contains(command.rawValue) {
+            hiddenMoreCommands.remove(command.rawValue)
+        } else {
+            hiddenMoreCommands.insert(command.rawValue)
+        }
+    }
+
+    public mutating func toggleHiddenTool(tool: MoreTool) {
+        if hiddenTools.contains(tool.rawValue) {
+            hiddenTools.remove(tool.rawValue)
+        } else {
+            hiddenTools.insert(tool.rawValue)
+        }
+    }
+
+    /// 一键恢复全部显示（清除所有隐藏项，配合「恢复默认」使用）
+    public mutating func showAllFeatures() {
+        hiddenQuickCommands.removeAll()
+        hiddenMoreCommands.removeAll()
+        hiddenTools.removeAll()
     }
 }
 

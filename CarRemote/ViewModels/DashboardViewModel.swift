@@ -188,12 +188,16 @@ final class DashboardViewModel: ObservableObject {
     /// 自定义布局弹窗
     @Published var showLayoutEditor = false
 
-    /// 保存自定义布局（控车按钮顺序 + 更多功能磁贴顺序），并立即刷新小组件
-    func saveLayout(quick: [CarCommand], more: [CarCommand], tools: [MoreTool]) {
+    /// 保存自定义布局（控车按钮顺序 + 更多功能磁贴顺序 + 隐藏项），并立即刷新小组件
+    func saveLayout(quick: [CarCommand], more: [CarCommand], tools: [MoreTool],
+                    hiddenQuick: Set<String>, hiddenMore: Set<String>, hiddenTools: Set<String>) {
         var settings = SharedStore.loadSettings()
         settings.quickCommands = quick.map { $0.rawValue }
         settings.moreCommands = more.map { $0.rawValue }
         settings.moreTools = tools.map { $0.rawValue }
+        settings.hiddenQuickCommands = hiddenQuick
+        settings.hiddenMoreCommands = hiddenMore
+        settings.hiddenTools = hiddenTools
         SharedStore.saveSettings(settings)
         // 布局随车况快照一起共享（重签环境下独立通道可能失效）
         if let status = appState?.status {
@@ -207,12 +211,13 @@ final class DashboardViewModel: ObservableObject {
         objectWillChange.send()
     }
 
-    /// 恢复默认布局
+    /// 恢复默认布局（同时清除所有隐藏项，回到出厂全部可见）
     func resetLayout() {
         var settings = SharedStore.loadSettings()
         settings.quickCommands = CarCommand.primaryCommands.map { $0.rawValue }
         settings.moreCommands = CarCommand.extraCommands.map { $0.rawValue }
         settings.moreTools = MoreTool.defaultOrder.map { $0.rawValue }
+        settings.showAllFeatures()
         SharedStore.saveSettings(settings)
         objectWillChange.send()
     }

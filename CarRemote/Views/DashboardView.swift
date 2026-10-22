@@ -277,7 +277,8 @@ struct DashboardView: View {
 
     private func carStage(status: CarStatus) -> some View {
         VStack(spacing: 0) {
-            CarVisualView(style: settings.carModelStyle, isUnlocked: status.doorUnlocked)
+            CarVisual3DView(style: settings.carModelStyle, isUnlocked: status.doorUnlocked)
+                .frame(height: 200)
                 .padding(.horizontal, 20)
 
             // 椭圆阴影（网页版 .car-shadow：径向渐变椭圆呼吸）
@@ -509,22 +510,28 @@ struct DashboardView: View {
     // MARK: - 快捷控车（网页版 quickCard：闪灯/开锁/闭锁/鸣笛，中间两个为描边大钮）
 
     private var quickControlsCard: some View {
-        let commands = SharedStore.loadSettings().orderedQuickCommands
-        return HStack(alignment: .top, spacing: 0) {
-            ForEach(Array(commands.enumerated()), id: \.element) { index, command in
-                ControlButtonView(
-                    command: command,
-                    isPrimary: command == .unlockDoor || command == .lockDoor,
-                    isExecuting: viewModel.executingCommand == command
-                ) {
-                    viewModel.execute(command)
+        let commands = settings.visibleQuickCommands
+        return Group {
+            if commands.isEmpty {
+                EmptyView()
+            } else {
+                HStack(alignment: .top, spacing: 0) {
+                    ForEach(Array(commands.enumerated()), id: \.element) { _, command in
+                        ControlButtonView(
+                            command: command,
+                            isPrimary: command == .unlockDoor || command == .lockDoor,
+                            isExecuting: viewModel.executingCommand == command
+                        ) {
+                            viewModel.execute(command)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
                 }
-                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .padding(.horizontal, 8)
+                .webCard()
             }
         }
-        .padding(.vertical, 14)
-        .padding(.horizontal, 8)
-        .webCard()
     }
 
     // MARK: - 更多指令（网页版 ctrlCard / moreGrid：5 列网格）
@@ -568,7 +575,7 @@ struct DashboardView: View {
                 columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 5),
                 spacing: 14
             ) {
-                ForEach(Array(SharedStore.loadSettings().orderedMoreCommands.enumerated()), id: \.element) { _, command in
+                ForEach(Array(settings.visibleMoreCommands.enumerated()), id: \.element) { _, command in
                     CompactControlButton(
                         command: command,
                         isExecuting: viewModel.executingCommand == command
@@ -761,24 +768,30 @@ struct DashboardView: View {
     // MARK: - 更多功能（网页版 moreGrid：磁贴顺序支持自定义）
 
     private var moreToolsCard: some View {
-        let tools = SharedStore.loadSettings().orderedMoreTools
-        return SectionCard(title: "更多功能", sakura: false) {
-            LazyVGrid(
-                columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4),
-                spacing: 14
-            ) {
-                ForEach(tools, id: \.self) { tool in
-                    // 白名单管理仅管理员可见
-                    if tool != .whitelist || appState.isAdminUser {
-                        moreToolTile(name: tool.displayName,
-                                     symbol: tool.sfSymbol,
-                                     color: Color(hex: UInt(tool.colorHex))) {
-                            handleTool(tool)
+        let tools = settings.visibleMoreTools
+        return Group {
+            if tools.isEmpty {
+                EmptyView()
+            } else {
+                SectionCard(title: "更多功能", sakura: false) {
+                    LazyVGrid(
+                        columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4),
+                        spacing: 14
+                    ) {
+                        ForEach(tools, id: \.self) { tool in
+                            // 白名单管理仅管理员可见
+                            if tool != .whitelist || appState.isAdminUser {
+                                moreToolTile(name: tool.displayName,
+                                             symbol: tool.sfSymbol,
+                                             color: Color(hex: UInt(tool.colorHex))) {
+                                    handleTool(tool)
+                                }
+                            }
                         }
                     }
+                    .padding(.top, 4)
                 }
             }
-            .padding(.top, 4)
         }
         .sheet(isPresented: $showWallpaperSheet) {
             WallpaperSheet()
