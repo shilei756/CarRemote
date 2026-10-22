@@ -12,7 +12,7 @@ import Foundation
 // =============================================================
 
 /// 车钥匙动作
-enum CarKeyAction: String, CaseIterable, Identifiable {
+public enum CarKeyAction: String, CaseIterable, Identifiable {
     case unlock       // 解锁
     case lock         // 上锁
     case start        // 启动 / 点火
@@ -71,13 +71,13 @@ enum CarKeyAction: String, CaseIterable, Identifiable {
 }
 
 /// 扫描到的蓝牙设备
-struct CarKeyDevice: Identifiable, Equatable {
-    let id: UUID          // peripheral.identifier
-    let name: String
-    var rssi: Int
-    var isBonded: Bool
+public struct CarKeyDevice: Identifiable, Equatable {
+    public let id: UUID          // peripheral.identifier
+    public let name: String
+    public var rssi: Int
+    public var isBonded: Bool
 
-    init(id: UUID, name: String, rssi: Int, isBonded: Bool = false) {
+    public init(id: UUID, name: String, rssi: Int, isBonded: Bool = false) {
         self.id = id
         self.name = name
         self.rssi = rssi
@@ -86,7 +86,7 @@ struct CarKeyDevice: Identifiable, Equatable {
 }
 
 /// 连接状态
-enum CarKeyConnectionState: String {
+public enum CarKeyConnectionState: String {
     case disconnected = "未连接"
     case scanning = "扫描中"
     case connecting = "连接中"
@@ -95,7 +95,7 @@ enum CarKeyConnectionState: String {
 }
 
 /// PKE（无钥匙进入）状态
-enum CarKeyPKEState: String {
+public enum CarKeyPKEState: String {
     case unknown = "未知"
     case unlocked = "已解锁"
     case locked = "已上锁"

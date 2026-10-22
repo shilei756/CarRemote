@@ -1,5 +1,4 @@
 import Foundation
-import CoreBluetooth
 
 // =============================================================
 // 蓝牙车钥匙 — 可配置项持久化
@@ -7,50 +6,50 @@ import CoreBluetooth
 // 用户可在「蓝牙钥匙 → 设置」内改写。默认值来自逆向还原。
 // =============================================================
 
-struct CarKeyConfig: Codable, Equatable {
+public struct CarKeyConfig: Codable, Equatable {
     // ---- 主 GATT 服务 ----
-    var serviceUUID: String = "970fafad-f144-357f-7888-d5754aa78400"
-    var writeUUID: String   = "970fafad-f144-357f-7888-d5754aa78401"
-    var notifyUUID: String  = "970fafad-f144-357f-7888-d5754aa78401" // 同一特征写+通知
+    public var serviceUUID: String = "970fafad-f144-357f-7888-d5754aa78400"
+    public var writeUUID: String   = "970fafad-f144-357f-7888-d5754aa78401"
+    public var notifyUUID: String  = "970fafad-f144-357f-7888-d5754aa78401" // 同一特征写+通知
 
     // ---- HID / 串口服务（Nordic BLE-UART）----
-    var hidServiceUUID: String = "0000fff0-0000-1000-8000-00805f9b34fb"
-    var hidWriteUUID: String    = "0000fff1-0000-1000-8000-00805f9b34fb"
-    var hidNotifyUUID: String   = "0000fff2-0000-1000-8000-00805f9b34fb"
+    public var hidServiceUUID: String = "0000fff0-0000-1000-8000-00805f9b34fb"
+    public var hidWriteUUID: String    = "0000fff1-0000-1000-8000-00805f9b34fb"
+    public var hidNotifyUUID: String   = "0000fff2-0000-1000-8000-00805f9b34fb"
 
     // ---- 指令帧（动作 rawValue -> hex）----
-    var frames: [String: String]
+    public var frames: [String: String]
 
     // ---- RSSI / 距离参数 ----
-    var unlockRSSI: Int = -65   // 大于此值（更近）触发解锁
-    var lockRSSI: Int   = -85   // 小于此值（更远）触发上锁
-    var measurePower: Int = -59 // 1 米参考 RSSI（用于距离估算）
-    var pathLoss: Double = 2.2  // 路径损耗指数
-    var autoUnlock: Bool = false
-    var autoLock: Bool = false
+    public var unlockRSSI: Int = -65   // 大于此值（更近）触发解锁
+    public var lockRSSI: Int   = -85   // 小于此值（更远）触发上锁
+    public var measurePower: Int = -59 // 1 米参考 RSSI（用于距离估算）
+    public var pathLoss: Double = 2.2  // 路径损耗指数
+    public var autoUnlock: Bool = false
+    public var autoLock: Bool = false
 
     // ---- 安全 ----
-    var password: String = ""
+    public var password: String = ""
 
     // ---- 绑定设备 ----
-    var bondedUUID: String = ""  // peripheral.identifier.uuidString
-    var bondedName: String = ""
+    public var bondedUUID: String = ""  // peripheral.identifier.uuidString
+    public var bondedName: String = ""
 
-    init() {
+    public init() {
         var f: [String: String] = [:]
         for a in CarKeyAction.allCases { f[a.rawValue] = a.defaultFrame }
         frames = f
     }
 
-    var frameFor: (_ action: CarKeyAction) -> String {
+    public var frameFor: (_ action: CarKeyAction) -> String {
         { action in frames[action.rawValue] ?? action.defaultFrame }
     }
 }
 
-final class CarKeyStore: ObservableObject {
-    static let shared = CarKeyStore()
+public final class CarKeyStore: ObservableObject {
+    public static let shared = CarKeyStore()
 
-    @Published var config: CarKeyConfig {
+    @Published public var config: CarKeyConfig {
         didSet { save() }
     }
 
@@ -65,26 +64,26 @@ final class CarKeyStore: ObservableObject {
         }
     }
 
-    func save() {
+    public func save() {
         if let data = try? JSONEncoder().encode(config) {
             UserDefaults.standard.set(data, forKey: key)
         }
     }
 
-    func resetToDefaults() {
+    public func resetToDefaults() {
         config = CarKeyConfig()
     }
 
     // MARK: - 便捷访问
 
-    func cbuuid(_ s: String) -> CBUUID? {
+    public func cbuuid(_ s: String) -> CBUUID? {
         let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty, UUID(uuidString: t) != nil || t.count >= 4 else { return nil }
         return CBUUID(string: t)
     }
 
     /// 估算距离（米）：d = 10^((measurePower - rssi) / (10 * pathLoss))
-    func distanceMeters(rssi: Int) -> Double {
+    public func distanceMeters(rssi: Int) -> Double {
         let ratio = Double(config.measurePower - rssi) / (10.0 * config.pathLoss)
         return pow(10.0, ratio)
     }
