@@ -10,11 +10,38 @@ import CarCore
 // - 透传 SceneKit 原生加载，零外部依赖，避免引入 Swift 包带来的构建风险
 // =============================================================
 
+// MARK: - SCNVector3 辅助
+
+private extension SCNVector3 {
+    static func - (a: SCNVector3, b: SCNVector3) -> SCNVector3 {
+        SCNVector3(a.x - b.x, a.y - b.y, a.z - b.z)
+    }
+
+    static func * (a: SCNVector3, s: Float) -> SCNVector3 {
+        SCNVector3(a.x * s, a.y * s, a.z * s)
+    }
+
+    var length: Float { sqrt(x * x + y * y + z * z) }
+
+    var normalized: SCNVector3 {
+        let l = length
+        return l > 0 ? SCNVector3(x / l, y / l, z / l) : self
+    }
+
+    func dot(_ o: SCNVector3) -> Float { x * o.x + y * o.y + z * o.z }
+}
+
+private func cross(_ a: SCNVector3, _ b: SCNVector3) -> SCNVector3 {
+    SCNVector3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x)
+}
+
+// MARK: - 3D 视图
+
 struct CarModel3DView: UIViewRepresentable {
     let modelName: String
 
     func makeUIView(context: Context) -> SCNView {
-        let view = SCNView()
+        let view = ModelSCNView()
         view.backgroundColor = .clear
         view.allowsCameraControl = true           // 手动旋转 / 捏合缩放，无自动动画
         view.autoenablesDefaultLighting = true     // 自带灯光，保证模型可见
@@ -36,26 +63,101 @@ struct CarModel3DView: UIViewRepresentable {
         cameraNode.camera = SCNCamera()
         cameraNode.camera?.zNear = 0.1
         cameraNode.camera?.zFar = 200
-        cameraNode.position = SCNVector3(0, 1.6, 5.5)
+        cameraNode.camera?.fieldOfView = 35          // 窄 FOV：长焦感、弱透视畸变
+        // 初始机位：3/4 侧视——方位角 10°（略偏车头）、仰角 10°（微俯视）
+        let az = Float(10) * .pi / 180
+        let el = Float(10) * .pi / 180
+        let dir = SCNVector3(cos(el) * cos(az), sin(el), cos(el) * sin(az))
+        cameraNode.position = dir * 100             // 先放远处，fitCamera 精算距离
         cameraNode.look(at: SCNVector3Zero)
-        scene.rootNode.addChildNode(cameraNode)
+        scene.rootNode.addChild(cameraNode)
         scene.rootNode.enumerateChildNodes { node, _ in
             guard let geo = node.geometry else { return }
-            geo.materials = geo.materials.map { material in
-                material.isDoubleSided = true
-                return material
+            for material in geo.materials {
+                material.isDoubleSided = true       // 模型为单面壳，双面渲染
             }
         }
         view.scene = scene
         view.pointOfView = cameraNode
         view.defaultCameraController.target = SCNVector3Zero
         coordinator.loadedModel = modelName
+        coordinator.cameraNode = cameraNode
+        coordinator.scene = scene
+        if let modelView = view as? ModelSCNView {
+            modelView.coordinator = coordinator
+        }
+        Self.fitCamera(in: view, coordinator: coordinator)
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
+    /// 按模型包围盒投影自动拟合相机距离：
+    /// 使车模约占画面 90%（任意视口宽高比自适应，车模始终与 2D 图片观感一致地充满画布）
+    static func fitCamera(in view: SCNView, coordinator: Coordinator) {
+        guard let cameraNode = coordinator.cameraNode,
+              let camera = cameraNode.camera,
+              let scene = coordinator.scene,
+              view.bounds.width > 1, view.bounds.height > 1 else { return }
+        // 收集所有几何节点的世界坐标包围盒 8 角点
+        var corners: [SCNVector3] = []
+        scene.rootNode.enumerateChildNodes { node, _ in
+            guard node.geometry != nil else { return }
+            let (bmin, bmax) = node.boundingBox
+            let m = node.worldTransform
+            for i in 0..<8 {
+                let c = SCNVector3(
+                    i & 1 != 0 ? bmax.x : bmin.x,
+                    i & 2 != 0 ? bmax.y : bmin.y,
+                    i & 4 != 0 ? bmax.z : bmin.z
+                )
+                corners.append(SCNVector3(
+                    m.m11 * c.x + m.m21 * c.y + m.m31 * c.z + m.m41,
+                    m.m12 * c.x + m.m22 * c.y + m.m32 * c.z + m.m42,
+                    m.m13 * c.x + m.m23 * c.y + m.m33 * c.z + m.m43
+                ))
+            }
+        }
+        guard !corners.isEmpty else { return }
+        let target = SCNVector3Zero
+        let fwd = (target - cameraNode.position).normalized
+        let right = cross(fwd, SCNVector3(0, 1, 0)).normalized
+        let up = cross(right, fwd).normalized
+        // 相机仅沿视线方向移动时，right/up 投影与距离无关，一次精算即可
+        var maxW: Float = 0
+        var maxH: Float = 0
+        for c in corners {
+            let v = c - cameraNode.position
+            maxW = max(maxW, abs(v.dot(right)))
+            maxH = max(maxH, abs(v.dot(up)))
+        }
+        let aspect = Float(view.bounds.width / view.bounds.height)
+        let vfov = Float(camera.fieldOfView) * .pi / 180
+        let hfov = 2 * atan(tan(vfov / 2) * aspect)
+        let fill: Float = 0.90
+        let z = max(maxW / (tan(hfov / 2) * fill), maxH / (tan(vfov / 2) * fill))
+        cameraNode.position = target - fwd * z
+        cameraNode.look(at: target)
+    }
+
     final class Coordinator {
         var loadedModel: String?
+        var cameraNode: SCNNode?
+        var scene: SCNScene?
+    }
+}
+
+/// SCNView 子类：首次布局后 bounds 才有效，视口尺寸变化时重新拟合相机
+final class ModelSCNView: SCNView {
+    weak var coordinator: CarModel3DView.Coordinator?
+    private var lastFitSize: CGSize = .zero
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if abs(bounds.width - lastFitSize.width) > 0.5 || abs(bounds.height - lastFitSize.height) > 0.5 {
+            lastFitSize = bounds.size
+            guard let coordinator = coordinator else { return }
+            CarModel3DView.fitCamera(in: self, coordinator: coordinator)
+        }
     }
 }
 
