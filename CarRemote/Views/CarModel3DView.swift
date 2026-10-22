@@ -6,8 +6,12 @@ import CarCore
 // 真实 3D 车模查看器（SceneKit）
 // - 资源：OBJ + MTL + JPG（真实车型数据，Sketchfab CC-BY 免费模型转换：
 //   逸动PLUS / UNI-V / CS75PLUS / UNI-K / CS75，6 万面 + 2048² 贴图）
-// - 交互：手指拖拽旋转、双指捏合缩放；无自动动画（纯用户驱动）
-// - 透传 SceneKit 原生加载，零外部依赖，避免引入 Swift 包带来的构建风险
+// - 交互（参考「引力域」App 转台风格）：
+//   · 单指左右拖拽 → 绕垂直轴顺时针/逆时针旋转（灵敏度刻意调低，松手带轻微惯性）
+//   · 禁止上下旋转（仰角固定微俯视 10°，垂直拖拽让位给页面滚动）
+//   · 双指捏合 → 缩放（限制在适配距离的 45%~180%）
+// - 光照：低环境光保底 + 强主光塑形 + 弱补光，
+//   避免白色车漆（如逸动PLUS 珠光白）过曝成纯白剪影
 // =============================================================
 
 // MARK: - SCNVector3 辅助
@@ -43,10 +47,22 @@ struct CarModel3DView: UIViewRepresentable {
     func makeUIView(context: Context) -> SCNView {
         let view = ModelSCNView()
         view.backgroundColor = .clear
-        view.allowsCameraControl = true           // 手动旋转 / 捏合缩放，无自动动画
-        view.autoenablesDefaultLighting = false    // 改用手动三灯布光，避免白车漆过曝
+        view.allowsCameraControl = false         // 自绘转台手势（仅水平旋转 + 捏合缩放）
+        view.autoenablesDefaultLighting = false  // 改用手动三灯布光，避免白车漆过曝
         view.antialiasingMode = .multisampling4X
         view.preferredFramesPerSecond = 30
+        view.delegate = context.coordinator      // 逐帧驱动旋转惯性
+
+        let pan = UIPanGestureRecognizer(target: context.coordinator,
+                                         action: #selector(CarModel3DView.Coordinator.handlePan(_:)))
+        pan.delegate = context.coordinator
+        view.addGestureRecognizer(pan)
+
+        let pinch = UIPinchGestureRecognizer(target: context.coordinator,
+                                             action: #selector(CarModel3DView.Coordinator.handlePinch(_:)))
+        pinch.delegate = context.coordinator
+        view.addGestureRecognizer(pinch)
+
         loadModel(into: view, modelName: modelName, coordinator: context.coordinator)
         return view
     }
@@ -64,12 +80,6 @@ struct CarModel3DView: UIViewRepresentable {
         cameraNode.camera?.zNear = 0.1
         cameraNode.camera?.zFar = 200
         cameraNode.camera?.fieldOfView = 35          // 窄 FOV：长焦感、弱透视畸变
-        // 初始机位：3/4 侧视——方位角 10°（略偏车头）、仰角 10°（微俯视）
-        let az = Float(10) * .pi / 180
-        let el = Float(10) * .pi / 180
-        let dir = SCNVector3(cos(el) * cos(az), sin(el), cos(el) * sin(az))
-        cameraNode.position = dir * 100             // 先放远处，fitCamera 精算距离
-        cameraNode.look(at: SCNVector3Zero)
         scene.rootNode.addChildNode(cameraNode)
         addLights(to: scene.rootNode)
         scene.rootNode.enumerateChildNodes { node, _ in
@@ -80,10 +90,10 @@ struct CarModel3DView: UIViewRepresentable {
         }
         view.scene = scene
         view.pointOfView = cameraNode
-        view.defaultCameraController.target = SCNVector3Zero
         coordinator.loadedModel = modelName
         coordinator.cameraNode = cameraNode
         coordinator.scene = scene
+        coordinator.resetCamera()                   // 方位角/惯性归位到初始 3/4 视角
         if let modelView = view as? ModelSCNView {
             modelView.coordinator = coordinator
         }
@@ -92,9 +102,10 @@ struct CarModel3DView: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
-    /// 三灯布光：弱环境光保底 + 右前上主光塑形 + 左后补光提暗部。
-    /// 白色车漆在全亮自动光下会过曝成死白（实测 >250 像素过半），
-    /// 受控光照下车漆保持 170~210 的层次，深色车窗/轮毂细节同步凸显。
+    /// 三灯布光：环境光只做保底（130）让暗部不死黑；
+    /// 右前上主光（720）塑形，左后补光（140）提暗部。
+    /// 白色车漆在强环境光下会过曝成纯白剪影（实测均值 >240、过半像素死白），
+    /// 压低环境光后白色漆面保持 170~200 且明暗层次清晰，深色车窗/轮毂同步凸显。
     private func addLights(to root: SCNNode) {
         func lightNode(_ type: SCNLight.LightType, intensity: CGFloat, position: SCNVector3) -> SCNNode {
             let light = SCNLight()
@@ -106,12 +117,12 @@ struct CarModel3DView: UIViewRepresentable {
             node.position = position
             return node
         }
-        root.addChildNode(lightNode(.ambient, intensity: 250, position: SCNVector3Zero))
-        root.addChildNode(lightNode(.directional, intensity: 600, position: SCNVector3(3, 5, 4)))
-        root.addChildNode(lightNode(.directional, intensity: 200, position: SCNVector3(-4, 1, -2)))
+        root.addChildNode(lightNode(.ambient, intensity: 130, position: SCNVector3Zero))
+        root.addChildNode(lightNode(.directional, intensity: 720, position: SCNVector3(3, 5, 4)))
+        root.addChildNode(lightNode(.directional, intensity: 140, position: SCNVector3(-4, 1, -2)))
     }
 
-    /// 按模型包围盒投影自动拟合相机距离：
+    /// 按模型包围盒投影自动拟合相机距离（保持当前旋转角度，仅精算距离）：
     /// 使车模约占画面 90%（任意视口宽高比自适应，车模始终与 2D 图片观感一致地充满画布）
     static func fitCamera(in view: SCNView, coordinator: Coordinator) {
         guard let cameraNode = coordinator.cameraNode,
@@ -139,14 +150,17 @@ struct CarModel3DView: UIViewRepresentable {
         }
         guard !corners.isEmpty else { return }
         let target = SCNVector3Zero
-        let fwd = (target - cameraNode.position).normalized
+        // 视线方向由当前方位角 + 固定仰角决定；相机仅沿视线方向移动时，
+        // right/up 投影与距离无关，一次精算即可
+        let el = Coordinator.initialElevation
+        let ce = cos(el)
+        let fwd = SCNVector3(-ce * sin(coordinator.azimuth), -sin(el), -ce * cos(coordinator.azimuth)).normalized
         let right = cross(fwd, SCNVector3(0, 1, 0)).normalized
         let up = cross(right, fwd).normalized
-        // 相机仅沿视线方向移动时，right/up 投影与距离无关，一次精算即可
         var maxW: Float = 0
         var maxH: Float = 0
         for c in corners {
-            let v = c - cameraNode.position
+            let v = c - target
             maxW = max(maxW, abs(v.dot(right)))
             maxH = max(maxH, abs(v.dot(up)))
         }
@@ -155,21 +169,142 @@ struct CarModel3DView: UIViewRepresentable {
         let hfov = 2 * atan(tan(vfov / 2) * aspect)
         let fill: Float = 0.90
         let z = max(maxW / (tan(hfov / 2) * fill), maxH / (tan(vfov / 2) * fill))
-        cameraNode.position = target - fwd * z
-        cameraNode.look(at: target)
+        // 视口尺寸变化时保留用户的捏合缩放比例
+        let zoom = coordinator.fitDistance > 0 ? coordinator.distance / coordinator.fitDistance : 1
+        coordinator.fitDistance = z
+        coordinator.distance = z * zoom
+        coordinator.applyCamera()
     }
 
-    final class Coordinator {
+    final class Coordinator: NSObject, SCNSceneRendererDelegate, UIGestureRecognizerDelegate {
         var loadedModel: String?
         var cameraNode: SCNNode?
         var scene: SCNScene?
+
+        // MARK: 转台状态
+
+        static let initialAzimuth: Float = 10 * .pi / 180    // 初始方位角：略偏车头的 3/4 视角
+        static let initialElevation: Float = 10 * .pi / 180  // 固定仰角：微俯视，交互中不变化
+        static let panSensitivity: Float = 0.004             // rad/pt：刻意低速，参考引力域转台手感
+        static let spinDecay: Float = 2.4                    // 松手后惯性衰减系数 /s
+        static let maxSpin: Float = 8.0                      // 惯性角速度上限 rad/s
+
+        var azimuth: Float = Coordinator.initialAzimuth
+        var distance: Float = 10          // 当前相机到目标距离（捏合缩放改变）
+        var fitDistance: Float = 10       // 自动适配得到的基准距离
+        var spinVelocity: Float = 0       // 松手后的残余角速度 rad/s
+        private var lastPanX: CGFloat = 0
+        private var lastPanTime: TimeInterval = 0
+        private var lastFrameTime: TimeInterval?
+
+        func resetCamera() {
+            azimuth = Self.initialAzimuth
+            spinVelocity = 0
+            applyCamera()
+        }
+
+        /// 按当前方位角/仰角/距离摆放相机（目标为原点，look(at:) 保持微俯视）
+        func applyCamera() {
+            guard let cameraNode = cameraNode else { return }
+            let el = Self.initialElevation
+            let ce = cos(el)
+            cameraNode.position = SCNVector3(
+                distance * ce * sin(azimuth),
+                distance * sin(el),
+                distance * ce * cos(azimuth)
+            )
+            cameraNode.look(at: SCNVector3Zero)
+        }
+
+        // MARK: 手势
+
+        /// 单指水平拖拽 → 绕 Y 轴旋转（仅水平方向，顺时针/逆时针由拖动方向决定）
+        @objc func handlePan(_ gesture: UIPanGestureRecognizer) {
+            switch gesture.state {
+            case .began:
+                spinVelocity = 0
+                lastPanX = gesture.location(in: gesture.view).x
+                lastPanTime = CACurrentMediaTime()
+            case .changed:
+                let x = gesture.location(in: gesture.view).x
+                let now = CACurrentMediaTime()
+                let dx = Float(x - lastPanX)
+                let dt = Float(max(now - lastPanTime, 1.0 / 120))
+                lastPanX = x
+                lastPanTime = now
+                let dAz = dx * Self.panSensitivity
+                azimuth += dAz
+                spinVelocity = dAz / dt          // 记录瞬时角速度，供松手后惯性使用
+                applyCamera()
+            case .ended, .cancelled:
+                spinVelocity = min(max(spinVelocity, -Self.maxSpin), Self.maxSpin)
+            default:
+                break
+            }
+        }
+
+        /// 双指捏合 → 缩放（向外靠近、向内拉远，钳制在基准距离的 45%~180%）
+        @objc func handlePinch(_ gesture: UIPinchGestureRecognizer) {
+            guard gesture.state == .began || gesture.state == .changed else { return }
+            let scale = Float(gesture.scale)
+            guard scale > 0 else { return }
+            distance = distance / scale
+            distance = min(max(distance, fitDistance * 0.45), fitDistance * 1.8)
+            gesture.scale = 1.0
+            applyCamera()
+        }
+
+        // MARK: 惯性（渲染循环逐帧衰减）
+
+        func renderer(_ renderer: SCNSceneRenderer, updateAtTime time: TimeInterval) {
+            defer { lastFrameTime = time }
+            guard let last = lastFrameTime else { return }
+            let dt = Float(min(max(time - last, 0), 0.1))
+            guard dt > 0, abs(spinVelocity) > 0.001 else { return }
+            azimuth += spinVelocity * dt
+            spinVelocity *= exp(-Self.spinDecay * dt)
+            if abs(spinVelocity) <= 0.001 { spinVelocity = 0 }
+            applyCamera()
+        }
+
+        // MARK: UIGestureRecognizerDelegate
+
+        /// 仅水平拖拽启动旋转；垂直拖拽让位给仪表盘 ScrollView 滚动
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard let pan = gestureRecognizer as? UIPanGestureRecognizer else { return true }
+            let v = pan.velocity(in: pan.view)
+            return abs(v.x) > abs(v.y) * 1.2
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            false
+        }
     }
 }
 
-/// SCNView 子类：首次布局后 bounds 才有效，视口尺寸变化时重新拟合相机
+/// SCNView 子类：首次布局后 bounds 才有效，视口尺寸变化时重新拟合相机；
+/// 进入窗口时把外层 ScrollView 的滚动手势挂到车模旋转手势之后
+/// （水平拖动转车模、垂直拖动滚页面，两者不打架）
 final class ModelSCNView: SCNView {
     weak var coordinator: CarModel3DView.Coordinator?
     private var lastFitSize: CGSize = .zero
+    private var didConfigureGestures = false
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        guard !didConfigureGestures, window != nil else { return }
+        didConfigureGestures = true
+        guard let pan = gestureRecognizers?.first(where: { $0 is UIPanGestureRecognizer }) else { return }
+        var ancestor: UIView? = superview
+        while let v = ancestor {
+            if let scroll = v as? UIScrollView {
+                scroll.panGestureRecognizer.require(toFail: pan)
+                break
+            }
+            ancestor = v.superview
+        }
+    }
 
     override func layoutSubviews() {
         super.layoutSubviews()
@@ -219,7 +354,7 @@ struct CarVisual3DView: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(isUnlocked
-            ? "\(style.displayName) 车辆三维模型，当前已解锁，可拖拽旋转查看"
+            ? "\(style.displayName) 车辆三维模型，当前已解锁，左右拖拽可旋转查看"
             : "\(style.displayName) 车辆三维模型，当前已锁止")
     }
 }
