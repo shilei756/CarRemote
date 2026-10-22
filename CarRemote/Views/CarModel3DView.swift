@@ -70,7 +70,7 @@ struct CarModel3DView: UIViewRepresentable {
         let dir = SCNVector3(cos(el) * cos(az), sin(el), cos(el) * sin(az))
         cameraNode.position = dir * 100             // 先放远处，fitCamera 精算距离
         cameraNode.look(at: SCNVector3Zero)
-        scene.rootNode.addChild(cameraNode)
+        scene.rootNode.addChildNode(cameraNode)
         scene.rootNode.enumerateChildNodes { node, _ in
             guard let geo = node.geometry else { return }
             for material in geo.materials {
