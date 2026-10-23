@@ -57,11 +57,12 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
 
     /// 是否有内置官方 3D 车模（逸动PLUS 2022，C211，来自长安智慧云控安装包）。
     /// 其他车型后续把对应 glb 放进 Resources/3DModel 并在此登记即可接入。
+    ///
+    /// ⚠️ 临时禁用（1.1.2）：部分 iOS 26 实机上，车况数据到达后创建 SceneKit
+    /// 视图（SCNView）会立即崩溃（录屏实证：点刷新→"正在获取车况"→App 消失）。
+    /// 在定位到确切根因前统一走 2D 车图兜底，保证 App 可用；调查恢复后改回 true。
     public var has3DModel: Bool {
-        switch self {
-        case .yidong, .yidongWhite: return true
-        default: return false
-        }
+        return false
     }
 
     /// 3D 车模资源名（Bundle 内 glb，不带扩展名；无 3D 车模时为 nil）
