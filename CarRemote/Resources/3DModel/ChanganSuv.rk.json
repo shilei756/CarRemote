@@ -1,21 +1,21 @@
 {
  "format": "CarRemote-RK-1",
- "source": "cs75plus.obj",
+ "source": "changan_suv.obj (长安官方通用车身模)",
  "uvFlipV": false,
  "normalization": {
   "scale": 1.1,
   "center": [
    0.0,
-   -0.386092,
+   -0.54902,
    0.0
   ],
-  "minY": -0.386092,
+  "minY": -0.54902,
   "length": 2.2
  },
  "materials": [
   {
-   "name": "CS75Plus_mat",
-   "texture": "CS75Plus_tex0.png",
+   "name": "ChanganSuv_mat",
+   "texture": "ChanganSuv_tex0.png",
    "baseColorSRGB": [
     1.0,
     1.0,
@@ -23,24 +23,24 @@
     1.0
    ],
    "metallic": 0.0,
-   "roughness": 0.6,
+   "roughness": 0.65,
    "emissiveSRGB": null,
    "blend": false,
    "doubleSided": false
   }
  ],
- "geometryFile": "CS75Plus.rk.bin",
+ "geometryFile": "ChanganSuv.rk.bin",
  "parts": [
   {
-   "name": "CS75Plus_body",
+   "name": "ChanganSuv_body",
    "group": "body",
    "material": 0,
-   "vertexCount": 180000,
-   "indexCount": 180000,
+   "vertexCount": 7422,
+   "indexCount": 7422,
    "positionOffset": 0,
-   "normalOffset": 2160000,
-   "uvOffset": 4320000,
-   "indexOffset": 5760000,
+   "normalOffset": 89064,
+   "uvOffset": 178128,
+   "indexOffset": 237504,
    "hasNormal": true,
    "hasUV": true,
    "isLight": false
@@ -49,9 +49,9 @@
  "groups": {
   "body": {
    "position": [
-    0.0,
-    0.0,
-    0.0
+    0,
+    0,
+    0
    ],
    "parent": null,
    "kind": "body",
@@ -63,7 +63,7 @@
  },
  "lightGroups": {},
  "stats": {
-  "vertexCount": 180000,
-  "triangleCount": 60000
+  "vertexCount": 7422,
+  "triangleCount": 2474
  }
 }

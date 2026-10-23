@@ -264,7 +264,9 @@ struct CarModel3DRepresentable: UIViewRepresentable {
                     }
                 }
                 guard panDirection == .horizontal else { return }   // 纵向透传：ScrollView 滚页面
-                let delta = Float(point.x - lastX) * 0.0085
+                // 取反：RealityKit 轨道相机 azimuth 增大时车模视觉上向右转，
+                // 与「拖动车模跟随手指」的自然预期相反（1.1.3 实机反馈）
+                let delta = -Float(point.x - lastX) * 0.0085
                 lastX = point.x
                 view.setOrbit(azimuth: view.orbitAzimuth + delta)
             default:

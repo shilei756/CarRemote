@@ -1,21 +1,21 @@
 {
  "format": "CarRemote-RK-1",
- "source": "uni_k.obj",
+ "source": "changan_sports.obj (长安官方通用车身模)",
  "uvFlipV": false,
  "normalization": {
   "scale": 1.1,
   "center": [
    0.0,
-   -0.390338,
+   -0.490196,
    0.0
   ],
-  "minY": -0.390338,
+  "minY": -0.490196,
   "length": 2.2
  },
  "materials": [
   {
-   "name": "UniK_mat",
-   "texture": "UniK_tex0.png",
+   "name": "ChanganSports_mat",
+   "texture": "ChanganSports_tex0.png",
    "baseColorSRGB": [
     1.0,
     1.0,
@@ -23,24 +23,24 @@
     1.0
    ],
    "metallic": 0.0,
-   "roughness": 0.6,
+   "roughness": 0.65,
    "emissiveSRGB": null,
    "blend": false,
    "doubleSided": false
   }
  ],
- "geometryFile": "UniK.rk.bin",
+ "geometryFile": "ChanganSports.rk.bin",
  "parts": [
   {
-   "name": "UniK_body",
+   "name": "ChanganSports_body",
    "group": "body",
    "material": 0,
-   "vertexCount": 180000,
-   "indexCount": 180000,
+   "vertexCount": 6264,
+   "indexCount": 6264,
    "positionOffset": 0,
-   "normalOffset": 2160000,
-   "uvOffset": 4320000,
-   "indexOffset": 5760000,
+   "normalOffset": 75168,
+   "uvOffset": 150336,
+   "indexOffset": 200448,
    "hasNormal": true,
    "hasUV": true,
    "isLight": false
@@ -49,9 +49,9 @@
  "groups": {
   "body": {
    "position": [
-    0.0,
-    0.0,
-    0.0
+    0,
+    0,
+    0
    ],
    "parent": null,
    "kind": "body",
@@ -63,7 +63,7 @@
  },
  "lightGroups": {},
  "stats": {
-  "vertexCount": 180000,
-  "triangleCount": 60000
+  "vertexCount": 6264,
+  "triangleCount": 2088
  }
 }
