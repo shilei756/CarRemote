@@ -117,7 +117,7 @@ public enum LightGroup: String, CaseIterable {
 
 // MARK: - 构建产物（后台解析完成后由主线程挂入场景）
 
-struct RKCarModel {
+public struct RKCarModel {
     let root: Entity
     let partEntities: [CarPart: Entity]          // 门/尾门/天窗的父实体（旋转枢轴所在）
     let windowEntities: [CarPart: Entity]        // 车窗组实体（门子节点）
@@ -165,6 +165,7 @@ public final class Car3DView: UIView {
 
     private var arView: ARView!
     private var cameraEntity: PerspectiveCamera?
+    private var sceneAnchor: AnchorEntity?
     private var carRoot: Entity?
     private var partEntities: [CarPart: Entity] = [:]
     private var windowEntities: [CarPart: Entity] = [:]
@@ -236,6 +237,11 @@ public final class Car3DView: UIView {
             arView.topAnchor.constraint(equalTo: topAnchor),
             arView.bottomAnchor.constraint(equalTo: bottomAnchor)
         ])
+        // 新版 RealityKit（iOS 26 SDK）Scene 已移除 addChild，
+        // 内容需挂到 AnchorEntity 后通过 scene.addAnchor 加入场景。
+        let anchor = AnchorEntity()
+        arView.scene.addAnchor(anchor)
+        sceneAnchor = anchor
         setupCamera()
         setupLighting()
     }
@@ -243,7 +249,7 @@ public final class Car3DView: UIView {
     private func setupCamera() {
         let camera = PerspectiveCamera()
         camera.camera = PerspectiveCameraComponent(near: 0.05, far: 100, fieldOfViewInDegrees: 38)
-        arView.scene.addChild(camera)
+        sceneAnchor?.addChild(camera)
         cameraEntity = camera
         applyOrbitCamera()
     }
@@ -251,18 +257,18 @@ public final class Car3DView: UIView {
     private func setupLighting() {
         // 主方向光：给车漆/金属件立体感（强度取中性，避免白车漆过曝）
         let key = DirectionalLight()
-        key.light?.intensity = 1600
-        key.light?.color = .white
+        key.light.intensity = 1600
+        key.light.color = .white
         key.position = SIMD3<Float>(4, 6, 5)
         key.look(at: SIMD3<Float>(0, 0.3, 0), from: SIMD3<Float>(4, 6, 5), relativeTo: nil)
-        arView.scene.addChild(key)
+        sceneAnchor?.addChild(key)
         // 冷色补光压暗部
         let fill = DirectionalLight()
-        fill.light?.intensity = 500
-        fill.light?.color = UIColor(red: 0.82, green: 0.88, blue: 1.0, alpha: 1.0)
+        fill.light.intensity = 500
+        fill.light.color = UIColor(red: 0.82, green: 0.88, blue: 1.0, alpha: 1.0)
         fill.position = SIMD3<Float>(-5, 3, -4)
         fill.look(at: SIMD3<Float>(0, 0.3, 0), from: SIMD3<Float>(-5, 3, -4), relativeTo: nil)
-        arView.scene.addChild(fill)
+        sceneAnchor?.addChild(fill)
     }
 
     // MARK: 轨道相机
@@ -466,8 +472,10 @@ public final class Car3DView: UIView {
     private static func makeMaterial(_ def: RKMaterialDef, textures: [String: TextureResource]) -> PhysicallyBasedMaterial {
         var m = PhysicallyBasedMaterial()
         let c = def.baseColorSRGB
+        // 无贴图的透明件（车窗玻璃 / 灯罩玻璃）给固定半透明，呈现玻璃质感
+        let baseAlpha: CGFloat = (def.blend && def.texture == nil) ? 0.4 : (c.count > 3 ? c[3] : 1)
         let tint = UIColor(red: CGFloat(c[0]), green: CGFloat(c[1]), blue: CGFloat(c[2]),
-                          alpha: CGFloat(c.count > 3 ? c[3] : 1))
+                          alpha: baseAlpha)
         m.baseColor = .init(tint: tint)
         m.metallic = .init(floatLiteral: Float(def.metallic))
         m.roughness = .init(floatLiteral: Float(def.roughness))
@@ -479,10 +487,6 @@ public final class Car3DView: UIView {
         if let tn = def.texture, let tex = textures[tn] {
             m.baseColor.texture = .init(tex)
             if def.blend {
-                if def.texture == nil {
-                    // 无贴图的透明件（车窗玻璃 / 灯罩玻璃）：固定半透明，呈现玻璃质感
-                    m.opacity = .init(floatLiteral: 0.4)
-                }
                 m.blending = .transparent(opacity: 1.0)
             }
         }
@@ -518,7 +522,7 @@ public final class Car3DView: UIView {
         windowOpen = build.windowOpen
         windowTilt = build.windowTilt
         handleTilt = build.handleTilt
-        arView.scene.addChild(build.root)
+        sceneAnchor?.addChild(build.root)
         availableParts = Set(partEntities.keys)
         hasWindows = !windowEntities.isEmpty
         applyLockState(animated: false)
@@ -674,7 +678,7 @@ public final class Car3DView: UIView {
         guard let entity = arView.entity(at: point) else { return nil }
         var current: Entity? = entity
         while let e = current {
-            if let n = e.name, let p = Self.partToCarPart[n] { return p }
+            if let p = Self.partToCarPart[e.name] { return p }
             current = e.parent
         }
         return nil
