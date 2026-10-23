@@ -304,15 +304,15 @@ struct CarVisual3DStage: View {
     @StateObject private var model = Car3DModelState()
     @State private var show3D = true
 
-    private let modelName = "EadoPlus2022"
-
     var body: some View {
         VStack(spacing: 0) {
             ZStack(alignment: .topTrailing) {
                 Group {
-                    if show3D && !model.loadFailed {
+                    // 仅当当前车型有内置 3D 资产（style.model3DName != nil）时展示 3D，
+                    // 其他车型自动回退 2D 车图
+                    if show3D && !model.loadFailed, let name = style.model3DName {
                         ZStack {
-                            CarModel3DRepresentable(state: model, modelName: modelName)
+                            CarModel3DRepresentable(state: model, modelName: name)
                                 .accessibilityElement(children: .ignore)
                                 .accessibilityLabel("\(style.displayName) 三维车模，左右滑动可旋转，长按车门、尾门或天窗可开合")
                                 .opacity(model.isLoaded ? 1 : 0)
@@ -335,20 +335,22 @@ struct CarVisual3DStage: View {
                 }
                 .frame(height: 200)
 
-                // 3D / 2D 一键切换（延续 1.0.5 车模页习惯）
-                Button {
-                    show3D.toggle()
-                } label: {
-                    Image(systemName: show3D ? "photo" : "square.stack.3d.up")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(WebTheme.muted)
-                        .padding(7)
-                        .background(Color(.secondarySystemBackground).opacity(0.82))
-                        .clipShape(Circle())
+                // 3D / 2D 一键切换（延续 1.0.5 车模页习惯；无 3D 资产的车型不显示）
+                if style.model3DName != nil {
+                    Button {
+                        show3D.toggle()
+                    } label: {
+                        Image(systemName: show3D ? "photo" : "square.stack.3d.up")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(WebTheme.muted)
+                            .padding(7)
+                            .background(Color(.secondarySystemBackground).opacity(0.82))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(show3D ? "切换为车辆图片" : "切换为三维车模")
+                    .padding(6)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(show3D ? "切换为车辆图片" : "切换为三维车模")
-                .padding(6)
             }
 
             if show3D && !model.loadFailed && model.isLoaded {

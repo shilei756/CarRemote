@@ -62,8 +62,14 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
     /// Apple 现框架，iOS 15+ 全员可用，已绕过 iOS 26/27 上 SCNView 创建即崩溃的问题。
     /// 资产由 glb 离线转换（EadoPlus2022.rk.json/.rk.bin + tex/*.png），运行时实时重建网格。
     public var has3DModel: Bool {
-        if #available(iOS 15.0, *) { return true }
-        return false
+        guard #available(iOS 15.0, *) else { return false }
+        // 目前仅逸动PLUS 2022（C211）内置官方 3D 资产；
+        // 其他车型（UNI-V / CS75PLUS / UNI-K 等）没有对应 3D 车模，
+        // 显示 2D 车图。后续拿到其他车型的 glb 后在此登记即可接入。
+        switch self {
+        case .yidong, .yidongWhite: return true
+        default: return false
+        }
     }
 
     /// 3D 车模资源名（Bundle 内 glb，不带扩展名；无 3D 车模时为 nil）

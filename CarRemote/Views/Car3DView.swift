@@ -152,14 +152,14 @@ public final class Car3DView: UIView {
     public private(set) var orbitAzimuth: Float = Car3DView.defaultAzimuth
     /// 轨道仰角（弧度，钳制 0.03~1.15）
     public private(set) var orbitElevation: Float = Car3DView.defaultElevation
-    /// 轨道半径（场景单位，钳制 3.6~10）
+    /// 轨道半径（场景单位，钳制 2.6~10；默认值以车模占屏约七成为准）
     public private(set) var orbitRadius: Float = Car3DView.defaultRadius
     /// 轨道注视点（车身中部）
     public private(set) var orbitTarget = SIMD3<Float>(0, 0.36, 0)
 
     private static let defaultAzimuth: Float = 0.7383
     private static let defaultElevation: Float = 0.2514
-    private static let defaultRadius: Float = 6.2
+    private static let defaultRadius: Float = 4.2
 
     // MARK: 私有
 
@@ -276,7 +276,7 @@ public final class Car3DView: UIView {
     public func setOrbit(azimuth: Float? = nil, elevation: Float? = nil, radius: Float? = nil) {
         if let azimuth = azimuth { orbitAzimuth = azimuth }
         if let elevation = elevation { orbitElevation = min(max(elevation, 0.03), 1.15) }
-        if let radius = radius { orbitRadius = min(max(radius, 3.6), 10) }
+        if let radius = radius { orbitRadius = min(max(radius, 2.6), 10) }
         applyOrbitCamera()
     }
 
@@ -359,7 +359,12 @@ public final class Car3DView: UIView {
             return e
         }
 
+        // glb 自带的假地面阴影面片（C211_Tex_Shadow，tex_4 半透明贴图）在
+        // RealityKit 下渲染成发白面片，且与本 App 纯净卡片背景不搭：
+        // 直接不渲染，车模悬浮于干净背景上。
+        let skippedMaterials: Set<String> = ["C211_Tex_Shadow"]
         for part in manifest.parts {
+            if skippedMaterials.contains(manifest.materials[part.material].name) { continue }
             let ge = groupEntity(part.group)
             let model = try buildModelEntity(part: part, manifest: manifest, data: binData, textures: textures)
             ge.addChild(model)
