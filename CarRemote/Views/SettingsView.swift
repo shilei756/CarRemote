@@ -158,6 +158,18 @@ struct SettingsView: View {
 
     private var settingsListCard: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // 3D 车模开关（逸动PLUS 2022 官方车模；行内切换，不用进子页）
+            actionRow(symbol: "cube.fill", tint: WebTheme.blue,
+                      title: "3D 车模", subtitle: "控车页显示可旋转的三维车模，关闭后显示平面车图",
+                      trailing: {
+                Text(settings.car3DEnabled ? "已开启" : "已关闭")
+                    .font(.system(size: 12))
+                    .foregroundStyle(WebTheme.muted)
+            }) {
+                settings.car3DEnabled.toggle()
+                saveSettings()
+            }
+            rowDivider
             // 免责声明
             linkRow(symbol: "exclamationmark.shield.fill", tint: WebTheme.amber,
                     title: "免责声明", subtitle: "使用前请务必阅读") {

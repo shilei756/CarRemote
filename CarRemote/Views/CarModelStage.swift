@@ -33,11 +33,19 @@ final class Car3DModelState: ObservableObject {
     @Published private(set) var availableParts: Set<CarPart> = []
     /// 是否有可独立升降的车窗
     @Published private(set) var hasWindows = false
+    /// 场景是否已挂载（glb 解析 + 索引完成）
+    @Published private(set) var isLoaded = false
+    /// 加载是否失败（失败时 UI 自动回退 2D 车图）
+    @Published private(set) var loadFailed = false
 
     private weak var sceneView: Car3DView?
 
     /// 最近一次同步的真实车况（值没变就不动车模，避免覆盖用户的本地预览）
     private var lastSyncedStatus: (unlocked: Bool, window: Bool, sunroof: Bool)?
+
+    /// 加载代次：每次创建新视图 +1，旧加载完成时按代次丢弃。
+    /// 防止 SwiftUI 重建 representable 时，旧 Task 把已废弃的视图挂成当前场景。
+    private var loadGeneration = 0
 
     private static let doorParts: [CarPart] = [.doorFrontLeft, .doorFrontRight, .doorRearLeft, .doorRearRight]
 
@@ -54,6 +62,12 @@ final class Car3DModelState: ObservableObject {
         }
         view.setLights(headlight: lightsOn, taillight: lightsOn)
         if wheelsSpinning { view.startWheels(rpm: 5) } else { view.stopWheels() }
+        // 重放加载完成前到达的真实车况（真实状态优先于本地预览）
+        if let last = lastSyncedStatus {
+            view.setUnlocked(last.unlocked)
+            setWindows(last.window)
+            setPart(.sunroof, open: last.sunroof)
+        }
     }
 
     func ensureAttached(_ view: Car3DView) {
@@ -62,6 +76,27 @@ final class Car3DModelState: ObservableObject {
 
     func detach() {
         sceneView = nil
+    }
+
+    // MARK: 加载（后台解析 → 主线程挂载）
+
+    /// 开始一次加载，返回代次（调用方在完成回调里比对）
+    func beginLoad() -> Int {
+        loadGeneration += 1
+        isLoaded = false
+        loadFailed = false
+        return loadGeneration
+    }
+
+    /// 后台加载完成（主线程调用）：代次不匹配说明视图已重建，直接丢弃
+    func completeLoad(generation: Int, view: Car3DView, scene: SCNScene?) {
+        guard generation == loadGeneration else { return }
+        if let scene, view.attachScene(scene) {
+            attach(view)
+            isLoaded = true
+        } else {
+            loadFailed = true
+        }
     }
 
     // MARK: 部件控制
@@ -130,9 +165,19 @@ struct CarModel3DRepresentable: UIViewRepresentable {
     func makeUIView(context: Context) -> Car3DView {
         let view = Car3DView(frame: .zero)
         view.backgroundColor = .clear
-        view.loadModel(named: modelName)
-        state.attach(view)
         context.coordinator.view = view
+
+        // 异步加载：glb 解析 + 贴图解码放后台线程（6MB 车模 + 25 个 PBR 材质，
+        // 旧设备上同步加载可达数秒，会阻塞主线程让页面转场卡死甚至被系统看门狗杀掉）。
+        // 完成后回主线程挂载；解析失败由 completeLoad 置位，UI 自动回退 2D 车图。
+        let generation = state.beginLoad()
+        let name = modelName
+        Task.detached(priority: .userInitiated) {
+            let scene = Car3DView.loadScene(named: name)
+            await MainActor.run {
+                state.completeLoad(generation: generation, view: view, scene: scene)
+            }
+        }
 
         // 横向滑动 → 旋转车模（与 ScrollView 纵向滚动手势并存）
         let pan = UIPanGestureRecognizer(target: context.coordinator,
@@ -267,10 +312,21 @@ struct CarVisual3DStage: View {
         VStack(spacing: 0) {
             ZStack(alignment: .topTrailing) {
                 Group {
-                    if show3D {
-                        CarModel3DRepresentable(state: model, modelName: modelName)
-                            .accessibilityElement(children: .ignore)
-                            .accessibilityLabel("\(style.displayName) 三维车模，左右滑动可旋转，长按车门、尾门或天窗可开合")
+                    if show3D && !model.loadFailed {
+                        ZStack {
+                            CarModel3DRepresentable(state: model, modelName: modelName)
+                                .accessibilityElement(children: .ignore)
+                                .accessibilityLabel("\(style.displayName) 三维车模，左右滑动可旋转，长按车门、尾门或天窗可开合")
+                                .opacity(model.isLoaded ? 1 : 0)
+                            if !model.isLoaded {
+                                // 加载中：先用 2D 侧视图占位，后台解析完成后无缝替换为 3D
+                                Image(style.sideImageName)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .accessibilityElement(children: .ignore)
+                                    .accessibilityLabel("正在加载\(style.displayName)三维车模")
+                            }
+                        }
                     } else {
                         Image(style.sideImageName)
                             .resizable()
@@ -297,9 +353,13 @@ struct CarVisual3DStage: View {
                 .padding(6)
             }
 
-            if show3D {
+            if show3D && !model.loadFailed && model.isLoaded {
                 controlStrip
             }
+        }
+        .compatOnChange(of: model.loadFailed) { failed in
+            // 3D 加载失败：自动回退 2D 车图；用户点右上角按钮可手动重试加载
+            if failed { show3D = false }
         }
         .compatOnChange(of: isUnlocked) { _ in syncStatus() }
         .compatOnChange(of: windowOpen) { _ in syncStatus() }

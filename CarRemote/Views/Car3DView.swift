@@ -257,10 +257,15 @@ public final class Car3DView: SCNView {
     /// - Returns: 是否加载成功；false 时调用方应兜底（如退回 2D 车图）
     @discardableResult
     public func loadModel(named name: String) -> Bool {
-        clearModel()
+        guard let scene = Self.loadScene(named: name) else { return false }
+        return attachScene(scene)
+    }
 
-        var sceneToUse: SCNScene?
-
+    /// 后台线程解析模型文件（唯一耗时步骤：glb 解析 + 贴图解码）。
+    /// 只创建独立的 SCNScene，不接触任何视图/场景状态，可在任意队列安全调用。
+    /// - Parameter name: 不带扩展名的资源名
+    /// - Returns: 解析出的场景；文件不存在或解析失败返回 nil
+    public static func loadScene(named name: String) -> SCNScene? {
         // 1) iOS 15+ 直接解析 glTF/glb（零转换）
         if #available(iOS 15.0, *) {
             for ext in ["glb", "gltf"] {
@@ -269,21 +274,23 @@ public final class Car3DView: SCNView {
                     // 完整保留节点名 / 层级 / 变换 / 几何体 / PBR 材质，并自动加载内嵌纹理。
                     // 不走 MDLAsset 手动建树：iOS 26 SDK 起 SCNNode(mdlObject:) 等
                     // ModelIO→SceneKit 桥接触发器在 Swift 接口已不可见（CI 编译实证）。
-                    sceneToUse = try? SCNScene(url: url, options: nil)
-                    break
+                    return try? SCNScene(url: url, options: nil)
                 }
             }
         }
-
         // 2) 兜底：COLLADA（iOS 全版本）
-        if sceneToUse == nil,
-           let url = Bundle.main.url(forResource: name, withExtension: "dae") {
-            sceneToUse = try? SCNScene(url: url, options: nil)
+        if let url = Bundle.main.url(forResource: name, withExtension: "dae") {
+            return try? SCNScene(url: url, options: nil)
         }
+        return nil
+    }
 
-        guard let loaded = sceneToUse else {
-            return false
-        }
+    /// 主线程挂载已解析的场景：归一化 → 索引部件 → 应用初始状态。
+    /// - Parameter loaded: loadScene(named:) 的返回值
+    /// - Returns: 是否挂载成功
+    @discardableResult
+    public func attachScene(_ loaded: SCNScene) -> Bool {
+        clearModel()
 
         let root = loaded.rootNode
         normalize(root)                 // 居中 + 缩放到统一尺寸
