@@ -33,6 +33,10 @@ final class Car3DModelState: ObservableObject {
     @Published private(set) var availableParts: Set<CarPart> = []
     /// 是否有可独立升降的车窗
     @Published private(set) var hasWindows = false
+    /// 是否有可点亮的灯光件（外购单 mesh 模没有）
+    @Published private(set) var hasLights = false
+    /// 是否有可转动的车轮件
+    @Published private(set) var hasWheels = false
     /// 场景是否已挂载（glb 解析 + 索引完成）
     @Published private(set) var isLoaded = false
     /// 加载是否失败（失败时 UI 自动回退 2D 车图）
@@ -55,6 +59,8 @@ final class Car3DModelState: ObservableObject {
         sceneView = view
         availableParts = view.availableParts
         hasWindows = view.hasWindows
+        hasLights = view.hasLights
+        hasWheels = view.hasWheels
         // 视图重建后把当前开合态应用回去
         for part in openParts { view.setPart(part, open: true, duration: 0.001) }
         if windowsOpen {
@@ -386,18 +392,24 @@ struct CarVisual3DStage: View {
                             model.setWindows(!model.windowsOpen)
                         }
                     }
-                    actionChip(title: "车灯", symbol: "light.beacon.max", active: model.lightsOn) {
-                        model.toggleLights()
+                    if model.hasLights {
+                        actionChip(title: "车灯", symbol: "light.beacon.max", active: model.lightsOn) {
+                            model.toggleLights()
+                        }
                     }
-                    actionChip(title: "车轮", symbol: "arrow.triangle.2.circlepath", active: model.wheelsSpinning) {
-                        model.toggleWheels()
+                    if model.hasWheels {
+                        actionChip(title: "车轮", symbol: "arrow.triangle.2.circlepath", active: model.wheelsSpinning) {
+                            model.toggleWheels()
+                        }
                     }
                     actionChip(title: "重置视角", symbol: "arrow.counterclockwise", active: false) {
                         model.resetView()
                     }
                 }
             }
-            Text("滑动旋转车模 · 长按车身部件直接开合")
+            Text(model.availableParts.isEmpty
+                  ? "滑动旋转车模 · 双指捏合缩放 · 双击复位视角"
+                  : "滑动旋转车模 · 长按车身部件直接开合")
                 .font(.system(size: 9))
                 .foregroundStyle(WebTheme.faint)
                 .frame(maxWidth: .infinity, alignment: .center)

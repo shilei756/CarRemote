@@ -1,0 +1,69 @@
+{
+ "format": "CarRemote-RK-1",
+ "source": "uni_v.obj",
+ "uvFlipV": false,
+ "normalization": {
+  "scale": 1.1,
+  "center": [
+   0.0,
+   -0.324321,
+   0.0
+  ],
+  "minY": -0.324321,
+  "length": 2.2
+ },
+ "materials": [
+  {
+   "name": "UniV_mat",
+   "texture": "UniV_tex0.png",
+   "baseColorSRGB": [
+    1.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "metallic": 0.0,
+   "roughness": 0.6,
+   "emissiveSRGB": null,
+   "blend": false,
+   "doubleSided": false
+  }
+ ],
+ "geometryFile": "UniV.rk.bin",
+ "parts": [
+  {
+   "name": "UniV_body",
+   "group": "body",
+   "material": 0,
+   "vertexCount": 180000,
+   "indexCount": 180000,
+   "positionOffset": 0,
+   "normalOffset": 2160000,
+   "uvOffset": 4320000,
+   "indexOffset": 5760000,
+   "hasNormal": true,
+   "hasUV": true,
+   "isLight": false
+  }
+ ],
+ "groups": {
+  "body": {
+   "position": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "parent": null,
+   "kind": "body",
+   "key": null,
+   "openPosition": null,
+   "openTiltDeg": null,
+   "wheelKey": null
+  }
+ },
+ "lightGroups": {},
+ "stats": {
+  "vertexCount": 180000,
+  "triangleCount": 60000
+ }
+}

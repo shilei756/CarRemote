@@ -147,19 +147,23 @@ public final class Car3DView: UIView {
     public private(set) var isUnlocked = true
     public private(set) var availableParts: Set<CarPart> = []
     public private(set) var hasWindows = false
+    /// 模型是否带可点亮的灯光件（Eado 官方模有；外购单 mesh 模没有）
+    public private(set) var hasLights = false
+    /// 模型是否带可转动的车轮件
+    public private(set) var hasWheels = false
 
     /// 轨道方位角（弧度；0 = 车头正对屏幕右前方，增大 = 车身左转）
     public private(set) var orbitAzimuth: Float = Car3DView.defaultAzimuth
     /// 轨道仰角（弧度，钳制 0.03~1.15）
     public private(set) var orbitElevation: Float = Car3DView.defaultElevation
-    /// 轨道半径（场景单位，钳制 2.6~10；默认值以车模占屏约七成为准）
+    /// 轨道半径（场景单位，钳制 1.4~10；默认值以车模占屏与 2D 车图一致为准）
     public private(set) var orbitRadius: Float = Car3DView.defaultRadius
     /// 轨道注视点（车身中部）
     public private(set) var orbitTarget = SIMD3<Float>(0, 0.36, 0)
 
     private static let defaultAzimuth: Float = 0.7383
     private static let defaultElevation: Float = 0.2514
-    private static let defaultRadius: Float = 4.2
+    private static let defaultRadius: Float = 2.4
 
     // MARK: 私有
 
@@ -276,7 +280,7 @@ public final class Car3DView: UIView {
     public func setOrbit(azimuth: Float? = nil, elevation: Float? = nil, radius: Float? = nil) {
         if let azimuth = azimuth { orbitAzimuth = azimuth }
         if let elevation = elevation { orbitElevation = min(max(elevation, 0.03), 1.15) }
-        if let radius = radius { orbitRadius = min(max(radius, 2.6), 10) }
+        if let radius = radius { orbitRadius = min(max(radius, 1.4), 10) }
         applyOrbitCamera()
     }
 
@@ -532,6 +536,8 @@ public final class Car3DView: UIView {
         sceneAnchor?.addChild(build.root)
         availableParts = Set(partEntities.keys)
         hasWindows = !windowEntities.isEmpty
+        hasLights = !lightEntities.isEmpty
+        hasWheels = !uniqueWheels.isEmpty
         applyLockState(animated: false)
         applyLightState(animated: false)
         return true

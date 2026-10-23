@@ -63,18 +63,23 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
     /// 资产由 glb 离线转换（EadoPlus2022.rk.json/.rk.bin + tex/*.png），运行时实时重建网格。
     public var has3DModel: Bool {
         guard #available(iOS 15.0, *) else { return false }
-        // 目前仅逸动PLUS 2022（C211）内置官方 3D 资产；
-        // 其他车型（UNI-V / CS75PLUS / UNI-K 等）没有对应 3D 车模，
-        // 显示 2D 车图。后续拿到其他车型的 glb 后在此登记即可接入。
-        switch self {
-        case .yidong, .yidongWhite: return true
-        default: return false
-        }
+        // 1.1.3 起全车系内置 3D 车模：
+        //   逸动PLUS —— 智慧云控官方 C211 模型（门/窗/把手/轮/灯全部件动画）
+        //   UNI-V / UNI-K / CS75PLUS / CS75 —— Sketchfab 实车外观模（单 mesh，
+        //   支持旋转/缩放查看，无独立门窗部件，控制条按可用性自动裁剪）
+        return true
     }
 
-    /// 3D 车模资源名（Bundle 内 glb，不带扩展名；无 3D 车模时为 nil）
+    /// 3D 车模资源名（Bundle 内 .rk.json/.rk.bin，不带扩展名；无 3D 车模时为 nil）
     public var model3DName: String? {
-        has3DModel ? "EadoPlus2022" : nil
+        guard has3DModel else { return nil }
+        switch self {
+        case .yidong, .yidongWhite: return "EadoPlus2022"
+        case .univ: return "UniV"
+        case .univK: return "UniK"
+        case .cs75: return "CS75Plus"
+        case .cs7520: return "CS75"
+        }
     }
 
     /// 油箱容积 L（网页版 CAR_MODELS.tank：切换车型时联动油量百分比）
