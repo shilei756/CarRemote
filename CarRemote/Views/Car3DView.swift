@@ -486,9 +486,11 @@ public final class Car3DView: UIView {
         }
         if let tn = def.texture, let tex = textures[tn] {
             m.baseColor.texture = .init(tex)
-            if def.blend {
-                m.blending = .transparent(opacity: 1.0)
-            }
+        }
+        // 玻璃/灯罩等半透明件：无论是否带贴图，都启用透明混合，
+        // 否则 baseColor 的 alpha 会被默认不透明混合忽略，玻璃变成实心。
+        if def.blend {
+            m.blending = .transparent(opacity: 1.0)
         }
         if def.doubleSided { m.faceCulling = .none }
         return m
