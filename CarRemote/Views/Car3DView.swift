@@ -217,11 +217,11 @@ public final class Car3DView: SCNView {
     // MARK: 轨道相机（滑动旋转 / 捏合缩放）
 
     /// 轨道方位角（弧度；0 = 车头正对屏幕右前方，增大 = 车身左转）
-    public private(set) var orbitAzimuth: Float = Self.defaultAzimuth
+    public private(set) var orbitAzimuth: Float = Car3DView.defaultAzimuth
     /// 轨道仰角（弧度，钳制 0.03~1.15，防止钻到车底/正顶）
-    public private(set) var orbitElevation: Float = Self.defaultElevation
+    public private(set) var orbitElevation: Float = Car3DView.defaultElevation
     /// 轨道半径（场景单位，钳制 3.6~10）
-    public private(set) var orbitRadius: Float = Self.defaultRadius
+    public private(set) var orbitRadius: Float = Car3DView.defaultRadius
     /// 轨道注视点（车身中部，归一化后车高约 0.72）
     public private(set) var orbitTarget = SCNVector3(0, 0.36, 0)
 
@@ -269,7 +269,14 @@ public final class Car3DView: SCNView {
                 if let url = Bundle.main.url(forResource: name, withExtension: ext) {
                     let asset = MDLAsset(url: url)
                     asset.loadTextures()
-                    sceneToUse = SCNScene(mdlAsset: asset)
+                    // 不直接用 SCNScene(mdlAsset:)：SceneKit 自 iOS 26 起整体弃用，
+                    // 新 SDK 的 Swift 接口已看不到该初始化器。改用 nodeWithMDLObject:
+                    // 手动递归建树（逐对象转换，保留节点名 / 变换 / 层级 / 几何体 / 材质）。
+                    let scene = SCNScene()
+                    for child in asset.children.objects {
+                        scene.rootNode.addChildNode(scnNode(from: child))
+                    }
+                    sceneToUse = scene
                     break
                 }
             }
@@ -316,6 +323,17 @@ public final class Car3DView: SCNView {
         stopWheels()
     }
 
+    /// MDLObject → SCNNode 递归转换（nodeWithMDLObject: 只转单对象，不含子节点）。
+    /// 保留节点名（partNodes 按官方节点名匹配）、局部变换、层级、几何体与材质。
+    private func scnNode(from object: MDLObject) -> SCNNode {
+        let node = SCNNode(mdlObject: object)
+        node.name = object.name
+        for child in object.children.objects {
+            node.addChildNode(scnNode(from: child))
+        }
+        return node
+    }
+
     /// 居中、统一尺度（车长 ≈ 2.2 场景单位），并关闭导入的相机。
     /// 注意：C211 的前灯"点亮"网格（Light_HL_LOn_Ext）带 4 米长的光束几何体，
     /// 地面阴影（Shadow）也会放大包围盒——计算尺度时须排除，否则整车会被缩小。
@@ -333,8 +351,8 @@ public final class Car3DView: SCNView {
     /// 只统计车身本体的包围盒（排除灯光网格/阴影/光束等非车身几何）
     private func bodyBounds(of root: SCNNode) -> (min: SCNVector3, max: SCNVector3) {
         let excluded = ["shadow", "light", "beam", "lon", "glow"]
-        var mn = SCNVector3(.greatestFiniteMagnitude, .greatestFiniteMagnitude, .greatestFiniteMagnitude)
-        var mx = SCNVector3(-.greatestFiniteMagnitude, -.greatestFiniteMagnitude, -.greatestFiniteMagnitude)
+        var mn = SCNVector3(Float.greatestFiniteMagnitude, Float.greatestFiniteMagnitude, Float.greatestFiniteMagnitude)
+        var mx = SCNVector3(-Float.greatestFiniteMagnitude, -Float.greatestFiniteMagnitude, -Float.greatestFiniteMagnitude)
         var counted = 0
         root.enumerateChildNodes { node, _ in
             guard let geo = node.geometry else { return }
@@ -361,8 +379,8 @@ public final class Car3DView: SCNView {
     }
 
     private func fullBounds(of root: SCNNode) -> (min: SCNVector3, max: SCNVector3) {
-        var mn = SCNVector3(.greatestFiniteMagnitude, .greatestFiniteMagnitude, .greatestFiniteMagnitude)
-        var mx = SCNVector3(-.greatestFiniteMagnitude, -.greatestFiniteMagnitude, -.greatestFiniteMagnitude)
+        var mn = SCNVector3(Float.greatestFiniteMagnitude, Float.greatestFiniteMagnitude, Float.greatestFiniteMagnitude)
+        var mx = SCNVector3(-Float.greatestFiniteMagnitude, -Float.greatestFiniteMagnitude, -Float.greatestFiniteMagnitude)
         root.enumerateChildNodes { node, _ in
             guard let geo = node.geometry else { return }
             let (lmin, lmax) = geo.boundingBox
@@ -571,8 +589,8 @@ public final class Car3DView: SCNView {
         }
 
         // 其他车型兜底：门 60°、后备箱/机盖 75°，按所在侧决定符号
-        let maxAngle: Float = (part == .trunk || part == .hood) ? Float(75 * .pi / 180)
-                                                               : Float(60 * .pi / 180)
+        let maxAngle: Float = (part == .trunk || part == .hood) ? Float(75 * Double.pi / 180)
+                                                               : Float(60 * Double.pi / 180)
         let target = open ? maxAngle : 0
         let sign: Float = node.position.x > 0 ? -1 : 1
         node.removeAllActions()
