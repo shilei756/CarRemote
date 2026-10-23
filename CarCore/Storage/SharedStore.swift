@@ -58,10 +58,11 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
     /// 是否有内置官方 3D 车模（逸动PLUS 2022，C211，来自长安智慧云控安装包）。
     /// 其他车型后续把对应 glb 放进 Resources/3DModel 并在此登记即可接入。
     ///
-    /// ⚠️ 临时禁用（1.1.2）：部分 iOS 26 实机上，车况数据到达后创建 SceneKit
-    /// 视图（SCNView）会立即崩溃（录屏实证：点刷新→"正在获取车况"→App 消失）。
-    /// 在定位到确切根因前统一走 2D 车图兜底，保证 App 可用；调查恢复后改回 true。
+    /// 1.1.3 起用 RealityKit 重写（替代 1.1.2 前崩溃的 SceneKit 实现）：RealityKit 为
+    /// Apple 现框架，iOS 15+ 全员可用，已绕过 iOS 26/27 上 SCNView 创建即崩溃的问题。
+    /// 资产由 glb 离线转换（EadoPlus2022.rk.json/.rk.bin + tex/*.png），运行时实时重建网格。
     public var has3DModel: Bool {
+        if #available(iOS 15.0, *) { return true }
         return false
     }
 

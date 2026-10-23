@@ -1,5 +1,5 @@
 import SwiftUI
-import SceneKit
+import RealityKit
 import CarCore
 
 // =============================================================
@@ -89,9 +89,9 @@ final class Car3DModelState: ObservableObject {
     }
 
     /// 后台加载完成（主线程调用）：代次不匹配说明视图已重建，直接丢弃
-    func completeLoad(generation: Int, view: Car3DView, scene: SCNScene?) {
+    func completeLoad(generation: Int, view: Car3DView, model: RKCarModel?) {
         guard generation == loadGeneration else { return }
-        if let scene, view.attachScene(scene) {
+        if let model, view.attach(model) {
             attach(view)
             isLoaded = true
         } else {
@@ -152,7 +152,7 @@ final class Car3DModelState: ObservableObject {
     }
 }
 
-// MARK: - UIViewRepresentable（SceneKit + 智慧云控手势）
+// MARK: - UIViewRepresentable（RealityKit + 智慧云控手势）
 
 struct CarModel3DRepresentable: UIViewRepresentable {
     @ObservedObject var state: Car3DModelState
@@ -173,9 +173,9 @@ struct CarModel3DRepresentable: UIViewRepresentable {
         let generation = state.beginLoad()
         let name = modelName
         Task.detached(priority: .userInitiated) {
-            let scene = Car3DView.loadScene(named: name)
+            let build = Car3DView.buildCarModel(named: name)
             await MainActor.run {
-                state.completeLoad(generation: generation, view: view, scene: scene)
+                state.completeLoad(generation: generation, view: view, model: build)
             }
         }
 
@@ -282,9 +282,7 @@ struct CarModel3DRepresentable: UIViewRepresentable {
         @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
             guard gesture.state == .began, let view else { return }
             let point = gesture.location(in: view)
-            let options: [SCNHitTestOption: Any] = [.firstFoundOnly: true]
-            guard let hit = view.hitTest(point, options: options).first,
-                  let part = view.part(containing: hit.node) else { return }
+            guard let part = view.part(at: point) else { return }
             state.toggle(part)
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
         }
