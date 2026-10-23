@@ -43,6 +43,25 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
+      - name: 转换 CgBI 贴图为标准 PNG
+        run: |
+          set -euo pipefail
+          # 长安官方通用车身模的贴图是 iOS 优化 CgBI 格式（BGRA/预乘 alpha），
+          # RealityKit 的纹理解码器不支持，实机会渲染成噪声色碎片。
+          # macOS 的 sips 走 ImageIO，原生支持 CgBI，在构建期转成标准 PNG。
+          for f in CarRemote/Resources/3DModel/Changan*_tex0.png; do
+            [ -e "$f" ] || continue
+            echo "转换: $f"
+            sips -s format png "$f" --out "$f.converted" >/dev/null
+            mv "$f.converted" "$f"
+          done
+          # 验证：转换后不应再有 CgBI 标记
+          if file CarRemote/Resources/3DModel/Changan*_tex0.png | grep -q CgBI; then
+            echo "::error::CgBI 贴图转换失败"
+            exit 1
+          fi
+          echo "CgBI 贴图已全部转为标准 PNG"
+
       - name: 安装 XcodeGen
         run: brew install xcodegen
 

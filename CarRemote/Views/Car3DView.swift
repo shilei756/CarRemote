@@ -353,7 +353,9 @@ public final class Car3DView: UIView {
             e.name = name
             if let parent = g.parent {
                 let pe = groupEntity(parent)          // 递归确保父组已创建
-                e.position = .zero                    // 子组：静止偏移已烘焙进顶点，实体置于原点
+                // 子组（车窗/把手）顶点相对「自身组 position」烘焙，
+                // 实体须放在该偏移上，否则玻璃/把手会错位到车门板上
+                e.position = Self.v3(g.position)
                 pe.addChild(e)
             } else {
                 e.position = Self.v3(g.position)
@@ -590,7 +592,8 @@ public final class Car3DView: UIView {
 
     private func setWindowEntity(_ entity: Entity, part: CarPart, open: Bool, duration: Double) {
         guard let rest = windowRest[part], let openPos = windowOpen[part], let tiltDeg = windowTilt[part] else { return }
-        let target = open ? (openPos - rest) : SIMD3<Float>(0, 0, 0)   // 门局部坐标下的位移增量
+        // 实体静止位 = 组 position（顶点相对其烘焙）；开窗平移到 openPosition（同为父门组局部坐标）
+        let target = open ? openPos : rest
         let tilt = open ? Float(tiltDeg) : 0
         var t = Transform(scale: entity.transform.scale,
                           rotation: simd_quatf(angle: tilt, axis: SIMD3<Float>(0, 0, 1)),
