@@ -17,6 +17,10 @@ struct LoginView: View {
                     if let errorMessage = viewModel.errorMessage {
                         errorBanner(errorMessage)
                     }
+                    // 上次会话被踢出的原因（体验到期 / 授权撤销），登录后自动清除
+                    if let sessionMessage = appState.errorMessage {
+                        errorBanner(sessionMessage)
+                    }
                     if let infoMessage = viewModel.infoMessage {
                         infoBanner(infoMessage)
                     }
@@ -120,6 +124,7 @@ struct LoginView: View {
 
     private var submitButton: some View {
         Button {
+            appState.errorMessage = nil
             viewModel.submit(appState: appState)
         } label: {
             ZStack {

@@ -77,15 +77,21 @@ final class AppState: ObservableObject {
         // 覆盖安装场景下 Keychain 保留旧凭据、defaults 里没有（从没重新登录过），
         // 小组件进程读不到凭据会一直显示「未登录」。
         SharedStore.saveCredentials(credentials)
-        Task { await verifyAccess(credentials) }
+        Task { await verifyAccess(credentials, restoredSession: true) }
     }
 
-    /// 登录后 / 恢复会话后校验授权（白名单 + 卡密）
-    private func verifyAccess(_ credentials: Credentials) async {
+    /// 登录后 / 恢复会话后校验授权（白名单 + 卡密）。
+    /// restoredSession = 再次打开 App 时的会话恢复：此时权限失效直接踢出登录态
+    ///（清凭据回登录页）；刚登录 / 刚验证卡密的场景仍走卡密网关，避免反复踢出。
+    private func verifyAccess(_ credentials: Credentials, restoredSession: Bool = false) async {
         phase = .loading
         do {
             let status = try await CardService.status(phone: credentials.phone)
             cardStatus = status
+            if !status.authorized, restoredSession {
+                forceLogout(message: "登录已失效：体验权限已到期或授权已被撤销，请重新登录。")
+                return
+            }
             phase = status.authorized ? .ready : .needsCard
         } catch {
             // 权限接口异常不阻塞正常用户（服务端仍会二次校验关键操作）
@@ -111,6 +117,7 @@ final class AppState: ObservableObject {
     // MARK: - 登录 / 登出
 
     func loginCompleted(_ credentials: Credentials) {
+        errorMessage = nil
         SharedStore.saveCredentials(credentials)
         self.credentials = credentials
         foregroundBeated = false
@@ -131,6 +138,7 @@ final class AppState: ObservableObject {
         statusUpdatedAt = nil
         isAdminUser = false
         accessBlock = nil
+        errorMessage = nil
         stopAccessMonitor()
         phase = .loggedOut
     }
