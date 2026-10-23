@@ -661,7 +661,7 @@ public final class Car3DView: SCNView {
         isWheelsSpinning = true
         // 相对旋转（rotateBy）才能无缝循环；rotateTo 会在每圈结束跳变回 0
         // 绕节点局部 X 轴（轮轴方向；C211 车轮节点 rest 旋转为单位四元数，局部 X = 世界 X）
-        let perRev = SCNAction.rotateBy(x: CGFloat(2 * .pi), y: 0, z: 0, duration: 60 / Double(rpm))
+        let perRev = SCNAction.rotateBy(x: CGFloat(2 * Double.pi), y: 0, z: 0, duration: 60 / Double(rpm))
         perRev.timingMode = .linear
         let forever = SCNAction.repeatForever(perRev)
         // 后轮为左右镜像单节点（Wheel_B_P），去重后只跑一个 action

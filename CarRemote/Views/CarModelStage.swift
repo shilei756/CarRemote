@@ -1,5 +1,6 @@
 import SwiftUI
 import SceneKit
+import CarCore
 
 // =============================================================
 // 3D 车模舞台（智慧云控风格交互）
@@ -104,9 +105,12 @@ final class Car3DModelState: ObservableObject {
     /// 用真实车况驱动车模：闭锁/开锁（把手 + 门灯）、车窗、天窗。
     /// 只有状态值发生变化时才应用，避免把用户的本地预览覆盖掉。
     func syncStatus(doorUnlocked: Bool, windowOpen: Bool, sunroofOpen: Bool) {
-        let key = (doorUnlocked, windowOpen, sunroofOpen)
-        guard key != lastSyncedStatus else { return }
-        lastSyncedStatus = key
+        // 元组没有 Equatable 一致性，不能直接和可选元组比较：先解包再逐字段比
+        if let last = lastSyncedStatus,
+           last.unlocked == doorUnlocked, last.window == windowOpen, last.sunroof == sunroofOpen {
+            return
+        }
+        lastSyncedStatus = (doorUnlocked, windowOpen, sunroofOpen)
         sceneView?.setUnlocked(doorUnlocked)
         setWindows(windowOpen)
         setPart(.sunroof, open: sunroofOpen)
