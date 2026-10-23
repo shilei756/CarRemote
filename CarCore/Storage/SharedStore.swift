@@ -63,9 +63,9 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
     /// 资产由 glb 离线转换（EadoPlus2022.rk.json/.rk.bin + tex/*.png），运行时实时重建网格。
     public var has3DModel: Bool {
         guard #available(iOS 15.0, *) else { return false }
-        // 1.1.3 起全车系内置 3D 车模（均来自长安官方资产）：
+        // 1.1.3 起全车系内置写实 3D 车模：
         //   逸动PLUS —— 智慧云控官方 C211 模型（门/窗/把手/轮/灯全部件动画）
-        //   UNI-V / UNI-K / CS75PLUS / CS75 —— 长安官方通用车身模（单 mesh，
+        //   UNI-V / UNI-K / CS75PLUS / CS75 —— 实车外观模（单 mesh，
         //   支持旋转/缩放查看，无独立门窗部件，控制条按可用性自动裁剪）
         return true
     }
@@ -74,10 +74,11 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
     public var model3DName: String? {
         guard has3DModel else { return nil }
         switch self {
-        case .yidong, .yidongWhite: return "EadoPlus2022"      // 智慧云控官方 C211 全部件模
-        case .univ: return "ChanganSports"                     // 长安官方通用轿跑车身
-        case .univK: return "ChanganSuvLux"                    // 长安官方通用豪华SUV车身
-        case .cs75, .cs7520: return "ChanganSuv"               // 长安官方通用SUV车身
+        case .yidong, .yidongWhite: return "EadoPlus2022"   // 智慧云控官方 C211 全部件模
+        case .univ: return "UniV"                           // UNI-V 实车外观模
+        case .univK: return "UniK"                          // UNI-K 实车外观模
+        case .cs75: return "CS75Plus"                       // CS75PLUS 实车外观模
+        case .cs7520: return "CS75"                         // CS75 实车外观模
         }
     }
 
