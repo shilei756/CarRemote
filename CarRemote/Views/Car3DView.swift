@@ -6,7 +6,7 @@
 //  同时兼容其他长安车型（CS75PLUS/UNI-V/UNI-K/UNI-T/CS55PLUS 等，节点名模糊匹配）。
 //
 //  功能：
-//    - 加载 glb（iOS 15+ ModelIO 零转换）或 COLLADA dae 车模
+//    - 加载 glb（iOS 15+ SceneKit 原生解析，零转换）或 COLLADA dae 车模
 //    - 四门开/关（官方 75° 铰链旋转，绕节点局部 Y 轴，枢轴=节点原点）
 //    - 后备箱开/关（官方 70° 绕局部 X 轴）
 //    - 天窗开/关（官方后滑 51.6cm + 7.1° 翻转）
@@ -42,8 +42,6 @@
 //
 
 import SceneKit
-import ModelIO
-import simd
 
 // MARK: - 可控部件
 
@@ -267,16 +265,11 @@ public final class Car3DView: SCNView {
         if #available(iOS 15.0, *) {
             for ext in ["glb", "gltf"] {
                 if let url = Bundle.main.url(forResource: name, withExtension: ext) {
-                    let asset = MDLAsset(url: url)
-                    asset.loadTextures()
-                    // 不直接用 SCNScene(mdlAsset:)：SceneKit 自 iOS 26 起整体弃用，
-                    // 新 SDK 的 Swift 接口已看不到该初始化器。改用 nodeWithMDLObject:
-                    // 手动递归建树（逐对象转换，保留节点名 / 变换 / 层级 / 几何体 / 材质）。
-                    let scene = SCNScene()
-                    for child in asset.children.objects {
-                        scene.rootNode.addChildNode(scnNode(from: child))
-                    }
-                    sceneToUse = scene
+                    // SCNScene(url:) 是 SceneKit 官方模型加载入口：内部经 ModelIO 解析 glb，
+                    // 完整保留节点名 / 层级 / 变换 / 几何体 / PBR 材质，并自动加载内嵌纹理。
+                    // 不走 MDLAsset 手动建树：iOS 26 SDK 起 SCNNode(mdlObject:) 等
+                    // ModelIO→SceneKit 桥接触发器在 Swift 接口已不可见（CI 编译实证）。
+                    sceneToUse = try? SCNScene(url: url, options: nil)
                     break
                 }
             }
@@ -321,17 +314,6 @@ public final class Car3DView: SCNView {
         carRoot?.removeFromParentNode()
         carRoot = nil
         stopWheels()
-    }
-
-    /// MDLObject → SCNNode 递归转换（nodeWithMDLObject: 只转单对象，不含子节点）。
-    /// 保留节点名（partNodes 按官方节点名匹配）、局部变换、层级、几何体与材质。
-    private func scnNode(from object: MDLObject) -> SCNNode {
-        let node = SCNNode(mdlObject: object)
-        node.name = object.name
-        for child in object.children.objects {
-            node.addChildNode(scnNode(from: child))
-        }
-        return node
     }
 
     /// 居中、统一尺度（车长 ≈ 2.2 场景单位），并关闭导入的相机。
