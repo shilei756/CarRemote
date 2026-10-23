@@ -273,16 +273,28 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - 浮动车图（网页版 car-stage：车图浮动 + 椭圆阴影 + 车况标签 + 四轮胎压）
+    // MARK: - 浮动车模（网页版 car-stage：3D 车模/车图浮动 + 椭圆阴影 + 车况标签）
 
     private func carStage(status: CarStatus) -> some View {
         VStack(spacing: 0) {
-            Image(settings.carModelStyle.sideImageName)
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(height: 200)
+            if settings.carModelStyle.has3DModel {
+                // 逸动PLUS 2022 官方 3D 车模（长安智慧云控 C211 资产）：
+                // 左右滑动旋转 / 捏合缩放 / 长按部件开合 / 底部控制条，随真实车况同步
+                CarVisual3DStage(
+                    style: settings.carModelStyle,
+                    isUnlocked: status.doorUnlocked,
+                    windowOpen: status.windowOpen,
+                    sunroofOpen: status.sunroofOpen
+                )
                 .padding(.horizontal, 20)
-                .accessibilityLabel("\(settings.carModelStyle.displayName) 车辆图片")
+            } else {
+                Image(settings.carModelStyle.sideImageName)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(height: 200)
+                    .padding(.horizontal, 20)
+                    .accessibilityLabel("\(settings.carModelStyle.displayName) 车辆图片")
+            }
 
             // 椭圆阴影（网页版 .car-shadow：径向渐变椭圆呼吸）
             Ellipse()

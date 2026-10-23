@@ -55,6 +55,20 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
         }
     }
 
+    /// 是否有内置官方 3D 车模（逸动PLUS 2022，C211，来自长安智慧云控安装包）。
+    /// 其他车型后续把对应 glb 放进 Resources/3DModel 并在此登记即可接入。
+    public var has3DModel: Bool {
+        switch self {
+        case .yidong, .yidongWhite: return true
+        default: return false
+        }
+    }
+
+    /// 3D 车模资源名（Bundle 内 glb，不带扩展名；无 3D 车模时为 nil）
+    public var model3DName: String? {
+        has3DModel ? "EadoPlus2022" : nil
+    }
+
     /// 油箱容积 L（网页版 CAR_MODELS.tank：切换车型时联动油量百分比）
     public var tankCapacityL: Double {
         switch self {

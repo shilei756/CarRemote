@@ -1,10 +1,10 @@
 # 长安控车 · CarRemote（原生 iOS App）
 
-把你的「远程控车系统」网站（长安逸动PLUS / UNI-V / CS75PLUS 控车面板）做成**纯原生 SwiftUI App**：不是套壳网页，拥有独立的代码编制，完整保留**白名单 / 封禁检查**与**卡密（CH-XXXX-XXXX）体验系统**，并新增**桌面小组件**与**Siri 语音控车**。
+把你的「远程控车系统」网站（长安逸动PLUS / UNI-V / CS75PLUS 控车面板）做成**纯原生 SwiftUI App**：不是套壳网页，拥有独立的代码编制，完整保留**白名单 / 封禁检查**与**卡密（CH-XXXX-XXXX）体验系统**，并新增**桌面小组件**、**Siri 语音控车**与**3D 车模**（滑动旋转、长按车身部件直接开合）。
 
 - 站主后端：`https://a9db267525c1cf6b2.app.workbuddy.host`
 - 控车链路与长安官方 App / 网页版完全一致（inCall OAuth → access_token → car/data → 四步控制指令）
-- 最低系统：iOS 18.0（小组件交互按钮、锁屏小组件需要 iOS 17+）
+- 最低系统：主 App iOS 15.0+；桌面小组件扩展 iOS 17.0+（交互按钮依赖 iOS 17 的 AppIntent/Button(intent:) API，锁屏圆型/矩形尺寸随扩展一并提供）
 
 ---
 
@@ -15,7 +15,8 @@
 | 车况仪表盘 | 剩余续航 / 油量 / 总里程 / 电瓶电压 / 车外温度 / 空调温度 / 四轮胎压 / 车辆示意图 / 状态旗标（车门、车窗、天窗、发动机） |
 | 快捷控车 | 闪灯、开锁、闭锁、鸣笛；更多控车：寻车、点火、熄火、开/关窗、留缝、天窗、空调 |
 | 防误触 | 开锁 / 闭锁 / 点火 / 熄火默认弹二次确认，可在「我的」逐条开关 |
-| 白名单 + 卡密 | 登录后按 `/api/card/status` 判定：正式用户直接进入；未授权用户进入卡密网关兑换当天体验（CH-XXXX-XXXX）；封禁手机号被拦截并提示联系站主 |
+| 白名单 + 卡密 | 登录后按 `/api/card/status` 判定：正式用户直接进入；未授权用户进入卡密网关兑换当天体验（CH-XXXX-XXXX）；封禁手机号被拦截并提示联系站主。使用中（App 内约每 60 秒 / 回前台）复查发现到期或授权被撤销，立即退出登录并提示原因 |
+| 3D 车模 | 逸动PLUS（含白色款）仪表盘内置 3D 车模：横向滑动 360° 旋转、双指缩放、双击复位视角；长按车身部件（车门 / 尾门 / 天窗）直接开合；车门锁态 / 车窗 / 天窗与真实车况实时同步；无 3D 资产的车型自动回退 2D 车图 |
 | 玩车圈子 | 动态流、点赞、评论、图文发布（与网页版同一套接口） |
 | 油耗统计 | 本地记录每次加油，自动估算分段 / 平均油耗、累计油费 |
 | 维保提醒 | 本地记录保养项目，按里程 / 日期到期提醒 |
@@ -39,7 +40,7 @@ CarRemote/
 │   └── Intents/                 # Siri App Intents（10 控车 + 1 车况查询）
 ├── CarRemote/                   # 主 App（SwiftUI）
 │   ├── AppState.swift           # 登录 → 卡密网关 → 主界面 状态机
-│   ├── Views/                   # 仪表盘/圈子/油耗/维保/设置/登录/卡密
+│   ├── Views/                   # 仪表盘/圈子/油耗/维保/设置/登录/卡密/3D车模
 │   ├── ViewModels/              # 仪表盘/圈子/油耗视图模型
 │   ├── Intents/AppShortcutsProvider.swift   # Siri 快捷短语
 │   └── Assets.xcassets/         # App 图标 + 主题色
@@ -177,5 +178,6 @@ open CarRemote.xcodeproj
 | 加一条控车指令 | `CarCore/Models/CarModels.swift` + `CarCore/Intents/CarControlIntents.swift` + `CarRemote/Intents/AppShortcutsProvider.swift` |
 | 换主 App 证书 / 描述文件 | 改 `project.yml` 里的 `CODE_SIGN_IDENTITY`（共 3 处：工程级 + CarRemote + CarCore）与 `PROVISIONING_PROFILE_SPECIFIER`（仅 CarRemote 目标级，框架目标不能带描述文件）；小组件改 `project.widget.yml`（CI 会用上传的描述文件自动覆盖 UUID，证书名需手动改） |
 | 小组件开关 / 描述文件 | `project.widget.yml` + Secret `PROVISIONING_PROFILE_WIDGET_BASE64` |
+| 3D 车模（渲染 / 交互 / 资产） | `CarRemote/Views/Car3DView.swift`（SceneKit 渲染、轨道相机、触控点命中）+ `CarRemote/Views/CarModelStage.swift`（滑动手势、控制条、车况同步）+ `CarRemote/Resources/3DModel/EadoPlus2022.glb`；车型开关见 `CarCore/Storage/SharedStore.swift` 的 `CarModelStyle.has3DModel` |
 | 换 App 图标 | 替换 `CarRemote/Assets.xcassets/AppIcon.appiconset/AppIcon.png`（1024×1024） |
 | 主题色 | `CarRemote/Assets.xcassets/AccentColor.colorset/Contents.json` |

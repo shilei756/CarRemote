@@ -37,13 +37,6 @@ final class AppState: ObservableObject {
     @Published var mythTheme: MythTheme? {
         didSet { SharedStore.saveMythTheme(mythTheme) }
     }
-    /// 权限被吊销 / 体验到期时弹出的不可关闭浮层（对齐网页版 revokedMask）
-    @Published var accessBlock: AccessBlock?
-    /// 不可关闭浮层的数据
-    struct AccessBlock: Equatable {
-        var title: String
-        var message: String
-    }
 
     private var foregroundBeated = false
 
@@ -137,15 +130,13 @@ final class AppState: ObservableObject {
         status = nil
         statusUpdatedAt = nil
         isAdminUser = false
-        accessBlock = nil
         errorMessage = nil
         stopAccessMonitor()
         phase = .loggedOut
     }
 
-    /// 强制退出（体验到期 / 被移出白名单）：清凭据并提示，不保留会话
+    /// 强制退出（体验到期 / 被移出白名单，含使用中到期）：清凭据并提示，不保留会话
     func forceLogout(message: String) {
-        accessBlock = nil
         logout()
         errorMessage = message
     }
@@ -166,24 +157,18 @@ final class AppState: ObservableObject {
         accessTimer = nil
     }
 
-    /// 复查账号权限。发现无权使用时盖上不可关闭浮层，只留「退出登录」。
+    /// 复查账号权限。发现无权使用时直接踢出登录态（使用中到期也踢）：
+    /// 清凭据回登录页，并在登录页横幅展示原因（对齐网页版 revokedMask 的严格程度）。
     func recheckAccess() async {
         guard phase == .ready, let credentials else { return }
         // 卡密到期（体验用户 24 小时）
-        if let status = try? await CardService.status(phone: credentials.phone) {
-            if !status.authorized {
-                accessBlock = AccessBlock(
-                    title: "体验权限已到期",
-                    message: status.message ?? "体验卡自激活起 24 小时有效，已到期。请重新输入卡密或联系站主开通。"
-                )
-                stopAccessMonitor()
-                return
-            }
+        if let status = try? await CardService.status(phone: credentials.phone), !status.authorized {
+            forceLogout(message: "体验权限已到期：\(status.message ?? "体验卡自激活起 24 小时有效，请重新输入卡密或联系站主开通。")")
+            return
         }
         // 被移出白名单 / 被拉黑
         if let ok = await CardService.authStatus(phone: credentials.phone, pin: credentials.pin), ok == false {
-            accessBlock = AccessBlock(title: "账号已无法继续使用", message: "当前账号的授权已被撤销，请重新登录或联系站主。")
-            stopAccessMonitor()
+            forceLogout(message: "账号已无法继续使用：当前账号的授权已被撤销，请重新登录或联系站主。")
         }
     }
     // MARK: - 前台 / 用量上报
