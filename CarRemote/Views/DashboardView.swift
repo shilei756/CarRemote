@@ -282,7 +282,9 @@ struct DashboardView: View {
                 // 左右滑动旋转 / 捏合缩放 / 长按部件开合 / 车窗车门随真实车况逐扇联动
                 CarVisual3DStage(
                     style: settings.carModelStyle,
-                    doorsAndWindows: status.doorsAndWindows
+                    doorsAndWindows: status.doorsAndWindows,
+                    vehicleStarted: status.isVehicleStarted,
+                    wheelsRolling: status.shouldRollWheels
                 )
                 .padding(.horizontal, 20)
             } else {

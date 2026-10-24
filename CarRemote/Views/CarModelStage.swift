@@ -31,10 +31,10 @@ final class Car3DModelState: ObservableObject {
     @Published private(set) var openParts: Set<CarPart> = []
     /// 是否存在未关的车窗（全车聚合，仅用于 UI 展示）
     @Published private(set) var windowsOpen = false
-    /// 车灯是否点亮（1.1.4 起：默认点亮，模拟「启动后开灯」状态，不再提供手动开关）
-    @Published private(set) var lightsOn = true
-    /// 车轮是否转动（1.1.4 起：默认转动，模拟「行驶中」，不再提供手动开关）
-    @Published private(set) var wheelsSpinning = true
+    /// 车灯是否点亮（1.1.4 起：**由真实车况驱动**——车辆已启动才亮灯，熄火即灭灯）
+    @Published private(set) var lightsOn = false
+    /// 车轮是否转动（1.1.4 起：**由真实车况驱动**——行驶中才滚动，静止不动）
+    @Published private(set) var wheelsSpinning = false
     /// 模型可用的部件（加载后由场景节点决定）
     @Published private(set) var availableParts: Set<CarPart> = []
     /// 是否有可独立升降的车窗
@@ -136,6 +136,26 @@ final class Car3DModelState: ObservableObject {
 
     func resetView() {
         sceneView?.resetCamera()
+    }
+
+    // MARK: 车辆启停 / 行驶状态同步（灯与车轮完全由真实车况驱动）
+
+    /// 车辆已启动 → 点亮大灯；车辆行驶中 → 车轮滚动。
+    /// 车辆静止（未启动/未行驶）时车模必须完全静止且不亮灯，
+    /// 否则会出现「车况正常但车轮在转、大灯常亮」的违和感（1.1.4 实机反馈）。
+    func syncVehicleState(started: Bool, driving: Bool) {
+        if lightsOn != started {
+            lightsOn = started
+            sceneView?.setLights(headlight: started, taillight: started)
+        }
+        if wheelsSpinning != driving {
+            wheelsSpinning = driving
+            if driving {
+                sceneView?.startWheels(rpm: 5)
+            } else {
+                sceneView?.stopWheels()
+            }
+        }
     }
 
     // MARK: 真实车况同步
@@ -340,6 +360,10 @@ struct CarVisual3DStage: View {
     let style: CarModelStyle
     /// 真实车况中的门窗状态（逐门逐窗）
     let doorsAndWindows: CarStatus.DoorsAndWindows
+    /// 车辆是否已启动（点火）→ 决定大灯是否点亮
+    let vehicleStarted: Bool
+    /// 车轮是否应当滚动（行驶中；接口不上报车速时退化为「已启动」）
+    let wheelsRolling: Bool
 
     /// 展示模式：3D 车模 / 俯视图（1.1.4 起右上角胶囊滑块切换）
     private enum StageMode { case threeD, topView }
@@ -422,11 +446,20 @@ struct CarVisual3DStage: View {
             if failed { mode = .topView }
         }
         .compatOnChange(of: doorsAndWindows) { _ in syncStatus() }
-        .onAppear { syncStatus() }
+        .compatOnChange(of: vehicleStarted) { _ in syncVehicleState() }
+        .compatOnChange(of: wheelsRolling) { _ in syncVehicleState() }
+        .onAppear {
+            syncStatus()
+            syncVehicleState()
+        }
     }
 
     private func syncStatus() {
         model.syncStatus(doorsAndWindows)
+    }
+
+    private func syncVehicleState() {
+        model.syncVehicleState(started: vehicleStarted, driving: wheelsRolling)
     }
 
     // MARK: 3D / 俯视 胶囊滑块
@@ -504,10 +537,13 @@ struct CarVisual3DStage: View {
             if !openWindows.isEmpty { parts.append("未关：" + openWindows.joined(separator: "、")) }
             text = parts.joined(separator: "　")
         }
-        return Text(text)
+        // 追加「灯 / 车轮」状态，让用户明确知道车模的动态是由车况驱动的
+        let dyn = wheelsRolling ? "行驶中，车轮转动"
+            : (vehicleStarted ? "已启动，车灯点亮" : "未启动，车灯熄灭、车轮静止")
+        return Text(text + "　·　" + dyn)
             .font(.system(size: 10))
             .foregroundStyle(WebTheme.muted)
             .frame(maxWidth: .infinity, alignment: .center)
-            .accessibilityLabel(text)
+            .accessibilityLabel(text + "，" + dyn)
     }
 }

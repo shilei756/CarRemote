@@ -252,6 +252,44 @@ public struct CarStatus: @unchecked Sendable {
         return (Self.number(raw, ["engineStatus"]) ?? 0) == 1
     }
 
+    /// 车辆是否已启动（点火/发动机运转）
+    /// 3D 车模据此点亮大灯：车辆启动后亮灯，熄火即灭灯。
+    /// 判定要求「有明确的运转证据」：行驶中 / 有效转速 / 发动机运行标志；
+    /// 只有点火信号但没有任何运转证据时，视为静止（不亮灯），
+    /// 避免出现「车况正常但大灯常亮」的违和感（1.1.4 实机反馈）。
+    public var isVehicleStarted: Bool {
+        // 行驶中：最直接的启动证据
+        if (Self.number(raw, ["vehicleSpeed", "speed"]) ?? 0) > 0 { return true }
+        // 发动机运行标志
+        if let engine = Self.number(raw, ["engineStatus"]), engine == 1 { return true }
+        // 有效转速（非哨兵值且 > 0）
+        if let rpm = Self.number(raw, ["revolutionSpeed", "engineSpeed", "rpm", "engineRevolution"]) {
+            if rpm < 16383 && rpm > 0 { return true }   // 0x3FFF / 0xFFFF 为无效哨兵值
+            // 转速为 0：发动机未运转 → 未启动
+            return false
+        }
+        // 接口只上报点火状态时，以点火状态为准
+        if let fire = Self.number(raw, ["fireStatus"]) { return fire == 1 }
+        return false
+    }
+
+    /// 车辆是否在行驶中（车速 > 0 km/h）
+    /// 3D 车模据此转动车轮：行驶中车轮滚动，静止不动。
+    public var isVehicleDriving: Bool {
+        (Self.number(raw, ["vehicleSpeed", "speed"]) ?? 0) > 0
+    }
+
+    /// 车轮是否应当滚动。
+    /// 规则（对齐用户诉求「静止时车轮不许转」）：
+    ///   - 接口上报了车速：车速 > 0 才转；
+    ///   - 接口完全不上报车速字段：退化为「车辆已启动即视为动态」，避免车轮永远死转/永不动。
+    public var shouldRollWheels: Bool {
+        if let speed = Self.number(raw, ["vehicleSpeed", "speed"]) {
+            return speed > 0
+        }
+        return isVehicleStarted
+    }
+
     /// 车辆位置（部分车型上报）
     public var location: (latitude: Double, longitude: Double)? {
         guard let lat = Self.number(raw, ["latitude", "lat", "LAT", "gpsLatitude"]),

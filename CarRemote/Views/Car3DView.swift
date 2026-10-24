@@ -144,7 +144,7 @@ public final class Car3DView: UIView {
     public private(set) var partAngles: [CarPart: Float] = [:]
     public private(set) var isWheelsSpinning = false
     public var lowerWindowsWithDoors = true
-    public private(set) var isUnlocked = true
+    public private(set) var isUnlocked = false
     public private(set) var availableParts: Set<CarPart> = []
     public private(set) var hasWindows = false
     /// 模型是否带可点亮的灯光件（Eado 官方模有；外购单 mesh 模没有）
@@ -256,6 +256,7 @@ public final class Car3DView: UIView {
         sceneAnchor = anchor
         setupCamera()
         setupLighting()
+        setupStudioEnvironment()
     }
 
     private func setupCamera() {
@@ -281,6 +282,79 @@ public final class Car3DView: UIView {
         fill.position = SIMD3<Float>(-5, 3, -4)
         fill.look(at: SIMD3<Float>(0, 0.3, 0), from: SIMD3<Float>(-5, 3, -4), relativeTo: nil)
         sceneAnchor?.addChild(fill)
+        // 轮廓光：勾出车顶/肩线，避免车模在浅色卡片背景上"融掉"
+        let rim = DirectionalLight()
+        rim.light.intensity = 900
+        rim.light.color = UIColor(red: 1.0, green: 0.96, blue: 0.90, alpha: 1.0)
+        rim.position = SIMD3<Float>(0, 5, -6)
+        rim.look(at: SIMD3<Float>(0, 0.4, 0), from: SIMD3<Float>(0, 5, -6), relativeTo: nil)
+        sceneAnchor?.addChild(rim)
+        // 地面反光（弱）：模拟展厅地面反射，避免车底死黑
+        let bounce = DirectionalLight()
+        bounce.light.intensity = 220
+        bounce.light.color = UIColor(red: 0.92, green: 0.94, blue: 1.0, alpha: 1.0)
+        bounce.position = SIMD3<Float>(0, -3, 2)
+        bounce.look(at: SIMD3<Float>(0, 0.2, 0), from: SIMD3<Float>(0, -3, 2), relativeTo: nil)
+        sceneAnchor?.addChild(bounce)
+    }
+
+    // MARK: 展厅环境光（IBL）
+
+    /// 生成一张「摄影棚」等距柱状环境图（上亮下暗 + 顶部柔光箱），
+    /// 交给 RealityKit 作为 IBL：车漆与镀铬件会出现真实的环境反射，
+    /// 这是实车 3D 车模「好看」的关键（否则只有两盏平行光，金属面发黑发平）。
+    private static func makeStudioEquirectangular() -> CGImage? {
+        let width = 256, height = 128
+        let cs = CGColorSpaceCreateDeviceRGB()
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        for y in 0..<height {
+            let v = Double(y) / Double(height - 1)      // 0 = 顶部
+            for x in 0..<width {
+                let u = Double(x) / Double(width - 1)
+                // 上半部天空：由亮到中灰；下半部地面：偏暗冷灰
+                let top: Double = 1.0
+                let horizon: Double = 0.62
+                let bottom: Double = 0.20
+                let base: Double
+                if v < 0.5 {
+                    let t = v / 0.5
+                    base = top + (horizon - top) * pow(t, 0.8)
+                } else {
+                    let t = (v - 0.5) / 0.5
+                    base = horizon + (bottom - horizon) * t
+                }
+                // 顶部偏后方一块柔光箱（给车顶一条长高光）
+                let boxU = abs(u - 0.5)
+                let boxV = abs(v - 0.16)
+                var boost = 0.0
+                if boxU < 0.16 && boxV < 0.10 {
+                    boost = (1.0 - boxU / 0.16) * (1.0 - boxV / 0.10) * 0.55
+                }
+                let val = min(1.0, base + boost)
+                let i = (y * width + x) * 4
+                pixels[i] = UInt8(val * 255)
+                pixels[i + 1] = UInt8(val * 253)
+                pixels[i + 2] = UInt8(min(1.0, val * 1.02) * 255)
+                pixels[i + 3] = 255
+            }
+        }
+        guard let provider = CGDataProvider(data: Data(pixels) as CFData) else { return nil }
+        return CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32,
+                       bytesPerRow: width * 4, space: cs,
+                       bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                       provider: provider, decode: nil, shouldInterpolate: true,
+                       intent: .defaultIntent)
+    }
+
+    @MainActor
+    private func setupStudioEnvironment() {
+        guard let cg = Self.makeStudioEquirectangular() else { return }
+        // EnvironmentResource.generate 在 iOS 18 起被新初始化器取代（仍可用，仅有弃用警告）。
+        // 在主线程同步调用（非 async 上下文 → 命中同步重载，避免重载歧义）。
+        // 生成失败时保持默认环境光，不影响功能。
+        if let res = try? EnvironmentResource.generate(fromEquirectangular: cg, withName: "studio") {
+            arView.environment.lighting.resource = res
+        }
     }
 
     // MARK: 轨道相机
@@ -314,15 +388,15 @@ public final class Car3DView: UIView {
     /// 不接触任何视图/场景状态，可在任意队列安全调用。
     /// - Parameter name: 资源名（不带扩展名，对应 EadoPlus2022.rk.json / .rk.bin）
     public static func buildCarModel(named name: String) -> RKCarModel? {
-        guard let jsonURL = Bundle.main.url(forResource: "\(name).rk", withExtension: "json"),
-              let binURL = Bundle.main.url(forResource: "\(name).rk", withExtension: "bin") else {
+        // 只要求清单存在：几何文件由 manifest.geometryFile 指定，
+        // 配色变体（如灰色逸动 EadoPlus2022Gray）复用同一份 .rk.bin，
+        // 因此这里不能按 name 强制要求 "<name>.rk.bin" 存在（否则灰色款加载失败）。
+        guard let jsonURL = Bundle.main.url(forResource: "\(name).rk", withExtension: "json") else {
             return nil
         }
         do {
             let jsonData = try Data(contentsOf: jsonURL)
             let manifest = try JSONDecoder().decode(RKManifest.self, from: jsonData)
-            // 几何文件以 manifest.geometryFile 为准：多个配色变体（如灰色逸动）
-            // 共用同一份 .rk.bin，仅 manifest 不同，避免资源体积翻倍
             let geoName = manifest.geometryFile.isEmpty ? "\(name).rk.bin" : manifest.geometryFile
             guard let binURL = Bundle.main.url(forResource: (geoName as NSString).deletingPathExtension,
                                                withExtension: (geoName as NSString).pathExtension) else {
@@ -399,9 +473,14 @@ public final class Car3DView: UIView {
             if let cp = handleGroupToPart[part.group] {
                 handleEntities[cp] = ge
             }
-            if part.isLight, let lg = lightGroupFor(name: part.name) {
-                lightEntities[lg, default: []].append(model)
+            if part.isLight {
+                // 所有自发光灯件默认隐藏，只有归入「可点亮分组」的才在对应状态下显示。
+                // 未分组件（如门迎宾灯 Light_*_LOn_Door_*、DRL）默认不显示，
+                // 否则会在车身两侧常驻两块多余灯光（1.1.4 实机反馈）。
                 model.isEnabled = false
+                if let lg = lightGroupFor(name: part.name) {
+                    lightEntities[lg, default: []].append(model)
+                }
             }
         }
 
@@ -499,17 +578,36 @@ public final class Car3DView: UIView {
     private static func makeMaterial(_ def: RKMaterialDef, textures: [String: TextureResource]) -> PhysicallyBasedMaterial {
         var m = PhysicallyBasedMaterial()
         let c = def.baseColorSRGB
+        let lowerName = def.name.lowercased()
+        let isGlass = lowerName.contains("glass") || lowerName.contains("window")
         // 无贴图的透明件（车窗玻璃 / 灯罩玻璃）给固定半透明，呈现玻璃质感
-        let baseAlpha: CGFloat = (def.blend && def.texture == nil) ? 0.4 : (c.count > 3 ? c[3] : 1)
+        // 玻璃件用更高不透明度（0.72），压暗后的基色才能读成「深色玻璃」而不是「透明片」
+        var baseAlpha: CGFloat = 1
+        if def.blend && def.texture == nil {
+            baseAlpha = isGlass ? 0.72 : 0.4
+        } else if c.count > 3 {
+            baseAlpha = c[3]
+        }
         let tint = UIColor(red: CGFloat(c[0]), green: CGFloat(c[1]), blue: CGFloat(c[2]),
                           alpha: baseAlpha)
         m.baseColor = .init(tint: tint)
         m.metallic = .init(floatLiteral: Float(def.metallic))
         m.roughness = .init(floatLiteral: Float(def.roughness))
+        // 车漆清漆层（clearcoat）：官方展厅模的实车质感来自这一层，
+        // 没有它金属/车漆面会显得「塑料」，加一层薄清漆立刻有影棚级高光。
+        if lowerName.contains("carpaint") || lowerName.contains("car_paint") {
+            m.clearcoat = 0.9
+            m.clearcoatRoughness = 0.06
+        } else if lowerName.contains("cs75") {
+            // CS75 系列为整车单贴图材质：加一层清漆让车身有影棚级高光
+            m.clearcoat = 0.55
+            m.clearcoatRoughness = 0.12
+        }
         if let e = def.emissiveSRGB, !e.isEmpty {
             let ec = UIColor(red: CGFloat(e[0]), green: CGFloat(e[1]), blue: CGFloat(e[2]),
                             alpha: CGFloat(e.count > 3 ? e[3] : 1))
             m.emissiveColor = .init(color: ec)
+            m.emissiveIntensity = 1.6
         }
         if let tn = def.texture, let tex = textures[tn] {
             m.baseColor.texture = .init(tex)
@@ -524,10 +622,14 @@ public final class Car3DView: UIView {
     }
 
     private static func lightGroupFor(name: String) -> LightGroup? {
-        if name.contains("Door") { return .doorLight }
-        // 仅主大灯进入 headlight 组。DRL / 左右示宽(LOn_Ext) 不再点亮——
-        // 1.1.3 实机反馈：把左右灯光件全部点亮会在车身两侧出现多余光带。
+        // 1.1.4 实机反馈：逸动车身两侧各有一块多余灯光 —— 来源是门迎宾灯
+        // （Light_L_LOn_Door_FL / Light_R_LOn_Door_FR）。官方展厅模的迎宾灯只在
+        // 解锁瞬间闪一下，常亮非常违和，因此这里**不再**给 doorLight 组任何灯件，
+        // 车门/门把手的状态由开合动画与弹起表现。
+        // 仅主大灯进入 headlight 组；DRL / 左右示宽(LOn_Ext) 也不点亮，
+        // 否则车身两侧会出现多余光带。
         if name.contains("HL_LOn") { return .headlight }
+        if name.contains("DRL_LOn") { return .headlight }   // 日行灯随大灯一起点亮
         if name.contains("TL_LOn") { return .taillight }
         if name.contains("BL_LOn") { return .brake }
         return nil
