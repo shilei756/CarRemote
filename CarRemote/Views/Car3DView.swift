@@ -349,15 +349,20 @@ public final class Car3DView: UIView {
     private func setupStudioEnvironment() {
         guard let cg = Self.makeStudioEquirectangular() else { return }
         // EnvironmentResource 是 @MainActor 类型，放到主线程任务里生成并挂载。
-        // 接口选择：init(equirectangular:withName:) 仅 iOS 18+ 可用（部署目标为 iOS 15），
-        // 因此使用自 iOS 13 起可用、仅在 iOS 18 起标记 deprecated 的 generate 接口
-        // （deprecated 只产生警告，不影响编译）。
-        // 在 async 上下文中只会命中 async 重载，await 表达式唯一匹配，不会产生重载歧义。
+        // 版本说明：
+        //   · 老的静态 generate 接口已在新版 SDK 中被移除，不能再引用；
+        //   · init(equirectangular:withName:) 仅 iOS 18+ 可用（本 App 部署目标 iOS 15）；
+        //   · init(equirectangular:options:) 仅 iOS 27+ 可用。
+        // 因此按可用性分支：iOS 18+ 走新初始化器拿到影棚 IBL；
+        // iOS 15–17 无稳定代码生成 IBL 的 API，退化为「强化灯位 + 清漆层」方案
+        //（见 setupLighting / makeMaterial），视觉上同样有影棚级高光。
         Task { @MainActor in
-            if let res = try? await EnvironmentResource.generate(fromEquirectangular: cg, withName: "studio") {
-                arView.environment.lighting.resource = res
-                // 适度提升 IBL 强度：让车漆/镀铬件出现清晰的环境反射高光
-                arView.environment.lighting.intensityExponent = 0.8
+            if #available(iOS 18.0, *) {
+                if let res = try? await EnvironmentResource(equirectangular: cg, withName: "studio") {
+                    arView.environment.lighting.resource = res
+                    // 适度提升 IBL 强度：让车漆/镀铬件出现清晰的环境反射高光
+                    arView.environment.lighting.intensityExponent = 0.8
+                }
             }
         }
     }
