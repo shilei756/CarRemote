@@ -42,6 +42,11 @@ public struct CarStatus: @unchecked Sendable {
         return false
     }
 
+    /// 候选键中是否存在任意一个（用于判断「是否上报过分区字段」）
+    private static func hasAny(_ dict: [String: Any], _ keys: [String]) -> Bool {
+        keys.contains { dict[$0] != nil }
+    }
+
     // MARK: - 油量 / 续航 / 里程
 
     /// 剩余续航 km
@@ -113,6 +118,126 @@ public struct CarStatus: @unchecked Sendable {
     /// 天窗未关
     public var sunroofOpen: Bool {
         Self.isOne(raw, ["sunroof", "skyWindow", "dormer"])
+    }
+
+    // MARK: - 逐门 / 逐窗细分状态（3D 车模联动用）
+
+    /// 逐扇车门与逐扇车窗的独立状态。
+    ///
+    /// 车联网接口 `car/data?keys=*` 上报的是**分区字段**：
+    ///   车门：`leftFrontDoorStatus` / `rightFrontDoorStatus` / `leftRearDoorStatus`
+    ///         / `rightRearDoorStatus` / `trunk` / `hood`
+    ///   车窗：`diverWindow`（主驾·左前）/ `passengerWindow`（副驾·右前）
+    ///         / `leftRearWindow` / `rightRearWindow`
+    ///
+    /// 取值语义（与智慧云控网页版 `carState()` 一致）：
+    ///   - `*DoorStatus == 1` → **该门已解锁**（注意：解锁 ≠ 打开，车门关闭时也可能为 1）
+    ///   - `*Window == 1`    → **该窗未关**
+    ///   - `window == 1`     → 全车车窗未关（部分车型只上报这一个聚合字段）
+    ///
+    /// 某分区字段缺失时，对应门/窗按「未解锁 / 已关闭」处理；
+    /// 若整组门字段全缺，则用聚合 `doorUnlocked` 兜底（全部门按已解锁处理）。
+    public struct DoorsAndWindows: Sendable, Equatable {
+        /// 左前门已解锁
+        public var leftFrontDoorUnlocked = false
+        /// 右前门已解锁
+        public var rightFrontDoorUnlocked = false
+        /// 左后门已解锁
+        public var leftRearDoorUnlocked = false
+        /// 右后门已解锁
+        public var rightRearDoorUnlocked = false
+        /// 后备箱已解锁
+        public var trunkUnlocked = false
+        /// 前机盖已解锁
+        public var hoodUnlocked = false
+        /// 左前窗未关
+        public var leftFrontWindowOpen = false
+        /// 右前窗未关
+        public var rightFrontWindowOpen = false
+        /// 左后窗未关
+        public var leftRearWindowOpen = false
+        /// 右后窗未关
+        public var rightRearWindowOpen = false
+        /// 天窗未关
+        public var sunroofOpen = false
+        /// 是否上报过任何分区车门字段（false = 只有聚合字段）
+        public var hasPerDoorFields = false
+        /// 是否上报过任何分区车窗字段（false = 只有聚合字段）
+        public var hasPerWindowFields = false
+
+        public init() {}
+
+        /// 是否有任意一扇门处于未锁状态
+        public var anyDoorUnlocked: Bool {
+            leftFrontDoorUnlocked || rightFrontDoorUnlocked
+                || leftRearDoorUnlocked || rightRearDoorUnlocked
+                || trunkUnlocked || hoodUnlocked
+        }
+
+        /// 是否有任意一扇窗未关
+        public var anyWindowOpen: Bool {
+            leftFrontWindowOpen || rightFrontWindowOpen
+                || leftRearWindowOpen || rightRearWindowOpen
+        }
+    }
+
+    /// 逐门逐窗状态（3D 车模与真实车况联动）
+    public var doorsAndWindows: DoorsAndWindows {
+        var s = DoorsAndWindows()
+        s.sunroofOpen = sunroofOpen
+
+        // ---- 车门 ----
+        let fl = Self.isOne(raw, ["leftFrontDoorStatus"])
+        let fr = Self.isOne(raw, ["rightFrontDoorStatus"])
+        let rl = Self.isOne(raw, ["leftRearDoorStatus"])
+        let rr = Self.isOne(raw, ["rightRearDoorStatus"])
+        let tk = Self.isOne(raw, ["trunk"])
+        let hd = Self.isOne(raw, ["hood"])
+        let perDoorSeen = Self.hasAny(raw, ["leftFrontDoorStatus", "rightFrontDoorStatus",
+                                            "leftRearDoorStatus", "rightRearDoorStatus"])
+        if perDoorSeen {
+            s.leftFrontDoorUnlocked = fl
+            s.rightFrontDoorUnlocked = fr
+            s.leftRearDoorUnlocked = rl
+            s.rightRearDoorUnlocked = rr
+            s.trunkUnlocked = tk
+            s.hoodUnlocked = hd
+        } else {
+            // 只有聚合字段：整组门按同一状态处理
+            let any = doorUnlocked
+            s.leftFrontDoorUnlocked = any
+            s.rightFrontDoorUnlocked = any
+            s.leftRearDoorUnlocked = any
+            s.rightRearDoorUnlocked = any
+            s.trunkUnlocked = any
+            s.hoodUnlocked = any
+        }
+        s.hasPerDoorFields = perDoorSeen
+
+        // ---- 车窗 ----
+        let winFL = Self.isOne(raw, ["diverWindow", "driverWindow",
+                                     "leftFrontDoorrWindow", "leftFrontDoorWindow"])
+        let winFR = Self.isOne(raw, ["passengerWindow"])
+        let winRL = Self.isOne(raw, ["leftRearWindow"])
+        let winRR = Self.isOne(raw, ["rightRearWindow"])
+        let perWindowSeen = Self.hasAny(raw, ["diverWindow", "driverWindow",
+                                              "leftFrontDoorrWindow", "leftFrontDoorWindow",
+                                              "passengerWindow", "leftRearWindow", "rightRearWindow"])
+        if perWindowSeen {
+            s.leftFrontWindowOpen = winFL
+            s.rightFrontWindowOpen = winFR
+            s.leftRearWindowOpen = winRL
+            s.rightRearWindowOpen = winRR
+        } else {
+            // 只有聚合 window 字段：全部车窗一起处理
+            let any = windowOpen
+            s.leftFrontWindowOpen = any
+            s.rightFrontWindowOpen = any
+            s.leftRearWindowOpen = any
+            s.rightRearWindowOpen = any
+        }
+        s.hasPerWindowFields = perWindowSeen
+        return s
     }
 
     /// 发动机是否运行（判定逻辑与网页版一致）

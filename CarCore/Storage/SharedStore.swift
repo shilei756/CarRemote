@@ -71,14 +71,19 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
     }
 
     /// 3D 车模资源名（Bundle 内 .rk.json/.rk.bin，不带扩展名；无 3D 车模时为 nil）
+    ///
+    /// 1.1.4 起 UNI-V / UNI-K 使用**长安官方 3D 展厅车模**（www.changan.com.cn/3Dhall），
+    /// 由官方 PlayCanvas 资产离线转换而来：逐扇车门、逐扇车窗、四个车轮独立可动，
+    /// 门/窗开合角度取自官方 `openDoors.js` 的四元数。
+    /// 逸动PLUS 沿用智慧云控安装包内的 C211 官方模。
     public var model3DName: String? {
         guard has3DModel else { return nil }
         switch self {
         case .yidong, .yidongWhite: return "EadoPlus2022"   // 智慧云控官方 C211 全部件模
-        case .univ: return "UniV"                           // UNI-V 实车外观模
-        case .univK: return "UniK"                          // UNI-K 实车外观模
-        case .cs75: return "CS75Plus"                       // CS75PLUS 实车外观模
-        case .cs7520: return "CS75"                         // CS75 实车外观模
+        case .univ: return "UniVOfficial"                    // 官方展厅 UNI-V（逐门逐窗）
+        case .univK: return "UniKOfficial"                   // 官方展厅 UNI-K（逐门逐窗）
+        case .cs75: return "CS75Plus"                        // 实车外观模（单 mesh）
+        case .cs7520: return "CS75"                          // 实车外观模（单 mesh）
         }
     }
 

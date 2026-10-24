@@ -9,21 +9,27 @@ import CarCore
 //   - 左右滑动车模 → 360° 旋转（轨道方位角；纵向滑动透传给仪表盘滚动，不冲突）
 //   - 捏合 → 缩放视距；双击 → 重置视角
 //   - 长按车模上的部件（车门/尾门/天窗）→ 直接开合（智慧云控「触控点控车」）
-//   - 底部横向滚动控制条：四门 / 尾门 / 天窗 / 车窗 / 车灯 / 车轮 / 重置视角
-//   - 车模随真实车况自动同步：闭锁态把手收回、开锁态把手弹出 + 门灯亮、
-//     车窗/天窗开合跟随车况（状态没变化时不动车模，避免覆盖本地预览）
+//   - 车模随真实车况自动同步（1.1.4 起）：
+//       · 车门：逐扇独立。未锁的车门在车模上呈开启状态
+//         （接口 `leftFrontDoorStatus` / `rightFrontDoorStatus` /
+//           `leftRearDoorStatus` / `rightRearDoorStatus` / `trunk` / `hood`，
+//           取值 1 = 该门已解锁）
+//       · 车窗：逐扇独立。未关的车窗在车模上降下
+//         （接口 `diverWindow`(主驾) / `passengerWindow`(副驾) /
+//           `leftRearWindow` / `rightRearWindow`，取值 1 = 未关）
+//       · 天窗：`sunroof` 字段
+//   - 车模下方**不再提供手动开门/开窗按钮**：车门车窗完全由真实车况驱动，
+//     避免「本机预览」与真实车况互相打架（长安远程指令没有单门/单窗控制接口）。
 //
-// 注意：车门/尾门/天窗芯片为「本机预览」——长安远程指令中没有单独的开闭
-// 某扇门/尾门的接口（只有全车解锁/闭锁与全车车窗），真实控制请用下方
-// 「快捷控车 / 更多控车」按钮；车况刷新后车模会自动回归真实状态。
+// 注意：车门车窗的联动以「刷新车况」为准，刷新后车模自动回归真实状态。
 // =============================================================
 
-// MARK: - 车模状态（芯片与触控点共用的单一数据源）
+// MARK: - 车模状态（单一数据源）
 
 final class Car3DModelState: ObservableObject {
     /// 开启中的部件（车门 / 尾门 / 天窗）
     @Published private(set) var openParts: Set<CarPart> = []
-    /// 车窗是否降下
+    /// 是否存在未关的车窗（全车聚合，仅用于 UI 展示）
     @Published private(set) var windowsOpen = false
     /// 车灯是否点亮（前灯 + 尾灯）
     @Published private(set) var lightsOn = false
@@ -45,7 +51,7 @@ final class Car3DModelState: ObservableObject {
     private weak var sceneView: Car3DView?
 
     /// 最近一次同步的真实车况（值没变就不动车模，避免覆盖用户的本地预览）
-    private var lastSyncedStatus: (unlocked: Bool, window: Bool, sunroof: Bool)?
+    private var lastSyncedStatus: CarStatus.DoorsAndWindows?
 
     /// 加载代次：每次创建新视图 +1，旧加载完成时按代次丢弃。
     /// 防止 SwiftUI 重建 representable 时，旧 Task 把已废弃的视图挂成当前场景。
@@ -70,9 +76,7 @@ final class Car3DModelState: ObservableObject {
         if wheelsSpinning { view.startWheels(rpm: 5) } else { view.stopWheels() }
         // 重放加载完成前到达的真实车况（真实状态优先于本地预览）
         if let last = lastSyncedStatus {
-            view.setUnlocked(last.unlocked)
-            setWindows(last.window)
-            setPart(.sunroof, open: last.sunroof)
+            applyStatus(last, to: view, duration: 0.001)
         }
     }
 
@@ -105,7 +109,7 @@ final class Car3DModelState: ObservableObject {
         }
     }
 
-    // MARK: 部件控制
+    // MARK: 部件控制（触控点控车的本地预览）
 
     func toggle(_ part: CarPart) {
         setPart(part, open: !openParts.contains(part))
@@ -114,13 +118,6 @@ final class Car3DModelState: ObservableObject {
     private func setPart(_ part: CarPart, open: Bool) {
         if open { openParts.insert(part) } else { openParts.remove(part) }
         sceneView?.setPart(part, open: open)
-    }
-
-    func setWindows(_ open: Bool) {
-        windowsOpen = open
-        for part in Self.doorParts {
-            sceneView?.setWindow(part, open: open)
-        }
     }
 
     func toggleLights() {
@@ -143,18 +140,54 @@ final class Car3DModelState: ObservableObject {
 
     // MARK: 真实车况同步
 
-    /// 用真实车况驱动车模：闭锁/开锁（把手 + 门灯）、车窗、天窗。
+    /// 用真实车况驱动车模：逐扇车门（未锁即呈开启态）+ 逐扇车窗（未关即降下）+ 天窗。
     /// 只有状态值发生变化时才应用，避免把用户的本地预览覆盖掉。
-    func syncStatus(doorUnlocked: Bool, windowOpen: Bool, sunroofOpen: Bool) {
-        // 元组没有 Equatable 一致性，不能直接和可选元组比较：先解包再逐字段比
-        if let last = lastSyncedStatus,
-           last.unlocked == doorUnlocked, last.window == windowOpen, last.sunroof == sunroofOpen {
-            return
+    func syncStatus(_ status: CarStatus.DoorsAndWindows) {
+        if let last = lastSyncedStatus, last == status { return }
+        lastSyncedStatus = status
+        guard let view = sceneView else { return }
+        applyStatus(status, to: view, duration: 0.45)
+    }
+
+    /// 把逐门逐窗状态落到车模实体上
+    private func applyStatus(_ s: CarStatus.DoorsAndWindows, to view: Car3DView, duration: TimeInterval) {
+        // 车门：未锁 → 车模上开启（逐扇独立）
+        let doors: [(CarPart, Bool)] = [
+            (.doorFrontLeft,  s.leftFrontDoorUnlocked),
+            (.doorFrontRight, s.rightFrontDoorUnlocked),
+            (.doorRearLeft,   s.leftRearDoorUnlocked),
+            (.doorRearRight,  s.rightRearDoorUnlocked),
+            (.trunk,          s.trunkUnlocked),
+            (.hood,           s.hoodUnlocked)
+        ]
+        for (part, unlocked) in doors {
+            if openParts.contains(part) != unlocked {
+                if unlocked { openParts.insert(part) } else { openParts.remove(part) }
+            }
+            // 车况驱动时车窗不跟随车门（车窗只由车窗状态字段决定）
+            view.setPartFromStatus(part, open: unlocked, duration: duration)
         }
-        lastSyncedStatus = (doorUnlocked, windowOpen, sunroofOpen)
-        sceneView?.setUnlocked(doorUnlocked)
-        setWindows(windowOpen)
-        setPart(.sunroof, open: sunroofOpen)
+
+        // 车窗：未关 → 降下（逐扇独立）
+        let windows: [(CarPart, Bool)] = [
+            (.doorFrontLeft,  s.leftFrontWindowOpen),
+            (.doorFrontRight, s.rightFrontWindowOpen),
+            (.doorRearLeft,   s.leftRearWindowOpen),
+            (.doorRearRight,  s.rightRearWindowOpen)
+        ]
+        for (part, open) in windows {
+            view.setWindow(part, open: open, duration: duration)
+        }
+        windowsOpen = s.anyWindowOpen
+
+        // 天窗
+        if openParts.contains(.sunroof) != s.sunroofOpen {
+            if s.sunroofOpen { openParts.insert(.sunroof) } else { openParts.remove(.sunroof) }
+        }
+        view.setPartFromStatus(.sunroof, open: s.sunroofOpen, duration: duration)
+
+        // 门灯 / 把手：任一门未锁即点亮
+        view.setUnlocked(s.anyDoorUnlocked)
     }
 }
 
@@ -305,9 +338,8 @@ struct CarModel3DRepresentable: UIViewRepresentable {
 
 struct CarVisual3DStage: View {
     let style: CarModelStyle
-    let isUnlocked: Bool
-    let windowOpen: Bool
-    let sunroofOpen: Bool
+    /// 真实车况中的门窗状态（逐门逐窗）
+    let doorsAndWindows: CarStatus.DoorsAndWindows
 
     @StateObject private var model = Car3DModelState()
     @State private var show3D = true
@@ -369,31 +401,22 @@ struct CarVisual3DStage: View {
             // 3D 加载失败：自动回退 2D 车图；用户点右上角按钮可手动重试加载
             if failed { show3D = false }
         }
-        .compatOnChange(of: isUnlocked) { _ in syncStatus() }
-        .compatOnChange(of: windowOpen) { _ in syncStatus() }
-        .compatOnChange(of: sunroofOpen) { _ in syncStatus() }
+        .compatOnChange(of: doorsAndWindows) { _ in syncStatus() }
         .onAppear { syncStatus() }
     }
 
     private func syncStatus() {
-        model.syncStatus(doorUnlocked: isUnlocked, windowOpen: windowOpen, sunroofOpen: sunroofOpen)
+        model.syncStatus(doorsAndWindows)
     }
 
-    // MARK: 智慧云控风格控制条（横向滚动）
+    // MARK: 车况联动说明 + 非门窗控制条
 
     private var controlStrip: some View {
         VStack(spacing: 6) {
+            // 车况联动状态摘要：告诉用户当前车模反映的是真实车况
+            statusSummary
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    // 部件芯片：按 CarPart 声明序排列，只显示模型里真实存在的部件
-                    ForEach(CarPart.allCases.filter { model.availableParts.contains($0) }, id: \.self) { part in
-                        partChip(part)
-                    }
-                    if model.hasWindows {
-                        actionChip(title: "车窗", symbol: "arrow.down.to.line", active: model.windowsOpen) {
-                            model.setWindows(!model.windowsOpen)
-                        }
-                    }
                     if model.hasLights {
                         actionChip(title: "车灯", symbol: "light.beacon.max", active: model.lightsOn) {
                             model.toggleLights()
@@ -409,9 +432,7 @@ struct CarVisual3DStage: View {
                     }
                 }
             }
-            Text(model.availableParts.isEmpty
-                  ? "滑动旋转车模 · 双指捏合缩放 · 双击复位视角"
-                  : "滑动旋转车模 · 长按车身部件直接开合")
+            Text("滑动旋转车模 · 双指捏合缩放 · 双击复位视角")
                 .font(.system(size: 9))
                 .foregroundStyle(WebTheme.faint)
                 .frame(maxWidth: .infinity, alignment: .center)
@@ -419,15 +440,37 @@ struct CarVisual3DStage: View {
         .padding(.top, 8)
     }
 
-    private func partChip(_ part: CarPart) -> some View {
-        let active = model.openParts.contains(part)
-        return Button {
-            model.toggle(part)
-        } label: {
-            chipLabel(title: part.rawValue, symbol: symbol(for: part), active: active)
+    /// 车况联动摘要（逐门逐窗）
+    private var statusSummary: some View {
+        let s = doorsAndWindows
+        var unlocked: [String] = []
+        if s.leftFrontDoorUnlocked { unlocked.append("左前门") }
+        if s.rightFrontDoorUnlocked { unlocked.append("右前门") }
+        if s.leftRearDoorUnlocked { unlocked.append("左后门") }
+        if s.rightRearDoorUnlocked { unlocked.append("右后门") }
+        if s.trunkUnlocked { unlocked.append("后备箱") }
+        if s.hoodUnlocked { unlocked.append("机盖") }
+        var openWindows: [String] = []
+        if s.leftFrontWindowOpen { openWindows.append("左前窗") }
+        if s.rightFrontWindowOpen { openWindows.append("右前窗") }
+        if s.leftRearWindowOpen { openWindows.append("左后窗") }
+        if s.rightRearWindowOpen { openWindows.append("右后窗") }
+        if s.sunroofOpen { openWindows.append("天窗") }
+
+        let text: String
+        if unlocked.isEmpty && openWindows.isEmpty {
+            text = "车模与实车一致：车门已锁、车窗已关"
+        } else {
+            var parts: [String] = []
+            if !unlocked.isEmpty { parts.append("未锁：" + unlocked.joined(separator: "、")) }
+            if !openWindows.isEmpty { parts.append("未关：" + openWindows.joined(separator: "、")) }
+            text = parts.joined(separator: "　")
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(part.rawValue)\(active ? "，已开启" : "，已关闭")")
+        return Text(text)
+            .font(.system(size: 10))
+            .foregroundStyle(WebTheme.muted)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .accessibilityLabel(text)
     }
 
     private func actionChip(title: String, symbol: String, active: Bool, action: @escaping () -> Void) -> some View {
@@ -453,18 +496,5 @@ struct CarVisual3DStage: View {
         .overlay(
             Capsule().strokeBorder(active ? WebTheme.blue : WebTheme.border, lineWidth: 1)
         )
-    }
-
-    private func symbol(for part: CarPart) -> String {
-        switch part {
-        case .doorFrontLeft:  return "arrow.up.left"
-        case .doorFrontRight: return "arrow.up.right"
-        case .doorRearLeft:   return "arrow.down.left"
-        case .doorRearRight:  return "arrow.down.right"
-        case .trunk:          return "arrow.up.backward"
-        case .hood:           return "arrow.up.forward"
-        case .sunroof:        return "sun.max"
-        case .chargePort:     return "bolt.fill"
-        }
     }
 }

@@ -278,13 +278,11 @@ struct DashboardView: View {
     private func carStage(status: CarStatus) -> some View {
         VStack(spacing: 0) {
             if settings.car3DEnabled && settings.carModelStyle.has3DModel {
-                // 逸动PLUS 2022 官方 3D 车模（长安智慧云控 C211 资产）：
-                // 左右滑动旋转 / 捏合缩放 / 长按部件开合 / 底部控制条，随真实车况同步
+                // 官方 3D 车模（长安智慧云控展厅资产）：
+                // 左右滑动旋转 / 捏合缩放 / 长按部件开合 / 车窗车门随真实车况逐扇联动
                 CarVisual3DStage(
                     style: settings.carModelStyle,
-                    isUnlocked: status.doorUnlocked,
-                    windowOpen: status.windowOpen,
-                    sunroofOpen: status.sunroofOpen
+                    doorsAndWindows: status.doorsAndWindows
                 )
                 .padding(.horizontal, 20)
             } else {

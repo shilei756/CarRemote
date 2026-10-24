@@ -193,12 +193,20 @@ public final class Car3DView: UIView {
         SIMD3<Float>(Float(a[0]), Float(a[1]), Float(a[2]))
     }
 
-    /// 贴图资源 URL：先按裸名在 bundle 根查找，失败再回退到 tex/ 子目录。
+    /// 贴图资源 URL：先按裸名在 bundle 根查找，失败再回退到各贴图子目录
+    /// （XcodeGen 打包时资源目录层级可能被扁平化，也可能被保留成子目录，两种都要兜住）。
+    private static let textureSubdirectories = ["tex", "UniVOfficial_tex", "UniKOfficial_tex"]
+
     private static func textureURL(named texName: String) -> URL? {
         let base = (texName as NSString).deletingPathExtension
         let ext = (texName as NSString).pathExtension
         if let u = Bundle.main.url(forResource: base, withExtension: ext) { return u }
-        return Bundle.main.url(forResource: base, withExtension: ext, subdirectory: "tex")
+        for sub in textureSubdirectories {
+            if let u = Bundle.main.url(forResource: base, withExtension: ext, subdirectory: sub) {
+                return u
+            }
+        }
+        return nil
     }
 
     /// 分组名 → CarPart（门/尾门/天窗，用于触控点映射与部件注册）
@@ -420,6 +428,7 @@ public final class Car3DView: UIView {
             }
         }
         for (gname, wp) in [("wheelFL", WheelPosition.frontLeft), ("wheelFR", WheelPosition.frontRight),
+                            ("wheelBL", WheelPosition.rearLeft), ("wheelBR", WheelPosition.rearRight),
                             ("wheelB", WheelPosition.rearLeft), ("wheelB", WheelPosition.rearRight)] {
             if let ge = groupEntities[gname] {
                 wheelEntities[wp] = ge
@@ -577,6 +586,15 @@ public final class Car3DView: UIView {
         if lowerWindowsWithDoors, let win = windowEntities[part] {
             setWindowEntity(win, part: part, open: open, duration: duration)
         }
+    }
+
+    /// 真实车况驱动的部件开合：与手动预览不同，车窗升降**不**跟随车门，
+    /// 而是完全由车窗状态字段决定（解锁一扇门不代表车窗降下）。
+    public func setPartFromStatus(_ part: CarPart, open: Bool, duration: TimeInterval = 0.35) {
+        let saved = lowerWindowsWithDoors
+        lowerWindowsWithDoors = false
+        setPart(part, open: open, duration: duration)
+        lowerWindowsWithDoors = saved
     }
 
     private func animate(entity: Entity, axis: SIMD3<Float>, angle: Float, duration: Double) {
