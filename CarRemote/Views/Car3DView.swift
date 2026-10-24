@@ -467,8 +467,8 @@ public final class Car3DView: UIView {
         let aspect = max(0.6, min(3.0, w / h))
         let tanH = tanV * aspect
         // 上下非对称预留（换算成 NDC：顶部只允许用到 ndcTop，底部到 ndcBottom）
-        let ndcTop = 1.0 - 2.0 * (28.0 / h)
-        let ndcBottom = -(1.0 - 2.0 * (6.0 / h))
+        let ndcTop = max(0.25, 1.0 - 2.0 * (28.0 / h))
+        let ndcBottom = -max(0.25, 1.0 - 2.0 * (6.0 / h))
 
         // 相机基向量（look(at:from:) 的右/上轴）
         let ce = cos(orbitElevation)
