@@ -14,3 +14,6 @@ DerivedData/
 *.cer
 *.certSigningRequest
 base64.txt
+
+# 交付产物（不入库）
+dist/
