@@ -365,8 +365,8 @@ struct CarVisual3DStage: View {
     /// 车轮是否应当滚动（行驶中；接口不上报车速时退化为「已启动」）
     let wheelsRolling: Bool
 
-    /// 展示模式：3D 车模 / 俯视图（1.1.4 起右上角胶囊滑块切换）
-    private enum StageMode { case threeD, topView }
+    /// 展示模式：3D 车模 / 2D 车图（1.1.4 起右上角胶囊滑块切换）
+    private enum StageMode { case threeD, twoD }
 
     @StateObject private var model = Car3DModelState()
     @State private var mode: StageMode = .threeD
@@ -395,12 +395,14 @@ struct CarVisual3DStage: View {
                             }
                         }
                     } else {
-                        // 俯视档：显示车顶俯视图（对齐智慧云控 3D/俯视 切换）
-                        Image(style.topImageName)
+                        // 2D 档（1.1.4 用户反馈：「俯视改为 2D 之前的车图」）：
+                        // 直接显示各车型的 2D 侧视大图（与网页版 /static/img/*_side.png 同源），
+                        // 不再渲染俯视小图，避免与 3D 车模视觉割裂。
+                        Image(style.sideImageName)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
                             .accessibilityElement(children: .ignore)
-                            .accessibilityLabel("\(style.displayName) 俯视车辆图片")
+                            .accessibilityLabel("\(style.displayName) 二维车辆图片")
                     }
                 }
                 .frame(height: 200)
@@ -428,7 +430,7 @@ struct CarVisual3DStage: View {
                         .accessibilityLabel("重置车模视角")
                     }
                     Spacer()
-                    // 3D / 俯视 胶囊滑块（对齐智慧云控车模页右上角切换控件）
+                    // 3D / 2D 胶囊滑块（对齐智慧云控车模页右上角切换控件）
                     if style.model3DName != nil {
                         stageModeSlider
                     }
@@ -442,8 +444,8 @@ struct CarVisual3DStage: View {
             }
         }
         .compatOnChange(of: model.loadFailed) { failed in
-            // 3D 加载失败：自动回退俯视图；「重置视角/3D」滑块仍可手动重试加载
-            if failed { mode = .topView }
+            // 3D 加载失败：自动回退 2D 车图；「重置视角/3D」滑块仍可手动重试加载
+            if failed { mode = .twoD }
         }
         .compatOnChange(of: doorsAndWindows) { _ in syncStatus() }
         .compatOnChange(of: vehicleStarted) { _ in syncVehicleState() }
@@ -462,12 +464,12 @@ struct CarVisual3DStage: View {
         model.syncVehicleState(started: vehicleStarted, driving: wheelsRolling)
     }
 
-    // MARK: 3D / 俯视 胶囊滑块
+    // MARK: 3D / 2D 胶囊滑块
 
     private var stageModeSlider: some View {
         HStack(spacing: 0) {
             stageSegment(.threeD, title: "3D")
-            stageSegment(.topView, title: "俯视")
+            stageSegment(.twoD, title: "2D")
         }
         .padding(3)
         .background(Color(.secondarySystemBackground).opacity(0.9))
@@ -475,7 +477,7 @@ struct CarVisual3DStage: View {
         .overlay(Capsule().strokeBorder(WebTheme.border, lineWidth: 1))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("车模展示模式")
-        .accessibilityHint("可在三维车模与俯视图之间切换")
+        .accessibilityHint("可在三维车模与二维车图之间切换")
     }
 
     private func stageSegment(_ segment: StageMode, title: String) -> some View {
@@ -493,7 +495,7 @@ struct CarVisual3DStage: View {
                 )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(title == "3D" ? "三维车模" : "俯视图")
+        .accessibilityLabel(title == "3D" ? "三维车模" : "二维车图")
         .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
 
