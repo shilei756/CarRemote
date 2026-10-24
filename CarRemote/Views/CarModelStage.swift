@@ -385,7 +385,7 @@ struct CarVisual3DStage: View {
                         ZStack {
                             CarModel3DRepresentable(state: model, modelName: name)
                                 .accessibilityElement(children: .ignore)
-                                .accessibilityLabel("\(style.displayName) 三维车模，左右滑动可旋转，长按车门、尾门或天窗可开合")
+                                .accessibilityLabel(accessibilityModelDescription)
                                 .opacity(model.isLoaded ? 1 : 0)
                             if !model.isLoaded {
                                 // 加载中：先用 2D 车图占位，后台解析完成后无缝替换为 3D
@@ -412,6 +412,9 @@ struct CarVisual3DStage: View {
                 // 不做自动取景，因此不需要为「整车完整入画」而加高舞台 ——
                 // 加高反而会让车模在画面里显得更小。
                 .frame(height: 200)
+                // 1.1.4：移除车模下方的说明文字区后，车模与下方的椭圆阴影之间
+                // 需要留一点呼吸间距，避免阴影直接贴住车尾/车底显得拥挤。
+                .padding(.bottom, 8)
 
                 HStack(alignment: .top) {
                     // 重置视角：放在「我的爱车」标题正下方（1.1.4 用户反馈）
@@ -443,10 +446,6 @@ struct CarVisual3DStage: View {
                 }
                 .padding(.horizontal, 2)
                 .padding(.top, 2)
-            }
-
-            if show3D && !model.loadFailed && model.isLoaded {
-                controlStrip
             }
         }
         .compatOnChange(of: model.loadFailed) { failed in
@@ -507,20 +506,24 @@ struct CarVisual3DStage: View {
 
     // MARK: 车况联动说明
 
-    private var controlStrip: some View {
-        VStack(spacing: 6) {
-            // 车况联动状态摘要：告诉用户当前车模反映的是真实车况
-            statusSummary
-            Text("滑动旋转车模 · 双指捏合缩放 · 双击复位视角")
-                .font(.system(size: 9))
-                .foregroundStyle(WebTheme.faint)
-                .frame(maxWidth: .infinity, alignment: .center)
-        }
-        .padding(.top, 8)
+    /// 车模的无障碍描述。
+    ///
+    /// 1.1.4：原先车模下方有一整块可见的说明文字区（车况摘要 + 手势提示），
+    ///         在视觉上把车模和下面的卡片切开成两个「框」。
+    ///         按用户要求移除该说明区，改为把同样的信息并入 VoiceOver 标签 ——
+    ///         视觉更干净，屏幕阅读器用户的信息量不减。
+    private var accessibilityModelDescription: String {
+        var parts: [String] = [
+            "\(style.displayName) 三维车模",
+            "左右滑动可旋转，双指捏合缩放，双击复位视角",
+            "长按车门、尾门或天窗可开合"
+        ]
+        parts.append(statusSummaryText)
+        return parts.joined(separator: "。")
     }
 
-    /// 车况联动摘要（逐门逐窗）
-    private var statusSummary: some View {
+    /// 车况联动摘要（逐门逐窗 + 灯/车轮状态），供无障碍朗读使用。
+    private var statusSummaryText: String {
         let s = doorsAndWindows
         var unlocked: [String] = []
         if s.leftFrontDoorUnlocked { unlocked.append("左前门") }
@@ -548,10 +551,6 @@ struct CarVisual3DStage: View {
         // 追加「灯 / 车轮」状态，让用户明确知道车模的动态是由车况驱动的
         let dyn = wheelsRolling ? "行驶中，车轮转动"
             : (vehicleStarted ? "已启动，车灯点亮" : "未启动，车灯熄灭、车轮静止")
-        return Text(text + "　·　" + dyn)
-            .font(.system(size: 10))
-            .foregroundStyle(WebTheme.muted)
-            .frame(maxWidth: .infinity, alignment: .center)
-            .accessibilityLabel(text + "，" + dyn)
+        return text + "　·　" + dyn
     }
 }
