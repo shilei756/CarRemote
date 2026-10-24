@@ -333,7 +333,8 @@ struct CarModel3DRepresentable: UIViewRepresentable {
             case .changed, .ended:
                 let factor = Float(gesture.scale)
                 guard factor > 0.01, factor < 100 else { return }
-                view.setOrbit(radius: view.orbitRadius / factor)
+                // 捏合缩放：叠加在「自动取景」距离之上（自动取景保证整车不被裁切）
+                view.zoom(by: factor)
                 gesture.scale = 1.0
             default:
                 break
@@ -405,7 +406,9 @@ struct CarVisual3DStage: View {
                             .accessibilityLabel("\(style.displayName) 二维车辆图片")
                     }
                 }
-                .frame(height: 200)
+                // 1.1.4：舞台加高到 240pt（3D 档），给「自动取景」留出余量，
+                // 避免车顶被顶部的「重置视角 / 3D-2D」浮层按钮压住。
+                .frame(height: show3D ? 240 : 200)
 
                 HStack(alignment: .top) {
                     // 重置视角：放在「我的爱车」标题正下方（1.1.4 用户反馈）
