@@ -133,8 +133,9 @@ public struct RKCarModel {
     let windowOpen: [CarPart: SIMD3<Float>]      // 门局部坐标系下的开启位
     let windowTilt: [CarPart: Float]
     let handleTilt: [CarPart: Float]
-    /// 车模世界坐标包围盒（min/max），用于相机自动取景：
-    /// 旋转到任意角度时都能算出「刚好容纳整车」的相机距离，避免车身被视口裁切。
+    /// 车模世界坐标包围盒（min/max），用于把相机注视点对准车体几何中心。
+    /// 注意：仅用于「对准中心」，**不参与任何尺寸/取景约束** ——
+    /// 车模大小完全由固定相机距离 + FOV 决定（见 applyOrbitCamera）。
     let boundsMin: SIMD3<Float>
     let boundsMax: SIMD3<Float>
 }
@@ -167,8 +168,8 @@ public final class Car3DView: UIView {
 
     private static let defaultAzimuth: Float = .pi / 2   // 初始视角：车身正侧面（车头朝左）
     private static let defaultElevation: Float = 0.2514
-    // 初始相机距离：1.1.4 用户要求「把逸动 3D 车模稍微放大一点」，
-    // 由 2.4 收到 2.12（约放大 13%），车模在 200pt 高的舞台里占比更合适。
+    // 初始相机距离：与 1.1.3-b102 一致（2.4 → 2.12 是 1.1.4「车模稍微放大一点」那次的调整）。
+    // 这是用户认可的「之前那种大小」，不再为了「整车完整入画」而调整。
     private static let defaultRadius: Float = 2.12
 
     // MARK: 私有
@@ -177,14 +178,9 @@ public final class Car3DView: UIView {
     private var cameraEntity: PerspectiveCamera?
     private var sceneAnchor: AnchorEntity?
     private var carRoot: Entity?
-    /// 车模世界包围盒（自动取景用）；模型挂载后更新
+    /// 车模世界包围盒；模型挂载后更新（仅用于对准注视点，不约束尺寸）
     private var modelBoundsMin = SIMD3<Float>(repeating: 0)
     private var modelBoundsMax = SIMD3<Float>(repeating: 0)
-    private var hasModelBounds = false
-    /// 用户手势缩放倍率（1 = 自动取景距离；>1 更近更大，<1 更远更小）
-    private var userZoom: Float = 1.0
-    /// 上次取景时的视口尺寸（用于检测尺寸变化并重新取景）
-    private var lastFramedSize: CGSize = .zero
     private var partEntities: [CarPart: Entity] = [:]
     private var windowEntities: [CarPart: Entity] = [:]
     private var handleEntities: [CarPart: Entity] = [:]
@@ -252,11 +248,9 @@ public final class Car3DView: UIView {
 
     public override func layoutSubviews() {
         super.layoutSubviews()
-        // 视口尺寸确定后重算取景距离：
-        // 自动取景依赖视口宽高比，首帧 attach 时 bounds 可能还是 0，
-        // 此处拿到真实尺寸再取景一次，保证整车完整入画。
-        if hasModelBounds, bounds.width > 0, bounds.size != lastFramedSize {
-            lastFramedSize = bounds.size
+        // 相机距离是**固定值**，不依赖视口尺寸，因此尺寸变化时无需重算取景。
+        // 这里只做一次轻量的相机刷新（首帧 bounds 未必就绪）。
+        if bounds.width > 0, cameraEntity != nil {
             applyOrbitCamera()
         }
     }
@@ -286,9 +280,9 @@ public final class Car3DView: UIView {
 
     private func setupCamera() {
         let camera = PerspectiveCamera()
-        // FOV 42°（1.1.4）：比原来的 38° 略广，在「整车完整入画」的前提下
-        // 让相机可以更近一些，车模在画面里占比更大、透视畸变更轻。
-        camera.camera = PerspectiveCameraComponent(near: 0.05, far: 100, fieldOfViewInDegrees: 42)
+        // FOV 38°：与 1.1.3 / 1.1.4-b102 一致，保持「之前那种旋转姿态」的观感。
+        // 车模尺寸只由「固定相机距离」决定，不做任何取景/边界修正。
+        camera.camera = PerspectiveCameraComponent(near: 0.05, far: 100, fieldOfViewInDegrees: 38)
         sceneAnchor?.addChild(camera)
         cameraEntity = camera
         applyOrbitCamera()
@@ -407,104 +401,38 @@ public final class Car3DView: UIView {
     public func setOrbit(azimuth: Float? = nil, elevation: Float? = nil, radius: Float? = nil) {
         if let azimuth = azimuth { orbitAzimuth = azimuth }
         if let elevation = elevation { orbitElevation = min(max(elevation, 0.03), 1.15) }
-        if let radius = radius {
-            // 半径改为「相对自动取景距离的倍率」：自动取景负责保证整车不被裁切，
-            // 用户捏合只在此基础上做放大/缩小，不会破坏取景约束。
-            let base = fittedRadius(target: orbitTarget)
-            userZoom = min(max(radius / max(base, 0.001), 0.45), 1.9)
-        }
+        if let radius = radius { orbitRadius = min(max(radius, 1.2), 12) }
         applyOrbitCamera()
     }
 
-    /// 用户手势缩放：传入倍率（>1 放大、<1 缩小），叠加在自动取景距离之上
+    /// 用户手势缩放：传入倍率（>1 放大、<1 缩小），直接作用在固定相机距离上。
+    /// 相机距离**不随旋转角度变化** —— 保持 1.1.3 及更早版本的「固定镜头、车原地转」姿态。
     public func zoom(by factor: Float) {
         guard factor > 0.01, factor < 100 else { return }
-        userZoom = min(max(userZoom / factor, 0.45), 1.9)
+        orbitRadius = min(max(orbitRadius / factor, 1.2), 12)
         applyOrbitCamera()
     }
 
     public func resetCamera() {
-        userZoom = 1.0
-        setOrbit(azimuth: Self.defaultAzimuth, elevation: Self.defaultElevation)
+        setOrbit(azimuth: Self.defaultAzimuth, elevation: Self.defaultElevation, radius: Self.defaultRadius)
     }
 
     private func applyOrbitCamera() {
         guard let camera = cameraEntity else { return }
         let ce = cos(orbitElevation)
         let target = orbitTarget
-        // 1.1.4 用户反馈「车模旋转时有一部分被遮挡」：
-        // 固定相机距离在侧视（车长 3.876m 全部展开）时装不下整车，
-        // 车头/车尾会被视口边缘裁掉。这里按当前旋转角度**动态计算**
-        // 刚好能容纳整车的距离 —— 相当于「无边界取景」：
-        // 无论转到哪个角度，整车都完整可见且尽量占满画面。
-        let radius = fittedRadius(target: target) * userZoom
-        orbitRadius = radius
+        // 1.1.4 用户反馈：「越改越小」+「还要之前那种旋转姿态，只是把车模的边界去掉」。
+        // 结论：相机距离是**固定值**，不随旋转角度做自动取景 ——
+        // 那样会随角度忽远忽近（推拉镜头感），且为了「整车不裁切」必须把车缩到很小。
+        // 现在恢复 1.1.3 的固定半径，车模保持原本的大尺寸，
+        // 视口裁切交由 RealityKit 处理（车头/车尾允许轻微出画，属于正常的透视取景）。
+        let radius = orbitRadius
         let pos = SIMD3<Float>(
             target.x + radius * ce * sin(orbitAzimuth),
             target.y + radius * sin(orbitElevation),
             target.z + radius * ce * cos(orbitAzimuth)
         )
         camera.look(at: target, from: pos, relativeTo: nil)
-    }
-
-    /// 计算「刚好容纳整车」的相机距离。
-    ///
-    /// 做法：把包围盒 8 个角点投影到相机的屏幕坐标系（相机 right / up 轴），
-    /// 求出在该视角下所需的最小距离；再按视口宽高比（ARView 约 1.5:1，
-    /// 水平视野远宽于垂直）取水平/垂直两个方向需求中的较大者。
-    ///
-    /// 垂直方向还做了「非对称预留」：舞台顶部有「重置视角 / 3D-2D」浮层按钮，
-    /// 顶部留 28pt、底部留 6pt，避免车顶被浮层压住、车底被裁边。
-    private func fittedRadius(target: SIMD3<Float>) -> Float {
-        guard hasModelBounds else { return orbitRadius }
-        let halfFov = Float(42) * .pi / 180 / 2      // 与 setupCamera 的 FOV 保持一致
-        // RealityKit 的 fieldOfViewInDegrees 默认按「垂直」方向应用（CameraFieldOfViewOrientation.vertical），
-        // 水平视野由视口宽高比推导：tanH = tanV * aspect
-        let tanV = tan(halfFov)
-        // 视口宽高比：优先用真实尺寸（3D 档舞台高 240pt，宽约屏宽-40pt）
-        // 注意 bounds 是 CGFloat，需统一转成 Float 再参与浮点运算
-        let w: Float = bounds.width > 0 ? Float(bounds.width) : 340
-        let h: Float = bounds.height > 0 ? Float(bounds.height) : 240
-        let aspect = max(0.6, min(3.0, w / h))
-        let tanH = tanV * aspect
-        // 上下非对称预留（换算成 NDC：顶部只允许用到 ndcTop，底部到 ndcBottom）
-        let ndcTop = max(0.25, 1.0 - 2.0 * (28.0 / h))
-        let ndcBottom = -max(0.25, 1.0 - 2.0 * (6.0 / h))
-
-        // 相机基向量（look(at:from:) 的右/上轴）
-        let ce = cos(orbitElevation)
-        let dir = SIMD3<Float>(ce * sin(orbitAzimuth), sin(orbitElevation), ce * cos(orbitAzimuth))
-        // forward = -dir；right = normalize(cross(forward, worldUp))；up = cross(right, forward)
-        let forward = -dir
-        let worldUp = SIMD3<Float>(0, 1, 0)
-        var right = simd_cross(forward, worldUp)
-        if simd_length(right) < 1e-5 { right = SIMD3<Float>(1, 0, 0) }
-        right = simd_normalize(right)
-        let up = simd_normalize(simd_cross(right, forward))
-
-        // 精确解：相机在 target + R*dir 处，角点 p 的相机空间深度为
-        //   depth = R - dot(p - target, dir)
-        // 水平入画条件： |x| <= depth * tanH  →  R >= dot(rel,dir) + |x|/tanH
-        // 垂直入画条件： y <= depth * tanV * ndcTop（上）/ -y <= depth * tanV * (-ndcBottom)（下）
-        // 对 8 个角点取最大值即为所需最小距离。
-        var need = 0.0 as Float
-        for i in 0..<8 {
-            let corner = SIMD3<Float>(
-                (i & 1) == 0 ? modelBoundsMin.x : modelBoundsMax.x,
-                (i & 2) == 0 ? modelBoundsMin.y : modelBoundsMax.y,
-                (i & 4) == 0 ? modelBoundsMin.z : modelBoundsMax.z
-            )
-            let rel = corner - target
-            let x = abs(simd_dot(rel, right))
-            let y = simd_dot(rel, up)               // 上为正、下为负
-            let along = simd_dot(rel, dir)          // 沿「target→相机」方向的分量
-            // 该角点在垂直方向的可用视野比例（上方受顶部浮层限制，下方接近满幅）
-            let vLimit = tanV * (y >= 0 ? ndcTop : -ndcBottom)
-            // 该角点同时受水平/垂直两个约束，取二者较大者（Swift 的 max 只接受两个参数）
-            need = max(need, along + max(x / tanH, abs(y) / vLimit))
-        }
-        // 余量系数 1.04：略大于「刚好容纳」的临界值，保证车头/车尾任何角度都不贴边、不被裁切。
-        return max(1.2, need * 1.04)
     }
 
     // MARK: 模型加载（后台解析 → 主线程挂载）
@@ -609,7 +537,7 @@ public final class Car3DView: UIView {
             }
         }
 
-        // 世界包围盒（自动取景用）：顶点坐标 + 所属组（含父链）的 position 偏移
+        // 世界几何数据（自动取景用）：顶点坐标 + 所属组（含父链）的 position 偏移
         // 组层级：车门 / 尾门 / 天车 / 车轮 / 车窗 / 把手；车窗与把手是车门的子节点，
         // 其实体挂在父组下，因此世界偏移需要沿 parent 链累加。
         func groupWorldOffset(_ name: String) -> SIMD3<Float> {
@@ -627,6 +555,7 @@ public final class Car3DView: UIView {
         }
         var boundsMin = SIMD3<Float>(repeating: .greatestFiniteMagnitude)
         var boundsMax = SIMD3<Float>(repeating: -.greatestFiniteMagnitude)
+        // 遍历全部顶点求世界包围盒（仅用于把相机注视点对准车体几何中心）
         for part in manifest.parts {
             if skippedMaterials.contains(manifest.materials[part.material].name) { continue }
             let off = groupWorldOffset(part.group)
@@ -641,10 +570,9 @@ public final class Car3DView: UIView {
                     | (UInt32(binData[o+6]) << 16) | (UInt32(binData[o+7]) << 24))
                 let z = Float(bitPattern: UInt32(binData[o+8]) | (UInt32(binData[o+9]) << 8)
                     | (UInt32(binData[o+10]) << 16) | (UInt32(binData[o+11]) << 24))
-                let wx = x + off.x, wy = y + off.y, wz = z + off.z
-                boundsMin.x = min(boundsMin.x, wx); boundsMax.x = max(boundsMax.x, wx)
-                boundsMin.y = min(boundsMin.y, wy); boundsMax.y = max(boundsMax.y, wy)
-                boundsMin.z = min(boundsMin.z, wz); boundsMax.z = max(boundsMax.z, wz)
+                boundsMin.x = min(boundsMin.x, x + off.x); boundsMax.x = max(boundsMax.x, x + off.x)
+                boundsMin.y = min(boundsMin.y, y + off.y); boundsMax.y = max(boundsMax.y, y + off.y)
+                boundsMin.z = min(boundsMin.z, z + off.z); boundsMax.z = max(boundsMax.z, z + off.z)
             }
         }
 
@@ -838,10 +766,15 @@ public final class Car3DView: UIView {
         hasWheels = !uniqueWheels.isEmpty
         applyLockState(animated: false)
         applyLightState(animated: false)
-        // 记录包围盒并把注视点移到车模中心，供自动取景使用
+        // 记录包围盒，并把注视点移到车模几何中心（仅用于对准，不约束车模尺寸）
+        //
+        // 1.1.4：逸动PLUS 车模的 `Light_HL_LOn_Ext`（左前大灯）原始资产存在**离群尖刺几何**
+        // —— 144 个顶点被拉伸到车头前方 1.7m 处（z=2.7692），把包围盒车长从真实的
+        // 2.2812 虚高到 3.8759（+66%），并让包围盒中心偏到 z=0.83（车头被切）。
+        // 该几何已在资产层（.rk.bin）修复，此处读到的包围盒即为真实车体尺寸
+        // （z ∈ [-1.10, 1.10]，中心 z=0），注视点因此正好落在车身几何中心。
         modelBoundsMin = build.boundsMin
         modelBoundsMax = build.boundsMax
-        hasModelBounds = true
         orbitTarget = (build.boundsMin + build.boundsMax) / 2
         applyOrbitCamera()
         return true
@@ -859,8 +792,6 @@ public final class Car3DView: UIView {
         partAngles.removeAll()
         carRoot?.removeFromParent()
         carRoot = nil
-        hasModelBounds = false
-        userZoom = 1.0
         stopWheels()
         wheelCancellable?.cancel()
         wheelCancellable = nil
