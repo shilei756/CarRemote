@@ -462,8 +462,9 @@ public final class Car3DView: UIView {
         // 水平视野由视口宽高比推导：tanH = tanV * aspect
         let tanV = tan(halfFov)
         // 视口宽高比：优先用真实尺寸（3D 档舞台高 240pt，宽约屏宽-40pt）
-        let w = bounds.width > 0 ? bounds.width : 340
-        let h = bounds.height > 0 ? bounds.height : 240
+        // 注意 bounds 是 CGFloat，需统一转成 Float 再参与浮点运算
+        let w: Float = bounds.width > 0 ? Float(bounds.width) : 340
+        let h: Float = bounds.height > 0 ? Float(bounds.height) : 240
         let aspect = max(0.6, min(3.0, w / h))
         let tanH = tanV * aspect
         // 上下非对称预留（换算成 NDC：顶部只允许用到 ndcTop，底部到 ndcBottom）
