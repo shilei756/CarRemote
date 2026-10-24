@@ -412,9 +412,6 @@ struct CarVisual3DStage: View {
                 // 不做自动取景，因此不需要为「整车完整入画」而加高舞台 ——
                 // 加高反而会让车模在画面里显得更小。
                 .frame(height: 200)
-                // 1.1.4：移除车模下方的说明文字区后，车模与下方的椭圆阴影之间
-                // 需要留一点呼吸间距，避免阴影直接贴住车尾/车底显得拥挤。
-                .padding(.bottom, 8)
 
                 HStack(alignment: .top) {
                     // 重置视角：放在「我的爱车」标题正下方（1.1.4 用户反馈）
@@ -446,6 +443,13 @@ struct CarVisual3DStage: View {
                 }
                 .padding(.horizontal, 2)
                 .padding(.top, 2)
+            }
+
+            // 车模下方的说明区（车况摘要 + 手势提示）
+            // 1.1.4-b108：恢复该区域 —— 此前误以为是「切车身的框」而删除，
+            // 用户澄清要删的是车头前部那面切割车身的几何「世界墙」（资产层问题）。
+            if show3D && !model.loadFailed && model.isLoaded {
+                controlStrip
             }
         }
         .compatOnChange(of: model.loadFailed) { failed in
@@ -506,12 +510,29 @@ struct CarVisual3DStage: View {
 
     // MARK: 车况联动说明
 
-    /// 车模的无障碍描述。
-    ///
-    /// 1.1.4：原先车模下方有一整块可见的说明文字区（车况摘要 + 手势提示），
-    ///         在视觉上把车模和下面的卡片切开成两个「框」。
-    ///         按用户要求移除该说明区，改为把同样的信息并入 VoiceOver 标签 ——
-    ///         视觉更干净，屏幕阅读器用户的信息量不减。
+    /// 车况联动说明区（可见文字 + 底部手势提示）
+    private var controlStrip: some View {
+        VStack(spacing: 6) {
+            statusSummary
+            Text("滑动旋转车模 · 双指捏合缩放 · 双击复位视角")
+                .font(.system(size: 9))
+                .foregroundStyle(WebTheme.faint)
+                .frame(maxWidth: .infinity, alignment: .center)
+        }
+        .padding(.top, 8)
+    }
+
+    /// 车况联动摘要（逐门逐窗 + 灯/车轮状态）
+    private var statusSummary: some View {
+        let text = statusSummaryText
+        return Text(text)
+            .font(.system(size: 10))
+            .foregroundStyle(WebTheme.muted)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .accessibilityLabel(text)
+    }
+
+    /// 车模的无障碍描述（含手势提示与车况摘要）。
     private var accessibilityModelDescription: String {
         var parts: [String] = [
             "\(style.displayName) 三维车模",
