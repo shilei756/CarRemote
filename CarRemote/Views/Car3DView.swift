@@ -346,6 +346,14 @@ public final class Car3DView: UIView {
                        intent: .defaultIntent)
     }
 
+    /// 是否具备可用的环境光（IBL）。
+    /// EnvironmentResource 的代码生成入口仅 iOS 18+ 稳定可用；
+    /// iOS 15–17 拿不到环境贴图，金属件必须降级处理，否则渲染成黑块。
+    private static var hasImageBasedLight: Bool {
+        if #available(iOS 18.0, *) { return true }
+        return false
+    }
+
     private func setupStudioEnvironment() {
         guard let cg = Self.makeStudioEquirectangular() else { return }
         // EnvironmentResource 是 @MainActor 类型，放到主线程任务里生成并挂载。
@@ -603,6 +611,15 @@ public final class Car3DView: UIView {
         m.baseColor = .init(tint: tint)
         m.metallic = .init(floatLiteral: Float(def.metallic))
         m.roughness = .init(floatLiteral: Float(def.roughness))
+        // 金属度钳制：无环境光（IBL）时，metallic≈1 的金属件没有可反射的光源，
+        // 会直接渲染成黑块（轮毂、饰条、logo 全部发黑）。
+        // iOS 18+ 通过 EnvironmentResource 挂载程序化影棚环境图后无需降级；
+        // iOS 15–17 无 IBL 时把金属度压到 0.25 并同步提高粗糙度，
+        // 让金属件退回「漫反射高光」表现，不再出现黑块。
+        if !Self.hasImageBasedLight, def.metallic > 0.3 {
+            m.metallic = .init(floatLiteral: 0.25)
+            m.roughness = .init(floatLiteral: min(1.0, Float(def.roughness) * 1.4 + 0.12))
+        }
         // 车漆清漆层（clearcoat）：官方展厅模的实车质感来自这一层，
         // 没有它金属/车漆面会显得「塑料」，加一层薄清漆立刻有影棚级高光。
         // 覆盖范围：车漆主件（carpaint / car_paint）、官方模的 CP 车漆层、
