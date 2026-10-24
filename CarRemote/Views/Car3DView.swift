@@ -161,7 +161,7 @@ public final class Car3DView: UIView {
     /// 轨道注视点（车身中部）
     public private(set) var orbitTarget = SIMD3<Float>(0, 0.36, 0)
 
-    private static let defaultAzimuth: Float = 0.7383
+    private static let defaultAzimuth: Float = .pi / 2   // 初始视角：车身正侧面（车头朝左）
     private static let defaultElevation: Float = 0.2514
     private static let defaultRadius: Float = 2.4
 
@@ -321,6 +321,13 @@ public final class Car3DView: UIView {
         do {
             let jsonData = try Data(contentsOf: jsonURL)
             let manifest = try JSONDecoder().decode(RKManifest.self, from: jsonData)
+            // 几何文件以 manifest.geometryFile 为准：多个配色变体（如灰色逸动）
+            // 共用同一份 .rk.bin，仅 manifest 不同，避免资源体积翻倍
+            let geoName = manifest.geometryFile.isEmpty ? "\(name).rk.bin" : manifest.geometryFile
+            guard let binURL = Bundle.main.url(forResource: (geoName as NSString).deletingPathExtension,
+                                               withExtension: (geoName as NSString).pathExtension) else {
+                return nil
+            }
             let binData = try Data(contentsOf: binURL)
             return try buildFromManifest(manifest, binData: binData)
         } catch {
@@ -518,8 +525,9 @@ public final class Car3DView: UIView {
 
     private static func lightGroupFor(name: String) -> LightGroup? {
         if name.contains("Door") { return .doorLight }
-        if name.contains("HL_LOn") || name.contains("DRL_LOn") ||
-           name.contains("_L_LOn_Ext") || name.contains("_R_LOn_Ext") { return .headlight }
+        // 仅主大灯进入 headlight 组。DRL / 左右示宽(LOn_Ext) 不再点亮——
+        // 1.1.3 实机反馈：把左右灯光件全部点亮会在车身两侧出现多余光带。
+        if name.contains("HL_LOn") { return .headlight }
         if name.contains("TL_LOn") { return .taillight }
         if name.contains("BL_LOn") { return .brake }
         return nil

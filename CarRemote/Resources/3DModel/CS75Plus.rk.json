@@ -6,24 +6,24 @@
   "scale": 1.1,
   "center": [
    0.0,
-   -0.386092,
+   -0.386059,
    0.0
   ],
-  "minY": -0.386092,
+  "minY": -0.386059,
   "length": 2.2
  },
  "materials": [
   {
    "name": "CS75Plus_mat",
-   "texture": "CS75Plus_tex0.png",
+   "texture": "CS75Plus_tex0.jpg",
    "baseColorSRGB": [
-    1.0,
-    1.0,
-    1.0,
-    1.0
+    1,
+    1,
+    1,
+    1
    ],
    "metallic": 0.0,
-   "roughness": 0.6,
+   "roughness": 0.55,
    "emissiveSRGB": null,
    "blend": false,
    "doubleSided": false
@@ -35,12 +35,12 @@
    "name": "CS75Plus_body",
    "group": "body",
    "material": 0,
-   "vertexCount": 180000,
-   "indexCount": 180000,
+   "vertexCount": 346414,
+   "indexCount": 1500000,
    "positionOffset": 0,
-   "normalOffset": 2160000,
-   "uvOffset": 4320000,
-   "indexOffset": 5760000,
+   "normalOffset": 4156968,
+   "uvOffset": 8313936,
+   "indexOffset": 11085248,
    "hasNormal": true,
    "hasUV": true,
    "isLight": false
@@ -49,9 +49,9 @@
  "groups": {
   "body": {
    "position": [
-    0.0,
-    0.0,
-    0.0
+    0,
+    0,
+    0
    ],
    "parent": null,
    "kind": "body",
@@ -63,7 +63,7 @@
  },
  "lightGroups": {},
  "stats": {
-  "vertexCount": 180000,
-  "triangleCount": 60000
+  "vertexCount": 346414,
+  "triangleCount": 500000
  }
 }

@@ -79,11 +79,12 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
     public var model3DName: String? {
         guard has3DModel else { return nil }
         switch self {
-        case .yidong, .yidongWhite: return "EadoPlus2022"   // 智慧云控官方 C211 全部件模
+        case .yidong: return "EadoPlus2022Gray"   // C211 全部件模 · 安第斯灰（1.1.4 用户偏好）
+        case .yidongWhite: return "EadoPlus2022"  // C211 全部件模 · 白色款
         case .univ: return "UniVOfficial"                    // 官方展厅 UNI-V（逐门逐窗）
         case .univK: return "UniKOfficial"                   // 官方展厅 UNI-K（逐门逐窗）
-        case .cs75: return "CS75Plus"                        // 实车外观模（单 mesh）
-        case .cs7520: return "CS75"                          // 实车外观模（单 mesh）
+        case .cs75: return "CS75Plus"                        // 2024 Changan CS75 Plus（Sketchfab teenlin3，CC BY 4.0，50万面+4K贴图）
+        case .cs7520: return "CS75"                          // Changan CS75（Sketchfab teenlin3，CC BY 4.0，50万面+4K贴图）
         }
     }
 

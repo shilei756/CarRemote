@@ -31,10 +31,10 @@ final class Car3DModelState: ObservableObject {
     @Published private(set) var openParts: Set<CarPart> = []
     /// 是否存在未关的车窗（全车聚合，仅用于 UI 展示）
     @Published private(set) var windowsOpen = false
-    /// 车灯是否点亮（前灯 + 尾灯）
-    @Published private(set) var lightsOn = false
-    /// 车轮是否转动
-    @Published private(set) var wheelsSpinning = false
+    /// 车灯是否点亮（1.1.4 起：默认点亮，模拟「启动后开灯」状态，不再提供手动开关）
+    @Published private(set) var lightsOn = true
+    /// 车轮是否转动（1.1.4 起：默认转动，模拟「行驶中」，不再提供手动开关）
+    @Published private(set) var wheelsSpinning = true
     /// 模型可用的部件（加载后由场景节点决定）
     @Published private(set) var availableParts: Set<CarPart> = []
     /// 是否有可独立升降的车窗
@@ -341,12 +341,17 @@ struct CarVisual3DStage: View {
     /// 真实车况中的门窗状态（逐门逐窗）
     let doorsAndWindows: CarStatus.DoorsAndWindows
 
+    /// 展示模式：3D 车模 / 俯视图（1.1.4 起右上角胶囊滑块切换）
+    private enum StageMode { case threeD, topView }
+
     @StateObject private var model = Car3DModelState()
-    @State private var show3D = true
+    @State private var mode: StageMode = .threeD
+
+    private var show3D: Bool { mode == .threeD }
 
     var body: some View {
         VStack(spacing: 0) {
-            ZStack(alignment: .topTrailing) {
+            ZStack(alignment: .top) {
                 Group {
                     // 仅当当前车型有内置 3D 资产（style.model3DName != nil）时展示 3D，
                     // 其他车型自动回退 2D 车图
@@ -357,7 +362,7 @@ struct CarVisual3DStage: View {
                                 .accessibilityLabel("\(style.displayName) 三维车模，左右滑动可旋转，长按车门、尾门或天窗可开合")
                                 .opacity(model.isLoaded ? 1 : 0)
                             if !model.isLoaded {
-                                // 加载中：先用 2D 侧视图占位，后台解析完成后无缝替换为 3D
+                                // 加载中：先用 2D 车图占位，后台解析完成后无缝替换为 3D
                                 Image(style.sideImageName)
                                     .resizable()
                                     .aspectRatio(contentMode: .fit)
@@ -366,31 +371,46 @@ struct CarVisual3DStage: View {
                             }
                         }
                     } else {
-                        Image(style.sideImageName)
+                        // 俯视档：显示车顶俯视图（对齐智慧云控 3D/俯视 切换）
+                        Image(style.topImageName)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
                             .accessibilityElement(children: .ignore)
-                            .accessibilityLabel("\(style.displayName) 车辆图片")
+                            .accessibilityLabel("\(style.displayName) 俯视车辆图片")
                     }
                 }
                 .frame(height: 200)
 
-                // 3D / 2D 一键切换（延续 1.0.5 车模页习惯；无 3D 资产的车型不显示）
-                if style.model3DName != nil {
-                    Button {
-                        show3D.toggle()
-                    } label: {
-                        Image(systemName: show3D ? "photo" : "square.stack.3d.up")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(WebTheme.muted)
-                            .padding(7)
-                            .background(Color(.secondarySystemBackground).opacity(0.82))
-                            .clipShape(Circle())
+                HStack(alignment: .top) {
+                    // 重置视角：放在「我的爱车」标题正下方（1.1.4 用户反馈）
+                    if show3D && !model.loadFailed && style.model3DName != nil {
+                        Button {
+                            model.resetView()
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.counterclockwise")
+                                    .font(.system(size: 10, weight: .semibold))
+                                Text("重置视角")
+                                    .font(.system(size: 11, weight: .medium))
+                            }
+                            .foregroundStyle(WebTheme.txt)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 5)
+                            .background(Color(.secondarySystemBackground).opacity(0.85))
+                            .clipShape(Capsule())
+                            .overlay(Capsule().strokeBorder(WebTheme.border, lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("重置车模视角")
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(show3D ? "切换为车辆图片" : "切换为三维车模")
-                    .padding(6)
+                    Spacer()
+                    // 3D / 俯视 胶囊滑块（对齐智慧云控车模页右上角切换控件）
+                    if style.model3DName != nil {
+                        stageModeSlider
+                    }
                 }
+                .padding(.horizontal, 2)
+                .padding(.top, 2)
             }
 
             if show3D && !model.loadFailed && model.isLoaded {
@@ -398,8 +418,8 @@ struct CarVisual3DStage: View {
             }
         }
         .compatOnChange(of: model.loadFailed) { failed in
-            // 3D 加载失败：自动回退 2D 车图；用户点右上角按钮可手动重试加载
-            if failed { show3D = false }
+            // 3D 加载失败：自动回退俯视图；「重置视角/3D」滑块仍可手动重试加载
+            if failed { mode = .topView }
         }
         .compatOnChange(of: doorsAndWindows) { _ in syncStatus() }
         .onAppear { syncStatus() }
@@ -409,29 +429,47 @@ struct CarVisual3DStage: View {
         model.syncStatus(doorsAndWindows)
     }
 
-    // MARK: 车况联动说明 + 非门窗控制条
+    // MARK: 3D / 俯视 胶囊滑块
+
+    private var stageModeSlider: some View {
+        HStack(spacing: 0) {
+            stageSegment(.threeD, title: "3D")
+            stageSegment(.topView, title: "俯视")
+        }
+        .padding(3)
+        .background(Color(.secondarySystemBackground).opacity(0.9))
+        .clipShape(Capsule())
+        .overlay(Capsule().strokeBorder(WebTheme.border, lineWidth: 1))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("车模展示模式")
+        .accessibilityHint("可在三维车模与俯视图之间切换")
+    }
+
+    private func stageSegment(_ segment: StageMode, title: String) -> some View {
+        let selected = mode == segment
+        return Button {
+            withAnimation(.easeInOut(duration: 0.18)) { mode = segment }
+        } label: {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(selected ? Color.white : WebTheme.muted)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule().fill(selected ? WebTheme.blue : Color.clear)
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title == "3D" ? "三维车模" : "俯视图")
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
+    }
+
+    // MARK: 车况联动说明
 
     private var controlStrip: some View {
         VStack(spacing: 6) {
             // 车况联动状态摘要：告诉用户当前车模反映的是真实车况
             statusSummary
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    if model.hasLights {
-                        actionChip(title: "车灯", symbol: "light.beacon.max", active: model.lightsOn) {
-                            model.toggleLights()
-                        }
-                    }
-                    if model.hasWheels {
-                        actionChip(title: "车轮", symbol: "arrow.triangle.2.circlepath", active: model.wheelsSpinning) {
-                            model.toggleWheels()
-                        }
-                    }
-                    actionChip(title: "重置视角", symbol: "arrow.counterclockwise", active: false) {
-                        model.resetView()
-                    }
-                }
-            }
             Text("滑动旋转车模 · 双指捏合缩放 · 双击复位视角")
                 .font(.system(size: 9))
                 .foregroundStyle(WebTheme.faint)
@@ -471,30 +509,5 @@ struct CarVisual3DStage: View {
             .foregroundStyle(WebTheme.muted)
             .frame(maxWidth: .infinity, alignment: .center)
             .accessibilityLabel(text)
-    }
-
-    private func actionChip(title: String, symbol: String, active: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            chipLabel(title: title, symbol: symbol, active: active)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(title)\(active ? "，已开启" : "，已关闭")")
-    }
-
-    private func chipLabel(title: String, symbol: String, active: Bool) -> some View {
-        HStack(spacing: 5) {
-            Image(systemName: symbol)
-                .font(.system(size: 11, weight: .semibold))
-            Text(title)
-                .font(.system(size: 12, weight: .medium))
-        }
-        .foregroundStyle(active ? .white : WebTheme.txt)
-        .padding(.horizontal, 11)
-        .padding(.vertical, 7)
-        .background(active ? WebTheme.blue : WebTheme.card2)
-        .clipShape(Capsule())
-        .overlay(
-            Capsule().strokeBorder(active ? WebTheme.blue : WebTheme.border, lineWidth: 1)
-        )
     }
 }
