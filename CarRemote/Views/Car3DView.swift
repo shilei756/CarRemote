@@ -605,7 +605,14 @@ public final class Car3DView: UIView {
         m.roughness = .init(floatLiteral: Float(def.roughness))
         // 车漆清漆层（clearcoat）：官方展厅模的实车质感来自这一层，
         // 没有它金属/车漆面会显得「塑料」，加一层薄清漆立刻有影棚级高光。
-        if lowerName.contains("carpaint") || lowerName.contains("car_paint") {
+        // 覆盖范围：车漆主件（carpaint / car_paint）、官方模的 CP 车漆层、
+        // 以及 UNI-K 的 black_ref 车门大面（与车漆同色的覆盖件），
+        // 否则同一台车上会出现「车身发亮、门板发塑料」的不一致。
+        let isPaintLike = lowerName.contains("carpaint")
+            || lowerName.contains("car_paint")
+            || lowerName.contains("cp_m")
+            || lowerName.contains("black_ref")
+        if isPaintLike {
             m.clearcoat = 0.9
             m.clearcoatRoughness = 0.06
         } else if lowerName.contains("cs75") {
