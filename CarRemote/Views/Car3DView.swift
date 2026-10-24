@@ -163,7 +163,9 @@ public final class Car3DView: UIView {
 
     private static let defaultAzimuth: Float = .pi / 2   // 初始视角：车身正侧面（车头朝左）
     private static let defaultElevation: Float = 0.2514
-    private static let defaultRadius: Float = 2.4
+    // 初始相机距离：1.1.4 用户要求「把逸动 3D 车模稍微放大一点」，
+    // 由 2.4 收到 2.12（约放大 13%），车模在 200pt 高的舞台里占比更合适。
+    private static let defaultRadius: Float = 2.12
 
     // MARK: 私有
 
@@ -195,7 +197,7 @@ public final class Car3DView: UIView {
 
     /// 贴图资源 URL：先按裸名在 bundle 根查找，失败再回退到各贴图子目录
     /// （XcodeGen 打包时资源目录层级可能被扁平化，也可能被保留成子目录，两种都要兜住）。
-    private static let textureSubdirectories = ["tex", "UniVOfficial_tex", "UniKOfficial_tex"]
+    private static let textureSubdirectories = ["tex"]
 
     private static func textureURL(named texName: String) -> URL? {
         let base = (texName as NSString).deletingPathExtension
@@ -632,10 +634,6 @@ public final class Car3DView: UIView {
         if isPaintLike {
             m.clearcoat = 0.9
             m.clearcoatRoughness = 0.06
-        } else if lowerName.contains("cs75") {
-            // CS75 系列为整车单贴图材质：加一层清漆让车身有影棚级高光
-            m.clearcoat = 0.55
-            m.clearcoatRoughness = 0.12
         }
         if let e = def.emissiveSRGB, !e.isEmpty {
             let ec = UIColor(red: CGFloat(e[0]), green: CGFloat(e[1]), blue: CGFloat(e[2]),

@@ -55,36 +55,30 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
         }
     }
 
-    /// 是否有内置官方 3D 车模（逸动PLUS 2022，C211，来自长安智慧云控安装包）。
-    /// 其他车型后续把对应 glb 放进 Resources/3DModel 并在此登记即可接入。
+    /// 是否有内置官方 3D 车模。
     ///
-    /// 1.1.3 起用 RealityKit 重写（替代 1.1.2 前崩溃的 SceneKit 实现）：RealityKit 为
-    /// Apple 现框架，iOS 15+ 全员可用，已绕过 iOS 26/27 上 SCNView 创建即崩溃的问题。
-    /// 资产由 glb 离线转换（EadoPlus2022.rk.json/.rk.bin + tex/*.png），运行时实时重建网格。
+    /// 1.1.4 用户决策：**仅保留逸动PLUS（C211，智慧云控官方全件模）**，
+    /// UNI-V / UNI-K / CS75PLUS / CS75 一律退回 2D 车图 ——
+    /// 官方展厅模的车漆贴图是整车身 UV 展平图，白化处理后仍与真实车色观感不符，
+    /// 且包体增重明显，故移除其 3D 资源（对应 .rk.json/.rk.bin/贴图已从 bundle 删除）。
     public var has3DModel: Bool {
         guard #available(iOS 15.0, *) else { return false }
-        // 1.1.3 起全车系内置写实 3D 车模：
-        //   逸动PLUS —— 智慧云控官方 C211 模型（门/窗/把手/轮/灯全部件动画）
-        //   UNI-V / UNI-K / CS75PLUS / CS75 —— 实车外观模（单 mesh，
-        //   支持旋转/缩放查看，无独立门窗部件，控制条按可用性自动裁剪）
-        return true
+        switch self {
+        case .yidong, .yidongWhite: return true
+        default: return false
+        }
     }
 
     /// 3D 车模资源名（Bundle 内 .rk.json/.rk.bin，不带扩展名；无 3D 车模时为 nil）
     ///
-    /// 1.1.4 起 UNI-V / UNI-K 使用**长安官方 3D 展厅车模**（www.changan.com.cn/3Dhall），
-    /// 由官方 PlayCanvas 资产离线转换而来：逐扇车门、逐扇车窗、四个车轮独立可动，
-    /// 门/窗开合角度取自官方 `openDoors.js` 的四元数。
-    /// 逸动PLUS 沿用智慧云控安装包内的 C211 官方模。
+    /// 1.1.4 起仅逸动PLUS 保留 3D 车模（智慧云控官方 C211 全件模，
+    /// 逐扇车门/车窗/车轮独立可动）；其余车型只有 2D 车图。
     public var model3DName: String? {
         guard has3DModel else { return nil }
         switch self {
         case .yidong: return "EadoPlus2022Gray"   // C211 全部件模 · 安第斯灰（1.1.4 用户偏好）
         case .yidongWhite: return "EadoPlus2022"  // C211 全部件模 · 白色款
-        case .univ: return "UniVOfficial"                    // 官方展厅 UNI-V（逐门逐窗）
-        case .univK: return "UniKOfficial"                   // 官方展厅 UNI-K（逐门逐窗）
-        case .cs75: return "CS75Plus"                        // 2024 Changan CS75 Plus（Sketchfab teenlin3，CC BY 4.0，50万面+4K贴图）
-        case .cs7520: return "CS75"                          // Changan CS75（Sketchfab teenlin3，CC BY 4.0，50万面+4K贴图）
+        default: return nil
         }
     }
 
