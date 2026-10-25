@@ -76,7 +76,7 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
     public var model3DName: String? {
         guard has3DModel else { return nil }
         switch self {
-        case .yidong: return "EadoPlus2022Gray"   // C211 全部件模 · 安第斯灰（1.1.4 用户偏好）
+        case .yidong: return "EadoPlus2022Gray"   // C211 全部件模 · 钛光银灰（1.1.4-b110 用户指定，色值 #C6C6C6 对齐官网）
         case .yidongWhite: return "EadoPlus2022"  // C211 全部件模 · 白色款
         default: return nil
         }
