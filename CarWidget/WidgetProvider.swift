@@ -43,11 +43,11 @@ struct CarWidgetProvider: TimelineProvider, AppIntentTimelineProvider {
 
     // MARK: AppIntentTimelineProvider（快捷控车 AppIntentConfiguration 用）
 
-    func snapshot(for intent: WidgetPairIntent, in context: Context) async -> CarStatusEntry {
+    func snapshot(for intent: WidgetPairIntent, in context: Context) async throws -> CarStatusEntry {
         makeEntry()
     }
 
-    func timeline(for intent: WidgetPairIntent, in context: Context) async -> Timeline<CarStatusEntry> {
+    func timeline(for intent: WidgetPairIntent, in context: Context) async throws -> Timeline<CarStatusEntry> {
         buildTimeline()
     }
 
