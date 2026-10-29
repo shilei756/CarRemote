@@ -22,16 +22,11 @@ struct CarStatusEntry: TimelineEntry {
 /// - 时间线刷新时先用本地快照**立即渲染**（不阻塞，原实现最长等 12 秒网络，
 ///   用户看到的是白转的加载圈），随后在后台拉一次官网车况，
 ///   内容有变化时再主动请求重绘（凭据来自共享存储）。
-struct CarWidgetProvider: TimelineProvider, AppIntentTimelineProvider {
-
-    /// AppIntentTimelineProvider 的意图关联（快捷控车小组件的配置意图）
-    typealias Intent = WidgetPairIntent
+struct CarWidgetProvider: TimelineProvider {
 
     func placeholder(in context: Context) -> CarStatusEntry {
         .placeholder
     }
-
-    // MARK: TimelineProvider（主小组件 StaticConfiguration 用）
 
     func getSnapshot(in context: Context, completion: @escaping (CarStatusEntry) -> Void) {
         completion(makeEntry())
@@ -41,17 +36,7 @@ struct CarWidgetProvider: TimelineProvider, AppIntentTimelineProvider {
         completion(buildTimeline())
     }
 
-    // MARK: AppIntentTimelineProvider（快捷控车 AppIntentConfiguration 用）
-
-    func snapshot(for intent: WidgetPairIntent, in context: Context) async throws -> CarStatusEntry {
-        makeEntry()
-    }
-
-    func timeline(for intent: WidgetPairIntent, in context: Context) async throws -> Timeline<CarStatusEntry> {
-        buildTimeline()
-    }
-
-    /// 构建时间线：立即用本地快照渲染，随后异步刷新（两个协议的 timeline 共用）
+    /// 构建时间线：立即用本地快照渲染，随后异步刷新
     private func buildTimeline() -> Timeline<CarStatusEntry> {
         let entry = makeEntry()
         // 第二个条目：横幅过期后重绘一次，自动清掉执行反馈横幅

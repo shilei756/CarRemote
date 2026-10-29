@@ -205,7 +205,7 @@ private struct NoDataView: View {
                     .foregroundStyle(.tertiary)
                 // 免签/巨魔等无共享权限环境的出路：小组件自己绑定账号
                 if WidgetLocalStore.loadCredentials() == nil {
-                    Text("免签安装？添加锁屏「快捷控车」小组件，长按→编辑 填手机号与控车码，点按绑定后全部小组件恢复")
+                    Text("免签安装？打开「快捷指令」搜索「小组件独立登录」，填手机号与控车码运行，绑定后全部小组件恢复")
                         .font(.system(size: 7.5, weight: .medium))
                         .foregroundStyle(.orange)
                         .multilineTextAlignment(.center)
@@ -432,47 +432,34 @@ struct QuickControlEntryView: View {
         if hasData {
             content
         } else {
-            // 未绑定（免签/巨魔等无共享权限环境）：点按即执行绑定
+            // 未绑定（免签/巨魔等无共享权限环境）：
+            // iOS 17 点按弹出绑定 Intent；iOS 16 点按唤起 App 看指引
             Group {
                 if family == .accessoryRectangular {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("快捷控车 · 未绑定")
-                            .font(.headline)
-                            .widgetAccentable()
-                        Text("编辑小组件填手机号与控车码，点按完成绑定")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+                    Button(intent: WidgetPairIntent()) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("快捷控车 · 未绑定")
+                                .font(.headline)
+                                .widgetAccentable()
+                            Text("点按绑定，或用「快捷指令」运行「小组件独立登录」")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
                     }
+                    .buttonStyle(.plain)
                 } else {
-                    VStack(spacing: 2) {
-                        Image(systemName: "link.circle.fill")
-                            .font(.system(size: 20))
-                        Text("点按绑定")
-                            .font(.system(size: 9, weight: .semibold))
+                    Button(intent: WidgetPairIntent()) {
+                        VStack(spacing: 2) {
+                            Image(systemName: "link.circle.fill")
+                                .font(.system(size: 20))
+                            Text("点按绑定")
+                                .font(.system(size: 9, weight: .semibold))
+                        }
                     }
+                    .buttonStyle(.plain)
                 }
             }
-            // 注意：不能加 widgetURL —— 未绑定时点按要让系统执行绑定 Intent，
-            // 挂了 URL 会变成唤起 App，绑定就永远无法触发
-            Group {
-                if family == .accessoryRectangular {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("快捷控车 · 未绑定")
-                            .font(.headline)
-                            .widgetAccentable()
-                        Text("编辑小组件填手机号与控车码，点按完成绑定")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                } else {
-                    VStack(spacing: 2) {
-                        Image(systemName: "link.circle.fill")
-                            .font(.system(size: 20))
-                        Text("点按绑定")
-                            .font(.system(size: 9, weight: .semibold))
-                    }
-                }
-            }
+            .widgetURL(URL(string: APIConfig.urlScheme + "://dashboard"))
         }
     }
 }

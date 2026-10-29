@@ -208,17 +208,16 @@ public struct WidgetPairIntent: AppIntent {
 
         if phone.isEmpty || pin.isEmpty {
             if let bound = WidgetLocalStore.loadCredentials() {
-                text = "已绑定 \(maskedPhone(bound.phone))，全部小组件正常工作。\n如需换号：长按小组件 → 编辑，填新的手机号与控车码后再点按。"
+                text = "已绑定 \(maskedPhone(bound.phone))，全部小组件正常工作。\n如需换号：在「快捷指令」里运行本指令并填新的手机号与控车码。"
             } else {
-                text = "尚未绑定。请长按小组件 → 编辑，填写手机号与控车码后，再点按小组件完成绑定。"
+                text = "绑定方法：打开「快捷指令」App → 搜索「小组件独立登录」→ 填手机号与控车码运行即可。绑定一次，全部小组件（主屏+锁屏）生效。"
             }
         } else {
             do {
                 let credentials = try await AuthService.login(phone: phone, pin: pin)
                 WidgetLocalStore.saveCredentials(credentials)
                 WidgetCenter.shared.reloadAllTimelines()
-                text = "绑定成功：\(maskedPhone(credentials.phone)) 已登录，稍后自动同步车况。全部小组件（主屏+锁屏）即刻生效。"
-            } catch {
+                text = "绑定成功：\(maskedPhone(credentials.phone)) 已登录，稍后自动同步车况。全部小组件（主屏+锁屏）即刻生效。"            } catch {
                 text = "绑定失败：\(CarIntentRunner.cleanReason(error.localizedDescription))"
             }
         }
