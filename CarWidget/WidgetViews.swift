@@ -203,6 +203,14 @@ private struct NoDataView: View {
                 Text(SharedStore.credentialsDiagnostics())
                     .font(.system(size: 7))
                     .foregroundStyle(.tertiary)
+                // 免签/巨魔等无共享权限环境的出路：小组件自己绑定账号
+                if WidgetLocalStore.loadCredentials() == nil {
+                    Text("免签安装？添加锁屏「快捷控车」小组件，长按→编辑 填手机号与控车码，点按绑定后全部小组件恢复")
+                        .font(.system(size: 7.5, weight: .medium))
+                        .foregroundStyle(.orange)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 10)
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -407,12 +415,64 @@ struct QuickControlEntryView: View {
     @Environment(\.widgetFamily) private var family
     var entry: CarStatusEntry
 
+    /// 是否有可用数据来源（共享通道或小组件本地绑定）
+    private var hasData: Bool {
+        entry.snapshot != nil || WidgetLocalStore.loadCredentials() != nil
+    }
+
     var body: some View {
-        switch family {
-        case .accessoryRectangular:
-            QuickRectangularView(entry: entry)
-        default:
-            QuickCircularView(entry: entry)
+        let content = Group {
+            switch family {
+            case .accessoryRectangular:
+                QuickRectangularView(entry: entry)
+            default:
+                QuickCircularView(entry: entry)
+            }
+        }
+        if hasData {
+            content
+        } else {
+            // 未绑定（免签/巨魔等无共享权限环境）：点按即执行绑定
+            Group {
+                if family == .accessoryRectangular {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("快捷控车 · 未绑定")
+                            .font(.headline)
+                            .widgetAccentable()
+                        Text("编辑小组件填手机号与控车码，点按完成绑定")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    VStack(spacing: 2) {
+                        Image(systemName: "link.circle.fill")
+                            .font(.system(size: 20))
+                        Text("点按绑定")
+                            .font(.system(size: 9, weight: .semibold))
+                    }
+                }
+            }
+            // 注意：不能加 widgetURL —— 未绑定时点按要让系统执行绑定 Intent，
+            // 挂了 URL 会变成唤起 App，绑定就永远无法触发
+            Group {
+                if family == .accessoryRectangular {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("快捷控车 · 未绑定")
+                            .font(.headline)
+                            .widgetAccentable()
+                        Text("编辑小组件填手机号与控车码，点按完成绑定")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    VStack(spacing: 2) {
+                        Image(systemName: "link.circle.fill")
+                            .font(.system(size: 20))
+                        Text("点按绑定")
+                            .font(.system(size: 9, weight: .semibold))
+                    }
+                }
+            }
         }
     }
 }

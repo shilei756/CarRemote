@@ -179,3 +179,56 @@ public struct WhistleFindIntent: AppIntent {
         return .result(dialog: IntentDialog(stringLiteral: await WidgetSlotRunner.perform(command: .remoteSearchCar)))
     }
 }
+
+// MARK: - 小组件独立登录（免签/巨魔等无 App Group 环境的兜底）
+
+/// 免签安装环境下 App Group/钥匙串共享组不存在，小组件读不到主 App 数据。
+/// 登录走站主自有后端（手机号+控车码），小组件进程可以自行登录：
+/// 在小组件「编辑」里填手机号与控车码 → 点按小组件完成绑定，
+/// 凭据与快照存小组件自己的沙盒，全部小组件（主屏+锁屏）同步生效。
+public struct WidgetPairIntent: AppIntent {
+    public static var title: LocalizedStringResource = "小组件独立登录"
+    public static var description: IntentDescription = IntentDescription(
+        "填写手机号与控车码，小组件自行登录拉取车况（无需 App 共享权限）",
+        categoryName: "账号"
+    )
+
+    @Parameter(title: "手机号", default: "")
+    public var phone: String
+
+    @Parameter(title: "控车码", default: "")
+    public var pin: String
+
+    public init() {}
+
+    public func perform() async throws -> some IntentResult & ProvidesDialog {
+        let text: String
+        let phone = phone.trimmingCharacters(in: .whitespacesAndNewlines)
+        let pin = pin.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if phone.isEmpty || pin.isEmpty {
+            if let bound = WidgetLocalStore.loadCredentials() {
+                text = "已绑定 \(maskedPhone(bound.phone))，全部小组件正常工作。\n如需换号：长按小组件 → 编辑，填新的手机号与控车码后再点按。"
+            } else {
+                text = "尚未绑定。请长按小组件 → 编辑，填写手机号与控车码后，再点按小组件完成绑定。"
+            }
+        } else {
+            do {
+                let credentials = try await AuthService.login(phone: phone, pin: pin)
+                WidgetLocalStore.saveCredentials(credentials)
+                WidgetCenter.shared.reloadAllTimelines()
+                text = "绑定成功：\(maskedPhone(credentials.phone)) 已登录，稍后自动同步车况。全部小组件（主屏+锁屏）即刻生效。"
+            } catch {
+                text = "绑定失败：\(CarIntentRunner.cleanReason(error.localizedDescription))"
+            }
+        }
+        return .result(dialog: IntentDialog(stringLiteral: text))
+    }
+
+    private func maskedPhone(_ phone: String) -> String {
+        guard phone.count == 11 else { return phone }
+        let idx = phone.index(phone.startIndex, offsetBy: 3)
+        let tail = phone.index(phone.endIndex, offsetBy: -4)
+        return phone[..<idx] + "****" + phone[tail...]
+    }
+}

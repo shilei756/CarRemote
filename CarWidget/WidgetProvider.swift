@@ -44,16 +44,23 @@ struct CarWidgetProvider: TimelineProvider {
 
         // 立即渲染后异步刷新车况；内容有变化才 reload，
         // 避免「刷新→reload→再刷新」的死循环（updatedAt 每次都不同，必须比内容）
-        guard let credentials = SharedStore.loadCredentials() else { return }
+        guard let credentials = Self.resolvedCredentials() else { return }
         let previous = entry.snapshot
         Task.detached {
             guard let fresh = await Self.fetchSnapshot(credentials: credentials) else { return }
             let changed = !Self.sameContent(fresh, previous)
             SharedStore.saveStatusSnapshot(fresh)
+            WidgetLocalStore.saveSnapshot(fresh)
             if changed {
                 WidgetCenter.shared.reloadAllTimelines()
             }
         }
+    }
+
+    /// 凭据解析顺序：共享通道（App Group/钥匙串）→ 小组件本地
+    /// （免签/巨魔等无共享权限环境下，用户在小组件里直接绑定过账号）
+    static func resolvedCredentials() -> Credentials? {
+        SharedStore.loadCredentials() ?? WidgetLocalStore.loadCredentials()
     }
 
     /// 忽略 updatedAt 的内容级比较（车况数据有变化才算变化）
@@ -73,8 +80,8 @@ struct CarWidgetProvider: TimelineProvider {
 
     private func makeEntry() -> CarStatusEntry {
         let settings = SharedStore.loadSettings()
-        let snapshot = SharedStore.loadStatusSnapshot()
-        let credentials = SharedStore.loadCredentials()
+        let snapshot = SharedStore.loadStatusSnapshot() ?? WidgetLocalStore.loadSnapshot()
+        let credentials = Self.resolvedCredentials()
 
         // 凭据读不到时保留快照继续展示：既能显示车况，
         // 也便于定位数据通道断在哪一环（按钮点击时会提示去 App 登录）
@@ -104,7 +111,9 @@ struct CarWidgetProvider: TimelineProvider {
         guard let (status, car, updated) = try? await CarService.refresh(credentials: credentials) else {
             return nil
         }
+        // token 可能已轮换：双写回两条通道（本地写入在免签环境下是唯一有效通道）
         SharedStore.saveCredentials(updated)
+        WidgetLocalStore.saveCredentials(updated)
         return StatusSnapshot(carName: car.displayName, status: status)
     }
 }
