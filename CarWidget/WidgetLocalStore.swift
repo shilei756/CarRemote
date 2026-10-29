@@ -43,7 +43,7 @@ enum WidgetLocalStore {
         if let snapshot, let data = try? JSONEncoder().encode(snapshot) {
             defaults.set(data, forKey: snapshotKey)
         } else {
-            defaults.removeItem(forKey: snapshotKey)
+            defaults.removeObject(forKey: snapshotKey)
         }
     }
 }

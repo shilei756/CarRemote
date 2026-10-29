@@ -22,17 +22,39 @@ struct CarStatusEntry: TimelineEntry {
 /// - 时间线刷新时先用本地快照**立即渲染**（不阻塞，原实现最长等 12 秒网络，
 ///   用户看到的是白转的加载圈），随后在后台拉一次官网车况，
 ///   内容有变化时再主动请求重绘（凭据来自共享存储）。
-struct CarWidgetProvider: TimelineProvider {
+struct CarWidgetProvider: TimelineProvider, AppIntentTimelineProvider {
+
+    /// AppIntentTimelineProvider 的意图关联（快捷控车小组件的配置意图）
+    typealias Intent = WidgetPairIntent
 
     func placeholder(in context: Context) -> CarStatusEntry {
         .placeholder
     }
+
+    // MARK: TimelineProvider（主小组件 StaticConfiguration 用）
 
     func getSnapshot(in context: Context, completion: @escaping (CarStatusEntry) -> Void) {
         completion(makeEntry())
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<CarStatusEntry>) -> Void) {
+        completion(buildTimeline())
+    }
+
+    // MARK: AppIntentTimelineProvider（快捷控车 AppIntentConfiguration 用）
+
+    func snapshot(for intent: WidgetPairIntent, in context: Context,
+                  completion: @escaping (CarStatusEntry) -> Void) {
+        completion(makeEntry())
+    }
+
+    func timeline(for intent: WidgetPairIntent, in context: Context,
+                  completion: @escaping (Timeline<CarStatusEntry>) -> Void) {
+        completion(buildTimeline())
+    }
+
+    /// 构建时间线：立即用本地快照渲染，随后异步刷新（两个协议的 timeline 共用）
+    private func buildTimeline() -> Timeline<CarStatusEntry> {
         let entry = makeEntry()
         // 第二个条目：横幅过期后重绘一次，自动清掉执行反馈横幅
         // （WidgetKit 无法 2 秒重绘，横幅实际显示时长≈下一条目的到达时间）
@@ -40,11 +62,11 @@ struct CarWidgetProvider: TimelineProvider {
         var clearEntry = entry
         clearEntry.date = bannerClearDate
         let nextUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: Date()) ?? Date()
-        completion(Timeline(entries: [entry, clearEntry], policy: .after(nextUpdate)))
+        let timeline = Timeline(entries: [entry, clearEntry], policy: .after(nextUpdate))
 
         // 立即渲染后异步刷新车况；内容有变化才 reload，
         // 避免「刷新→reload→再刷新」的死循环（updatedAt 每次都不同，必须比内容）
-        guard let credentials = Self.resolvedCredentials() else { return }
+        guard let credentials = Self.resolvedCredentials() else { return timeline }
         let previous = entry.snapshot
         Task.detached {
             guard let fresh = await Self.fetchSnapshot(credentials: credentials) else { return }
@@ -55,6 +77,7 @@ struct CarWidgetProvider: TimelineProvider {
                 WidgetCenter.shared.reloadAllTimelines()
             }
         }
+        return timeline
     }
 
     /// 凭据解析顺序：共享通道（App Group/钥匙串）→ 小组件本地
