@@ -81,7 +81,7 @@ public enum ResignCompat {
     }
 }
 
-private extension Array where Element: Equatable {
+private extension Array where Element: Hashable {
     /// 去重保序
     var uniqued: [Element] {
         var seen = Set<Element>()
