@@ -390,7 +390,9 @@ struct WhitelistView: View {
             Text("首次 \(item.first) · 最近 \(item.last) · \(item.count) 次")
                 .font(.system(size: 10))
                 .foregroundStyle(WebTheme.faint)
-            if !item.owner {
+            // 操作按钮仅站主可见（服务端限定：强制下线/卸任/删除均 only-owner，
+            // 管理员点击只会收到「仅站主可操作」，因此前端直接不渲染，与网页版一致）
+            if usage?.isOwner == true, !item.owner {
                 HStack(spacing: 8) {
                     smallActionButton("强制下线", tint: WebTheme.red) {
                         askConfirm(
@@ -460,9 +462,12 @@ struct WhitelistView: View {
                             .font(.system(size: 10))
                             .foregroundStyle(WebTheme.muted)
                         Spacer()
-                        smallActionButton("解除", tint: WebTheme.green) {
-                            askConfirm(title: "解除限制", message: "确定解除对 \(phone) 的使用限制？") {
-                                Task { await runAction("已解除限制") { try await AdminService.unblock(password: adminPassword, phone: phone, caller: caller) } }
+                        // 解除限制仅站主可操作（服务端 only-owner），管理员只看名单
+                        if usage?.isOwner == true {
+                            smallActionButton("解除", tint: WebTheme.green) {
+                                askConfirm(title: "解除限制", message: "确定解除对 \(phone) 的使用限制？") {
+                                    Task { await runAction("已解除限制") { try await AdminService.unblock(password: adminPassword, phone: phone, caller: caller) } }
+                                }
                             }
                         }
                     }
