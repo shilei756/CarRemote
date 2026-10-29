@@ -43,14 +43,12 @@ struct CarWidgetProvider: TimelineProvider, AppIntentTimelineProvider {
 
     // MARK: AppIntentTimelineProvider（快捷控车 AppIntentConfiguration 用）
 
-    func snapshot(for intent: WidgetPairIntent, in context: Context,
-                  completion: @escaping (CarStatusEntry) -> Void) {
-        completion(makeEntry())
+    func snapshot(for intent: WidgetPairIntent, in context: Context) async -> CarStatusEntry {
+        makeEntry()
     }
 
-    func timeline(for intent: WidgetPairIntent, in context: Context,
-                  completion: @escaping (Timeline<CarStatusEntry>) -> Void) {
-        completion(buildTimeline())
+    func timeline(for intent: WidgetPairIntent, in context: Context) async -> Timeline<CarStatusEntry> {
+        buildTimeline()
     }
 
     /// 构建时间线：立即用本地快照渲染，随后异步刷新（两个协议的 timeline 共用）
