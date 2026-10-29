@@ -541,6 +541,12 @@ public enum SharedStore {
         UserDefaults(suiteName: APIConfig.appGroupIdentifier)
     }
 
+    /// 全部候选共享存储：工程默认组 + 重签描述文件动态发现的组。
+    /// 读取时按顺序试到命中；写入时全部落笔（无权限的组静默失败，无害）。
+    private static var allDefaults: [UserDefaults] {
+        ResignCompat.candidateAppGroups().compactMap { UserDefaults(suiteName: $0) }
+    }
+
     // MARK: 凭据（Keychain 为主，App Group 兜底——小组件在两种环境下都能读到）
 
     public static func loadCredentials() -> Credentials? {
@@ -549,8 +555,11 @@ public enum SharedStore {
            let creds = try? JSONDecoder().decode(Credentials.self, from: data) {
             return creds
         }
-        if let creds = loadCredentialsFromDefaults() {
-            return creds
+        for d in allDefaults {
+            if let data = d.data(forKey: Key.credentials),
+               let creds = try? JSONDecoder().decode(Credentials.self, from: data) {
+                return creds
+            }
         }
         // 第三通道：App Group 容器目录文件（个别重签环境下 UserDefaults 失效时兜底）
         if let data = containerFileData(Key.credentials),
@@ -568,64 +577,130 @@ public enum SharedStore {
         } else {
             KeychainStore.remove(Key.credentials)
         }
-        // 兜底副本 1：App Group UserDefaults
-        if let credentials,
-           let data = try? JSONEncoder().encode(credentials) {
-            defaults?.set(data, forKey: Key.credentials)
+        // 兜底副本 1：App Group UserDefaults（全部候选组都写，重签环境哪个有权限哪个生效）
+        if let credentials, let data = try? JSONEncoder().encode(credentials) {
+            allDefaults.forEach { $0.set(data, forKey: Key.credentials) }
         } else {
-            defaults?.removeObject(forKey: Key.credentials)
+            allDefaults.forEach { $0.removeObject(forKey: Key.credentials) }
         }
         // 兜底副本 2：App Group 容器目录文件
-        if let credentials,
-           let data = try? JSONEncoder().encode(credentials) {
+        if let credentials, let data = try? JSONEncoder().encode(credentials) {
             writeContainerFile(data, forKey: Key.credentials)
         } else {
             writeContainerFile(nil, forKey: Key.credentials)
         }
     }
 
-    private static func loadCredentialsFromDefaults() -> Credentials? {
-        guard let data = defaults?.data(forKey: Key.credentials) else { return nil }
-        return try? JSONDecoder().decode(Credentials.self, from: data)
-    }
-
-    /// App Group 容器目录文件读写（UserDefaults 读不到时的第二兜底）
-    private static func containerURL() -> URL? {
-        FileManager.default
-            .containerURL(forSecurityApplicationGroupIdentifier: APIConfig.appGroupIdentifier)?
-            .appendingPathComponent("carremote_shared", isDirectory: true)
+    /// App Group 容器目录文件读写（UserDefaults 读不到时的第二兜底）。
+    /// 遍历全部候选组：默认组 + 重签描述文件发现的组（读：命中即回；写：全写）。
+    private static func containerURLs() -> [URL] {
+        ResignCompat.candidateAppGroups().compactMap {
+            FileManager.default
+                .containerURL(forSecurityApplicationGroupIdentifier: $0)?
+                .appendingPathComponent("carremote_shared", isDirectory: true)
+        }
     }
 
     private static func writeContainerFile(_ data: Data?, forKey key: String) {
-        guard let dir = containerURL() else { return }
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let url = dir.appendingPathComponent(key + ".bin")
-        if let data {
-            try? data.write(to: url)
-        } else {
-            try? FileManager.default.removeItem(at: url)
+        for dir in containerURLs() {
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let url = dir.appendingPathComponent(key + ".bin")
+            if let data {
+                try? data.write(to: url)
+            } else {
+                try? FileManager.default.removeItem(at: url)
+            }
         }
     }
 
     private static func containerFileData(_ key: String) -> Data? {
-        guard let url = containerURL()?.appendingPathComponent(key + ".bin") else { return nil }
-        return try? Data(contentsOf: url)
+        for dir in containerURLs() {
+            let url = dir.appendingPathComponent(key + ".bin")
+            if let data = try? Data(contentsOf: url) { return data }
+        }
+        return nil
     }
 
-    /// 凭据三条通道的诊断（小组件「未登录」界面显示，用于远程定位数据通道断点）
+    /// 凭据三条通道的诊断（小组件「未登录」界面与 App 设置页显示，远程定位数据通道断点）。
+    /// 重签环境下附带动发现的签名组信息，便于确认重签平台是否开通了 App Group。
     public static func credentialsDiagnostics() -> String {
         let kc = KeychainStore.get(Key.credentials) != nil
-        let dg = defaults?.data(forKey: Key.credentials) != nil
+        let dg = allDefaults.contains { $0.data(forKey: Key.credentials) != nil }
         let cf = containerFileData(Key.credentials) != nil
-        return "诊断 钥匙串\(kc ? "✓" : "✗") 共享存储\(dg ? "✓" : "✗") 容器文件\(cf ? "✓" : "✗")"
+        let info = ResignCompat.resignInfo()
+        var extra = ""
+        if info.profileFound {
+            let groups = info.appGroups
+            if groups.isEmpty {
+                extra = " · 重签未含App组"
+            } else if !groups.contains(APIConfig.appGroupIdentifier) {
+                extra = " · 签名组\(groups.count)个:" + groups.prefix(2).joined(separator: ",")
+            }
+        }
+        return "诊断 钥匙串\(kc ? "✓" : "✗") 共享存储\(dg ? "✓" : "✗") 容器文件\(cf ? "✓" : "✗")\(extra)"
+    }
+
+    /// 小组件数据通道完整诊断报告（App 设置页「小组件诊断」展示）。
+    /// 区分两层问题：
+    /// 1. 权限层——重签描述文件里有没有声明 App Group / 钥匙串组（决定通道能不能用）；
+    /// 2. 数据层——凭据现在能不能读到（决定小组件显示什么）。
+    public static func widgetChannelReport() -> String {
+        var lines: [String] = []
+        let info = ResignCompat.resignInfo()
+
+        // 1) 签名环境
+        if info.profileFound {
+            lines.append("签名环境：重签描述文件 ✓ 已解析")
+        } else {
+            lines.append("签名环境：未发现描述文件（App Store 正式包）")
+        }
+
+        // 2) App Group 权限（以描述文件声明为准——未声明的组跨进程必然不通）
+        if info.profileFound {
+            if info.appGroups.isEmpty {
+                lines.append("App Group：✗ 重签时未声明（共享存储/容器文件通道失效）")
+            } else {
+                for g in info.appGroups {
+                    let tag = (g == APIConfig.appGroupIdentifier) ? "（工程默认）" : "（重签分配）"
+                    lines.append("App Group：✓ \(g)\(tag)")
+                }
+                if !info.appGroups.contains(APIConfig.appGroupIdentifier) {
+                    lines.append("提示：默认组被替换，已自动改用重签组读写 ✓")
+                }
+            }
+            // 3) 钥匙串组
+            if info.keychainGroups.isEmpty {
+                lines.append("钥匙串组：✗ 重签时未声明（跨进程钥匙串失效，退回各自独立钥匙串）")
+            } else {
+                for g in info.keychainGroups {
+                    lines.append("钥匙串组：✓ \(g)")
+                }
+            }
+        }
+
+        // 4) 钥匙串写入能力（进程内可实测）
+        let probe = "carremote.diag.\(UUID().uuidString)"
+        KeychainStore.set("1", forKey: probe)
+        let kcOK = KeychainStore.get(probe) != nil
+        KeychainStore.remove(probe)
+        lines.append("钥匙串写入：\(kcOK ? "✓" : "✗")")
+
+        // 5) 凭据可读性（数据层）
+        let creds = loadCredentials() != nil
+        lines.append("登录凭据：\(creds ? "✓ 可读取" : "✗ 读不到")")
+        let snap = loadStatusSnapshot() != nil
+        lines.append("车况快照：\(snap ? "✓ 可读取" : "✗ 暂无（App 刷新车况后写入）")")
+        return lines.joined(separator: "\n")
     }
 
     // MARK: 设置（App Group 为主，Keychain/容器文件镜像兜底——小组件读按钮配置用）
 
     public static func loadSettings() -> AppSettings {
-        if let data = defaults?.data(forKey: Key.settings),
-           let settings = try? JSONDecoder().decode(AppSettings.self, from: data) {
-            return settings
+        for d in allDefaults {
+            if let data = d.data(forKey: Key.settings),
+               let settings = try? JSONDecoder().decode(AppSettings.self, from: data) {
+                return settings
+            }
         }
         if let data = containerFileData(Key.settings),
            let settings = try? JSONDecoder().decode(AppSettings.self, from: data) {
@@ -641,7 +716,7 @@ public enum SharedStore {
 
     public static func saveSettings(_ settings: AppSettings) {
         guard let data = try? JSONEncoder().encode(settings) else { return }
-        defaults?.set(data, forKey: Key.settings)
+        allDefaults.forEach { $0.set(data, forKey: Key.settings) }
         writeContainerFile(data, forKey: Key.settings)
         if let json = String(data: data, encoding: .utf8) {
             KeychainStore.set(json, forKey: Key.settings)
@@ -651,9 +726,11 @@ public enum SharedStore {
     // MARK: 车况快照（App Group 为主，Keychain/容器文件镜像兜底——重签环境下 App Group 可能失效）
 
     public static func loadStatusSnapshot() -> StatusSnapshot? {
-        if let data = defaults?.data(forKey: Key.statusSnapshot),
-           let snapshot = try? JSONDecoder().decode(StatusSnapshot.self, from: data) {
-            return snapshot
+        for d in allDefaults {
+            if let data = d.data(forKey: Key.statusSnapshot),
+               let snapshot = try? JSONDecoder().decode(StatusSnapshot.self, from: data) {
+                return snapshot
+            }
         }
         if let data = containerFileData(Key.statusSnapshot),
            let snapshot = try? JSONDecoder().decode(StatusSnapshot.self, from: data) {
@@ -669,7 +746,7 @@ public enum SharedStore {
 
     public static func saveStatusSnapshot(_ snapshot: StatusSnapshot) {
         guard let data = try? JSONEncoder().encode(snapshot) else { return }
-        defaults?.set(data, forKey: Key.statusSnapshot)
+        allDefaults.forEach { $0.set(data, forKey: Key.statusSnapshot) }
         writeContainerFile(data, forKey: Key.statusSnapshot)
         if let json = String(data: data, encoding: .utf8) {
             KeychainStore.set(json, forKey: Key.statusSnapshot)
@@ -678,7 +755,7 @@ public enum SharedStore {
 
     /// 退出登录时清空快照（小组件展示「未登录」）
     public static func clearStatusSnapshot() {
-        defaults?.removeObject(forKey: Key.statusSnapshot)
+        allDefaults.forEach { $0.removeObject(forKey: Key.statusSnapshot) }
         writeContainerFile(nil, forKey: Key.statusSnapshot)
         KeychainStore.remove(Key.statusSnapshot)
     }
@@ -718,12 +795,14 @@ public enum SharedStore {
     }
 
     /// 自定义服务器地址（换域名时站主在设置里手填，免发版）。空 = 用默认地址。
+    /// 小组件进程拉车况也要用，故走多组遍历（重签环境组名可能变化）。
     public static func loadServerBaseURL() -> String? {
-        let t = defaults?.string(forKey: Key.serverBaseURL)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !t.isEmpty else { return nil }
+        let t = allDefaults.compactMap { $0.string(forKey: Key.serverBaseURL) }
+            .first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? ""
+        let trimmed = t.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
         // 规范化：补协议、去末尾斜杠，避免拼 URL 出错
-        var url = t
+        var url = trimmed
         if !url.hasPrefix("http://") && !url.hasPrefix("https://") {
             url = "https://" + url
         }
@@ -732,19 +811,21 @@ public enum SharedStore {
     }
 
     public static func saveServerBaseURL(_ url: String?) {
-        defaults?.set(url?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
-                      forKey: Key.serverBaseURL)
+        let value = url?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        allDefaults.forEach { $0.set(value, forKey: Key.serverBaseURL) }
     }
 
     /// 开放平台最新 refresh_token（oauth 每次刷新都会轮换，必须存回本地，
     /// 下次优先用最新的，否则长安会返回降级 token：scope 只剩 car_info/user）
     public static func loadACOpenRefreshToken() -> String? {
-        let t = defaults?.string(forKey: Key.acOpenRefreshToken) ?? ""
+        let t = allDefaults.compactMap { $0.string(forKey: Key.acOpenRefreshToken) }
+            .first { !$0.isEmpty } ?? ""
         return t.isEmpty ? nil : t
     }
 
     public static func saveACOpenRefreshToken(_ token: String?) {
-        defaults?.set(token ?? "", forKey: Key.acOpenRefreshToken)
+        let value = token ?? ""
+        allDefaults.forEach { $0.set(value, forKey: Key.acOpenRefreshToken) }
     }
 
     /// 上次开空调选择的温度（网页版 localStorage ac_last_temp，16~32 有效）

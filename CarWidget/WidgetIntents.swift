@@ -20,10 +20,16 @@ enum WidgetSlotRunner {
 
     @MainActor
     static func perform(slot: Int) async -> String {
+        await perform(command: command(forSlot: slot))
+    }
+
+    /// 执行单条指令（锁屏快捷按钮与槽位按钮共用）。
+    /// 结果落盘并刷新时间线：小组件界面显示绿✓/红✗横幅作为点击反馈
+    @MainActor
+    static func perform(command: CarCommand?) async -> String {
         let text: String
         let ok: Bool
-        if let credentials = SharedStore.loadCredentials(),
-           let command = command(forSlot: slot) {
+        if let credentials = SharedStore.loadCredentials(), let command {
             do {
                 let result = try await CarService.execute(command: command, credentials: credentials)
                 ok = result.ok
@@ -32,6 +38,8 @@ enum WidgetSlotRunner {
                 ok = false
                 text = "\(command.displayName)失败：\(CarIntentRunner.cleanReason(error.localizedDescription))"
             }
+            // 执行成功后本地同步翻转状态：锁屏按钮图标立即反映最新锁态/发动机态
+            if ok { syncSnapshotState(command: command) }
         } else if SharedStore.loadCredentials() == nil {
             text = "请先在「长安控车」App 中登录"
             ok = false
@@ -39,10 +47,23 @@ enum WidgetSlotRunner {
             text = "请在 App「设置 → 小组件按钮」中配置该按钮"
             ok = false
         }
-        // 结果落盘并刷新时间线：小组件界面显示绿✓/红✗横幅作为点击反馈
         Self.saveFeedback(text: text, ok: ok)
         WidgetCenter.shared.reloadAllTimelines()
         return text
+    }
+
+    /// 指令执行成功后更新本地快照的车况状态位（下次时间线渲染即生效）
+    private static func syncSnapshotState(command: CarCommand) {
+        guard var snapshot = SharedStore.loadStatusSnapshot() else { return }
+        switch command {
+        case .unlockDoor: snapshot.doorUnlocked = true
+        case .lockDoor: snapshot.doorUnlocked = false
+        case .openEngine: snapshot.engineRunning = true
+        case .closeEngine: snapshot.engineRunning = false
+        default: return
+        }
+        snapshot.updatedAt = Date()
+        SharedStore.saveStatusSnapshot(snapshot)
     }
 
     // MARK: 执行结果反馈（小组件进程本地存储，时间线渲染时读取）
@@ -67,17 +88,6 @@ enum WidgetSlotRunner {
               let action = try? JSONDecoder().decode(LastAction.self, from: data),
               Date().timeIntervalSince(action.at) < 35 else { return nil }
         return action
-    }
-}
-
-/// 高危指令（点火/熄火等）在小组件里直接执行的确认提示：
-/// 小组件进程无法弹确认框，因此高危指令执行时通过 App 打开确认（openAppWhenRun）。
-private func isDangerous(_ command: CarCommand?) -> Bool {
-    switch command {
-    case .openEngine, .closeEngine, .openWindow:
-        return true
-    default:
-        return false
     }
 }
 
@@ -130,5 +140,42 @@ public struct WidgetSlot5Intent: AppIntent {
     public init() {}
     public func perform() async throws -> some IntentResult & ProvidesDialog {
         .result(dialog: IntentDialog(stringLiteral: await WidgetSlotRunner.perform(slot: 5)))
+    }
+}
+
+// MARK: - 锁屏快捷控车 Intent（iOS 17 交互式小组件，不解锁手机直接执行）
+
+/// 开关车门锁（智能反向）：已锁止 → 开锁；已开锁 → 闭锁
+public struct LockToggleIntent: AppIntent {
+    public static var title: LocalizedStringResource = "开关车门锁"
+    public static var description: IntentDescription = "车门已锁则开锁，已开锁则闭锁（不解锁手机直接控车）"
+    public static var openAppWhenRun: Bool = false
+    public init() {}
+    public func perform() async throws -> some IntentResult & ProvidesDialog {
+        let command: CarCommand = SharedStore.loadStatusSnapshot()?.doorUnlocked == true ? .lockDoor : .unlockDoor
+        return .result(dialog: IntentDialog(stringLiteral: await WidgetSlotRunner.perform(command: command)))
+    }
+}
+
+/// 点火/熄火（智能反向）：发动机未运行 → 点火；运行中 → 熄火
+public struct EngineToggleIntent: AppIntent {
+    public static var title: LocalizedStringResource = "点火 / 熄火"
+    public static var description: IntentDescription = "发动机未运行则远程点火，运行中则熄火（不解锁手机直接控车）"
+    public static var openAppWhenRun: Bool = false
+    public init() {}
+    public func perform() async throws -> some IntentResult & ProvidesDialog {
+        let command: CarCommand = SharedStore.loadStatusSnapshot()?.engineRunning == true ? .closeEngine : .openEngine
+        return .result(dialog: IntentDialog(stringLiteral: await WidgetSlotRunner.perform(command: command)))
+    }
+}
+
+/// 寻车：鸣笛 + 闪灯（车钥匙找车同款效果）
+public struct WhistleFindIntent: AppIntent {
+    public static var title: LocalizedStringResource = "寻车"
+    public static var description: IntentDescription = "鸣笛闪灯帮助快速找到爱车（不解锁手机直接执行）"
+    public static var openAppWhenRun: Bool = false
+    public init() {}
+    public func perform() async throws -> some IntentResult & ProvidesDialog {
+        return .result(dialog: IntentDialog(stringLiteral: await WidgetSlotRunner.perform(command: .remoteSearchCar)))
     }
 }

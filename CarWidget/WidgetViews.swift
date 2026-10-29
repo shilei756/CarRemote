@@ -400,6 +400,102 @@ struct AccessoryCircularView: View {
     }
 }
 
+// MARK: - 锁屏快捷控车（独立小组件，iOS 17 交互式不解锁控车）
+
+/// 快捷控车小组件入口（圆形大锁钮 / 矩形三按钮）
+struct QuickControlEntryView: View {
+    @Environment(\.widgetFamily) private var family
+    var entry: CarStatusEntry
+
+    var body: some View {
+        switch family {
+        case .accessoryRectangular:
+            QuickRectangularView(entry: entry)
+        default:
+            QuickCircularView(entry: entry)
+        }
+    }
+}
+
+/// 锁屏圆形：大锁钮，点按智能反向执行（已锁→开锁，已开→闭锁）
+struct QuickCircularView: View {
+    let entry: CarStatusEntry
+
+    var body: some View {
+        let unlocked = entry.snapshot?.doorUnlocked ?? false
+        ZStack {
+            AccessoryWidgetBackground()
+            Button(intent: LockToggleIntent()) {
+                VStack(spacing: 1) {
+                    Image(systemName: unlocked ? "lock.open.fill" : "lock.fill")
+                        .font(.system(size: 20, weight: .bold))
+                    Text(unlocked ? "闭锁" : "开锁")
+                        .font(.system(size: 9, weight: .semibold))
+                }
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(unlocked ? Color.orange : Color.green)
+        }
+        .accessibilityLabel(unlocked ? "当前已开锁，点按闭锁" : "当前已锁止，点按开锁")
+    }
+}
+
+/// 锁屏矩形：车名 + 三个快捷按钮（开关锁 / 点火熄火 / 寻车）
+struct QuickRectangularView: View {
+    let entry: CarStatusEntry
+
+    var body: some View {
+        let unlocked = entry.snapshot?.doorUnlocked ?? false
+        let engineOn = entry.snapshot?.engineRunning ?? false
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 4) {
+                Text(entry.snapshot?.carName ?? "长安控车")
+                    .font(.headline)
+                    .widgetAccentable()
+                    .lineLimit(1)
+                Spacer()
+                if let action = WidgetSlotRunner.lastAction() {
+                    Image(systemName: action.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(action.ok ? Color.green : Color.red)
+                }
+            }
+            HStack(spacing: 6) {
+                quickButton(icon: unlocked ? "lock.fill" : "lock.open.fill",
+                            text: unlocked ? "闭锁" : "开锁",
+                            tint: unlocked ? .green : .orange,
+                            intent: LockToggleIntent())
+                quickButton(icon: engineOn ? "engine.combustion.fill" : "engine.combustion",
+                            text: engineOn ? "熄火" : "点火",
+                            tint: engineOn ? .gray : .red,
+                            intent: EngineToggleIntent())
+                quickButton(icon: "light.beacon.max",
+                            text: "寻车",
+                            tint: .cyan,
+                            intent: WhistleFindIntent())
+            }
+        }
+    }
+
+    private func quickButton<I: AppIntent>(icon: String, text: String, tint: Color, intent: I) -> some View {
+        Button(intent: intent) {
+            VStack(spacing: 2) {
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .semibold))
+                Text(text)
+                    .font(.system(size: 9, weight: .semibold))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 4)
+            .background(tint.opacity(0.16))
+            .foregroundStyle(tint)
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(text)
+    }
+}
+
 // MARK: - 锁屏（矩形）
 
 struct AccessoryRectangularView: View {
@@ -412,10 +508,22 @@ struct AccessoryRectangularView: View {
                     Text(snapshot.carName)
                         .font(.headline)
                         .widgetAccentable()
+                        .lineLimit(1)
                     Spacer()
-                    Image(systemName: snapshot.doorUnlocked ? "lock.open.fill" : "lock.fill")
-                        .font(.caption)
-                        .widgetAccentable()
+                    // 锁图标本身就是开关锁按钮（iOS 17 交互式，不解锁直接控车）
+                    if #available(iOSApplicationExtension 17.0, *) {
+                        Button(intent: LockToggleIntent()) {
+                            Image(systemName: snapshot.doorUnlocked ? "lock.open.fill" : "lock.fill")
+                                .font(.caption)
+                                .foregroundStyle(snapshot.doorUnlocked ? Color.orange : Color.green)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(snapshot.doorUnlocked ? "已开锁，点按闭锁" : "已锁止，点按开锁")
+                    } else {
+                        Image(systemName: snapshot.doorUnlocked ? "lock.open.fill" : "lock.fill")
+                            .font(.caption)
+                            .widgetAccentable()
+                    }
                 }
                 HStack(alignment: .firstTextBaseline, spacing: 3) {
                     Text("续航")

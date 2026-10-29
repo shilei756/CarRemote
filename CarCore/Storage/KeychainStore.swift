@@ -12,12 +12,13 @@ public enum KeychainStore {
 
     private static let service = "app.copper1249.chipmunk6639.keychain"
 
-    /// 访问组候选（iOS 真机；模拟器返回空走默认 keychain）
+    /// 访问组候选（iOS 真机）：工程声明的组 + 重签描述文件动态发现的组；
+    /// 模拟器不支持 Access Group，自动降级走默认 keychain
     private static func accessGroups() -> [String] {
         #if targetEnvironment(simulator)
         return []
         #else
-        return [APIConfig.keychainAccessGroup]
+        return ResignCompat.candidateKeychainGroups()
         #endif
     }
 

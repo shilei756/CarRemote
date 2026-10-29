@@ -222,6 +222,12 @@ struct SettingsView: View {
                 WidgetButtonsPage(settings: $settings)
             }
             rowDivider
+            // 小组件诊断（重签环境数据通道排查）
+            linkRow(symbol: "stethoscope", tint: WebTheme.red,
+                    title: "小组件诊断", subtitle: "桌面组件不显示车况时点这里排查") {
+                WidgetDiagnosticsPage()
+            }
+            rowDivider
             // Siri 语音控制
             linkRow(symbol: "waveform", tint: WebTheme.blue,
                     title: "Siri 语音控制", subtitle: "对 Siri 说短语即可控车",
@@ -583,6 +589,55 @@ struct ConfirmSettingsPage: View {
 
     private func saveSettings() {
         SharedStore.saveSettings(settings)
+    }
+}
+
+// MARK: - 小组件诊断子页
+
+struct WidgetDiagnosticsPage: View {
+    @State private var report = ""
+    @State private var refreshedAt = ""
+
+    var body: some View {
+        Form {
+            Section {
+                Text(report)
+                    .font(.system(size: 12.5, design: .monospaced))
+                    .lineSpacing(4)
+                    .textSelection(.enabled)
+            } header: {
+                Text("数据通道")
+            }
+
+            Section {
+                Text("小组件显示「未登录」通常只有一个原因：重签安装时没有带上共享权限。处理方法：\n\n1. 在重签平台（全能签等）的云签配置里，为本应用开通 App Groups 并填入组名 group.6cd6b6c14418f98a.1（有钥匙串共享选项的话一并勾选）；\n2. 重新签名安装，打开 App 登录一次；\n3. 回到桌面长按刷新小组件。\n\n若平台改发了别的组名，本版本会自动识别并改用新组，无需改代码。")
+                    .font(.system(size: 12.5))
+                    .lineSpacing(4)
+            } header: {
+                Text("修复指引")
+            } footer: {
+                Text("检查于 \(refreshedAt)。主屏小组件与锁屏小组件共用同一套数据通道。")
+            }
+        }
+        .hideScrollBackground()
+        .inlineTitle("小组件诊断")
+        .onAppear(perform: refresh)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    refresh()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+            }
+        }
+    }
+
+    private func refresh() {
+        report = SharedStore.widgetChannelReport()
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
+        refreshedAt = f.string(from: Date())
     }
 }
 
