@@ -542,12 +542,24 @@ enum GLBCarModelLoader {
     }
 
     /// image 字节（WebP/PNG/JPEG）→ TextureResource
-    /// （不传 CreateOptions：generateMipmaps 选项在新 SDK 中类型有变动，默认选项即可）
+    ///
+    /// 走「CGImage → PNG 临时文件 → TextureResource.load(contentsOf:)」：
+    /// iOS 26 SDK 移除了 generate(from:) 旧重载（新签名要求 semantic 参数），
+    /// 而 load(contentsOf:) 与 .rk 管线同款，全 SDK 版本稳定可用。
     private static func makeTexture(from bytes: Data) -> TextureResource? {
         guard let src = CGImageSourceCreateWithData(bytes as CFData, nil),
               let cg = CGImageSourceCreateImageAtIndex(src, 0, [kCGImageSourceShouldCache: false] as CFDictionary)
         else { return nil }
-        return try? TextureResource.generate(from: cg, withName: "glb_tex", options: .init())
+        guard let png = UIImage(cgImage: cg).pngData() else { return nil }
+        let url = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("glb_tex_\(UUID().uuidString).png")
+        do {
+            try png.write(to: url)
+        } catch {
+            return nil
+        }
+        defer { try? FileManager.default.removeItem(at: url) }
+        return try? TextureResource.load(contentsOf: url)
     }
 
     // MARK: - 几何兜底
