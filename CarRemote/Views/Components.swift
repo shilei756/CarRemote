@@ -21,7 +21,7 @@ struct SectionCard<Content: View>: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .webCard()
+        .glassCard()
         .overlay(alignment: .top) {
             // 神兽主题下樱花不生效（网页版：神兽与经典樱花二选一）
             if sakura && WebTheme.myth == nil {

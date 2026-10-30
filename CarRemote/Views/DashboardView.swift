@@ -603,7 +603,7 @@ struct DashboardView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .webCard()
+        .glassCard()
     }
 
     // MARK: - 定位入口（点击才查询 + 详情弹窗，对齐网页版 locCard 效果）

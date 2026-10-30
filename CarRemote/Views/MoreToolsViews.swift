@@ -740,12 +740,7 @@ struct WallpaperSheet: View {
             .buttonStyle(.plain)
         }
         .padding(14)
-        .background(WebTheme.card)
-        .clipShape(RoundedRectangle(cornerRadius: WebTheme.cardRadius, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: WebTheme.cardRadius, style: .continuous)
-                .strokeBorder(WebTheme.border, lineWidth: 1)
-        )
+        .glassCard()
     }
 
     /// 单个神兽主题卡（网页版 mythList 行）
@@ -836,7 +831,7 @@ struct WallpaperSheet: View {
                 }
             }
             .padding(14)
-            .webCard()
+            .glassCard()
         }
         .buttonStyle(.plain)
     }

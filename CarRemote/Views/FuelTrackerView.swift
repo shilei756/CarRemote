@@ -236,12 +236,7 @@ struct FuelTrackerView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(WebTheme.card.opacity(0.7))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(WebTheme.border.opacity(0.6), lineWidth: 1)
-        )
+        .glassCard(radius: 12)
     }
 }
 

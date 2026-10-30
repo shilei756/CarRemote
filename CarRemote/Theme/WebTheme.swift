@@ -147,14 +147,16 @@ extension Color {
 
 // MARK: - 网页版卡片修饰符
 
-/// 控制台白卡：白底 + 1px 边框 + 圆角 20 + 轻阴影（.card）
+/// 控制台白卡：白底 + 1px 边框 + 圆角 + 轻阴影（.card），圆角可定制
 struct WebCardStyle: ViewModifier {
+    var radius: CGFloat = WebTheme.cardRadius
+
     func body(content: Content) -> some View {
         content
             .background(WebTheme.card)
-            .clipShape(RoundedRectangle(cornerRadius: WebTheme.cardRadius, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: WebTheme.cardRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
                     .strokeBorder(WebTheme.border, lineWidth: 1)
             )
             .shadow(color: WebTheme.cardShadow, radius: 10, x: 0, y: 2)
@@ -163,20 +165,33 @@ struct WebCardStyle: ViewModifier {
 
 extension View {
     /// 应用网页版控制台卡片样式
-    func webCard() -> some View {
-        modifier(WebCardStyle())
+    func webCard(radius: CGFloat = WebTheme.cardRadius) -> some View {
+        modifier(WebCardStyle(radius: radius))
     }
 }
 
 extension View {
     /// 控车栏样式：iOS 26 用液态玻璃（Liquid Glass），旧系统回退网页版白卡。
     /// 配合自定义壁纸时，玻璃栏会透出壁纸，质感最佳。
+    /// 注意：glassEffect 默认形状是胶囊，控车栏本就是胶囊形，故不传形状。
     @ViewBuilder
     func controlBarStyle() -> some View {
         if #available(iOS 26.0, *) {
             self.glassEffect()
         } else {
             self.webCard()
+        }
+    }
+
+    /// 卡片液态玻璃：iOS 26 用 Liquid Glass 圆角矩形（整卡上玻璃，与控车栏同质感），
+    /// 旧系统回退网页版白卡。矩形卡片必须显式指定圆角矩形，
+    /// 否则 glassEffect 默认胶囊形会把卡片挤成胶囊。
+    @ViewBuilder
+    func glassCard(radius: CGFloat = WebTheme.cardRadius) -> some View {
+        if #available(iOS 26.0, *) {
+            self.glassEffect(in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+        } else {
+            self.webCard(radius: radius)
         }
     }
 }

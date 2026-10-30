@@ -89,9 +89,7 @@ struct SettingsView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity)
-        .background(WebTheme.card)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(WebTheme.border, lineWidth: 1))
+        .glassCard(radius: 16)
     }
 
     // MARK: - 切换车型（横滑卡片）
@@ -149,9 +147,7 @@ struct SettingsView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(WebTheme.card)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(WebTheme.border, lineWidth: 1))
+        .glassCard(radius: 16)
     }
 
     // MARK: - 设置列表（逐行进入子页）
@@ -270,9 +266,7 @@ struct SettingsView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 4)
-        .background(WebTheme.card)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(WebTheme.border, lineWidth: 1))
+        .glassCard(radius: 16)
     }
 
     /// 行间分隔线
@@ -489,9 +483,7 @@ struct SettingsView: View {
             .padding(.vertical, 12)
         }
         .padding(.horizontal, 14)
-        .background(WebTheme.card)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(WebTheme.border, lineWidth: 1))
+        .glassCard(radius: 16)
     }
 
     private var logoutButton: some View {
@@ -550,9 +542,7 @@ struct DisclaimerPage: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .background(WebTheme.card)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(WebTheme.border, lineWidth: 1))
+        .glassCard(radius: 14)
     }
 }
 
@@ -834,9 +824,7 @@ struct AboutPage: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity)
-            .background(WebTheme.card)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(WebTheme.border, lineWidth: 1))
+            .glassCard(radius: 14)
     }
 
     private func aboutRow(label: String, value: String) -> some View {

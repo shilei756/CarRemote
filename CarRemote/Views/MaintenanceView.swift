@@ -216,11 +216,10 @@ struct MaintenanceView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(WebTheme.card)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .glassCard(radius: 12)
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(due ? WebTheme.red.opacity(0.35) : WebTheme.border, lineWidth: 1)
+                .strokeBorder(due ? WebTheme.red.opacity(0.35) : WebTheme.border.opacity(0.5), lineWidth: 1)
         )
     }
 

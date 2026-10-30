@@ -48,12 +48,7 @@ private struct StatusGroup<Content: View>: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(WebTheme.card)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(WebTheme.border, lineWidth: 1)
-        )
+        .glassCard(radius: 14)
     }
 }
 
@@ -351,12 +346,7 @@ struct PanoramaSheet: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity)
-        .background(WebTheme.card)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(WebTheme.border, lineWidth: 1)
-        )
+        .glassCard(radius: 14)
     }
 
     // MARK: - 新拍图片
@@ -372,12 +362,7 @@ struct PanoramaSheet: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(WebTheme.card)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(WebTheme.border, lineWidth: 1)
-        )
+        .glassCard(radius: 14)
     }
 
     // MARK: - 历史
@@ -442,12 +427,7 @@ struct PanoramaSheet: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(WebTheme.card)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(WebTheme.border, lineWidth: 1)
-        )
+        .glassCard(radius: 14)
     }
 
     /// 2×2 图片网格
