@@ -172,7 +172,8 @@ enum GLBCarModelLoader {
             }
 
             let rootNodes: [Int]
-            if let sceneIdx = (json["scene"] as? Int) ?? 0, sceneIdx < scenesJSON.count,
+            let sceneIdx = json["scene"] as? Int ?? 0
+            if sceneIdx < scenesJSON.count,
                let rn = scenesJSON[sceneIdx]["nodes"] as? [Int] {
                 rootNodes = rn
             } else {
@@ -372,11 +373,12 @@ enum GLBCarModelLoader {
     private static func localMatrix(_ node: [String: Any]) -> simd_float4x4 {
         if let m = node["matrix"] as? [Double], m.count == 16 {
             var mat = matrix_identity_float4x4
-            for c in 0..<4 {
-                for r in 0..<4 {
-                    mat.columns[c][r] = Float(m[c * 4 + r])   // glTF 列主序
-                }
-            }
+            // glTF matrix 为列主序 4×4；simd_float4x4.columns 是元组，
+            // 不能用下标访问，须逐列赋值
+            mat.columns.0 = SIMD4<Float>(Float(m[0]), Float(m[1]), Float(m[2]), Float(m[3]))
+            mat.columns.1 = SIMD4<Float>(Float(m[4]), Float(m[5]), Float(m[6]), Float(m[7]))
+            mat.columns.2 = SIMD4<Float>(Float(m[8]), Float(m[9]), Float(m[10]), Float(m[11]))
+            mat.columns.3 = SIMD4<Float>(Float(m[12]), Float(m[13]), Float(m[14]), Float(m[15]))
             return mat
         }
         let t = node["translation"] as? [Double] ?? [0, 0, 0]
@@ -540,12 +542,12 @@ enum GLBCarModelLoader {
     }
 
     /// image 字节（WebP/PNG/JPEG）→ TextureResource
+    /// （不传 CreateOptions：generateMipmaps 选项在新 SDK 中类型有变动，默认选项即可）
     private static func makeTexture(from bytes: Data) -> TextureResource? {
         guard let src = CGImageSourceCreateWithData(bytes as CFData, nil),
               let cg = CGImageSourceCreateImageAtIndex(src, 0, [kCGImageSourceShouldCache: false] as CFDictionary)
         else { return nil }
-        return try? TextureResource.generate(from: cg, withName: "glb_tex",
-                                             options: [.generateMipmaps])
+        return try? TextureResource.generate(from: cg, withName: "glb_tex")
     }
 
     // MARK: - 几何兜底
