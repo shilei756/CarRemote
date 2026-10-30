@@ -554,17 +554,14 @@ struct DashboardView: View {
     private var moreControlsCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             // 标题行：更多控车 + 空调控制（新版/官方版切换）与标题同行对齐
+            // 开通状态提示放在「空调」左侧（横排，不挤右侧）
             HStack(spacing: 8) {
                 Text("更多控车")
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(WebTheme.txt)
                 Spacer(minLength: 8)
-                Text("空调")
-                    .font(.system(size: 10))
-                    .foregroundStyle(WebTheme.faint)
-                acModeSlider
                 if viewModel.acMode == .new {
-                    // 开通剩余日期（已开通才显示）
+                    // 开通剩余日期（已开通才显示），位于「空调」左侧
                     if let days = viewModel.acRemainingDays {
                         Text("剩余 \(days) 天")
                             .font(.system(size: 9, weight: .semibold))
@@ -575,6 +572,10 @@ struct DashboardView: View {
                             .foregroundStyle(WebTheme.amber)
                     }
                 }
+                Text("空调")
+                    .font(.system(size: 10))
+                    .foregroundStyle(WebTheme.faint)
+                acModeSlider
             }
             LazyVGrid(
                 columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 5),
