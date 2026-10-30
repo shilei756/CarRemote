@@ -6,6 +6,7 @@ import Foundation
 public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
     case yidong = "yidong"                  // 逸动PLUS
     case yidongWhite = "yidong_white"       // 逸动PLUS 白色
+    case yidong3 = "yidong3"                // 三代逸动（网站新增 2D 车模，增加不替换）
     case univ = "univ"                      // UNI-V
     case cs75 = "cs75"                      // CS75PLUS
     case univK = "univ_k"                   // UNI-K
@@ -17,6 +18,7 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
         switch self {
         case .yidong: return "逸动PLUS"
         case .yidongWhite: return "逸动PLUS 白色"
+        case .yidong3: return "三代逸动"
         case .univ: return "UNI-V"
         case .cs75: return "CS75PLUS"
         case .univK: return "UNI-K"
@@ -27,7 +29,7 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
 
     public var sfSymbol: String {
         switch self {
-        case .yidong, .yidongWhite: return "car"
+        case .yidong, .yidongWhite, .yidong3: return "car"
         case .univ: return "car.rear"
         case .cs75, .cs75Black, .univK, .cs7520: return "car.front"
         }
@@ -38,6 +40,7 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
         switch self {
         case .yidong: return "car_yidong"
         case .yidongWhite: return "car_yidong_white"
+        case .yidong3: return "car_yidong3"
         case .univ: return "car_univ"
         case .cs75: return "car_cs75plus"
         case .univK: return "car_univ_k"
@@ -51,6 +54,7 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
         switch self {
         case .yidong: return "car_top_yidong"
         case .yidongWhite: return "car_top_yidong_white"
+        case .yidong3: return "car_top_yidong3"
         case .univ: return "car_top_univ"
         case .cs75: return "car_top_cs75plus"
         case .univK: return "car_top_univ_k"
@@ -89,7 +93,7 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
     /// 油箱容积 L（网页版 CAR_MODELS.tank：切换车型时联动油量百分比）
     public var tankCapacityL: Double {
         switch self {
-        case .yidong, .yidongWhite: return 53
+        case .yidong, .yidongWhite, .yidong3: return 53
         case .univ: return 51
         case .cs75, .cs75Black, .cs7520: return 58
         case .univK: return 56

@@ -562,17 +562,7 @@ struct DashboardView: View {
                 Text("空调")
                     .font(.system(size: 10))
                     .foregroundStyle(WebTheme.faint)
-                Picker("空调模式", selection: Binding(
-                    get: { viewModel.acMode },
-                    set: { viewModel.setACMode($0) }
-                )) {
-                    ForEach(ACMode.allCases, id: \.self) { mode in
-                        Text(mode.rawValue).tag(mode)
-                    }
-                }
-                .pickerStyle(.menu)
-                .tint(WebTheme.blue)
-                .frame(width: 78)
+                acModeSlider
                 if viewModel.acMode == .new {
                     // 开通剩余日期（已开通才显示）
                     if let days = viewModel.acRemainingDays {
@@ -604,6 +594,41 @@ struct DashboardView: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .glassCard()
+    }
+
+    // MARK: 空调模式胶囊滑块（与车模 3D/2D 切换同款交互）
+
+    private var acModeSlider: some View {
+        HStack(spacing: 0) {
+            acModeSegment(.new, title: "新版")
+            acModeSegment(.official, title: "官方")
+        }
+        .padding(3)
+        .background(Color(.secondarySystemBackground).opacity(0.9))
+        .clipShape(Capsule())
+        .overlay(Capsule().strokeBorder(WebTheme.border, lineWidth: 1))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("空调控制模式")
+        .accessibilityHint("可在新版开放平台链路与官方直连链路之间切换")
+    }
+
+    private func acModeSegment(_ mode: ACMode, title: String) -> some View {
+        let selected = viewModel.acMode == mode
+        return Button {
+            withAnimation(.easeInOut(duration: 0.18)) { viewModel.setACMode(mode) }
+        } label: {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(selected ? Color.white : WebTheme.muted)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(
+                    Capsule().fill(selected ? WebTheme.blue : Color.clear)
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(mode == .new ? "新版（开放平台）" : "官方版（直连）")
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
 
     // MARK: - 定位入口（点击才查询 + 详情弹窗，对齐网页版 locCard 效果）
