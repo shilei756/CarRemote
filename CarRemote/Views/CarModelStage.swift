@@ -493,12 +493,8 @@ struct CarVisual3DStage: View {
                 .padding(.top, 2)
             }
 
-            // 车模下方的说明区（车况摘要 + 手势提示）
-            // 1.1.4-b108：恢复该区域 —— 此前误以为是「切车身的框」而删除，
-            // 用户澄清要删的是车头前部那面切割车身的几何「世界墙」（资产层问题）。
-            if show3D && !model.loadFailed && model.isLoaded {
-                controlStrip
-            }
+            // 1.5.1 用户反馈：3D 车模下方保持与 2D 车图一样纯净，
+            // 车况摘要文字 / 手势提示一并移除（车况徽标仍在舞台外展示）。
         }
         .compatOnChange(of: model.loadFailed) { failed in
             // 3D 加载失败：自动回退 2D 车图；「重置视角/3D」滑块仍可手动重试加载
@@ -558,27 +554,8 @@ struct CarVisual3DStage: View {
 
     // MARK: 车况联动说明
 
-    /// 车况联动说明区（可见文字 + 底部手势提示）
-    private var controlStrip: some View {
-        VStack(spacing: 6) {
-            statusSummary
-            Text("滑动旋转车模 · 双指捏合缩放 · 双击复位视角")
-                .font(.system(size: 9))
-                .foregroundStyle(WebTheme.faint)
-                .frame(maxWidth: .infinity, alignment: .center)
-        }
-        .padding(.top, 8)
-    }
-
-    /// 车况联动摘要（逐门逐窗 + 灯/车轮状态）
-    private var statusSummary: some View {
-        let text = statusSummaryText
-        return Text(text)
-            .font(.system(size: 10))
-            .foregroundStyle(WebTheme.muted)
-            .frame(maxWidth: .infinity, alignment: .center)
-            .accessibilityLabel(text)
-    }
+    /// 1.5.1：3D 舞台下方说明区已整体移除（保持与 2D 车图一致纯净），
+    /// 仅保留无障碍描述中的车况摘要朗读。
 
     /// 车模的无障碍描述（含手势提示与车况摘要）。
     private var accessibilityModelDescription: String {

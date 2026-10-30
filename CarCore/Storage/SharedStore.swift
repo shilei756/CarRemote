@@ -14,7 +14,7 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
     case cs75Black = "cs75_black"            // CS75PLUS 黑色（用户网站新增 2D 图，增加不替换）
 
     /// 「我的爱车」GLB 官方车模 ↔ 现有 2D 车型映射（能对应上的都接 3D，其余车型已删除）：
-    ///   c211=逸动PLUS（已有官方 .rk 全件模，保留联动更佳）  c281=UNI-V
+    ///   c211=逸动PLUS（1.5.1 起灰/白两款均换用本模）  c281=UNI-V
     ///   c589=三代逸动   s311=CS75PLUS 二代   s311mca1phev=CS75PLUS 三代（无对应 2D，已删）
     ///   cd569=CS35PLUS / s202=UNI-T / s203=CS55PLUS / c236 / c281phev / s311mca：无 2D 对应，已删
     public static let glbModelNames: [CarModelStyle: String] = [
@@ -81,13 +81,14 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
         return model3DName != nil
     }
 
-    /// 3D 车模资源名：
-    ///   - "xxx.glb" →「我的爱车」GLB 官方模（GLBCarModelLoader 解析，门窗/尾门/天窗/车轮联动）
-    ///   - 其余     → 智慧云控 .rk 官方全件模（Car3DView .rk 管线）
+    /// 3D 车模资源名（全部为「我的爱车」GLB 官方模，GLBCarModelLoader 解析，
+    /// 门窗/尾门/天窗/车轮联动）：
+    ///   - "c211_gray.glb" → c211 车模 + 灰漆变体（网页版 #C6C6C6 加深一档）
+    ///   - 其余按 glbModelNames 映射
     public var model3DName: String? {
         switch self {
-        case .yidong: return "EadoPlus2022Gray"   // C211 全部件模 · 钛光银灰（1.1.4-b110 用户指定，色值 #C6C6C6 对齐官网）
-        case .yidongWhite: return "EadoPlus2022"  // C211 全部件模 · 白色款
+        case .yidong: return "c211_gray.glb"   // 逸动PLUS · 深空灰（1.5.1 用户指定：替换旧 .rk 全件模）
+        case .yidongWhite: return "c211.glb"   // 逸动PLUS · 白色款
         default:
             guard let glb = Self.glbModelNames[self] else { return nil }
             return "\(glb).glb"

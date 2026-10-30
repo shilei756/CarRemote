@@ -55,7 +55,7 @@ struct CarModelGalleryView: View {
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(WebTheme.txt)
                 Spacer()
-                Text("共 \(Self.catalogStyles.count) 款 · 来自「我的爱车」")
+                Text("共 \(Self.catalogStyles.count) 款 · 本 App 内置资产")
                     .font(.system(size: 10.5))
                     .foregroundStyle(WebTheme.faint)
             }
@@ -126,7 +126,7 @@ struct CarModelGalleryView: View {
             Label("车模说明", systemImage: "info.circle.fill")
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(WebTheme.txt)
-            Text("以下车模提取自「我的爱车」App 的三维展厅资产，与「切换车型」共用同一套官方模型。")
+            Text("本 App 内置的官方三维车模资产，与「切换车型」共用同一套模型。")
                 .font(.system(size: 11.5))
                 .foregroundStyle(WebTheme.muted)
             Text("拖拽旋转（横+纵）· 双指捏合缩放 · 双击复位视角 · 点「俯视图」缓动切到车顶视角 · 长按车门/尾门/天窗可开合预览。车灯保持熄灭。")

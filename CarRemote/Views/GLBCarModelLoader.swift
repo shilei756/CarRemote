@@ -35,10 +35,20 @@ enum GLBCarModelLoader {
     // MARK: - 顶层入口（后台线程调用）
 
     /// 按资源名加载 Bundle 内的 .glb 车模（XcodeGen 打包层级可能扁平化，多路径兜底）。
+    ///
+    /// 配色变体约定：资源名以 `_gray` 结尾（如 `c211_gray`）→ 复用同文件车模
+    /// 并对车漆整体乘一层更深的灰色调（网页版逸动 #C6C6C6 再加深）。
     static func load(named name: String) -> RKCarModel? {
-        guard let url = resourceURL(named: name, ext: "glb"),
+        var res = name
+        var tint: SIMD4<Float>? = nil
+        if res.hasSuffix("_gray") {
+            res = String(res.dropLast(5))
+            // 线性空间乘色：0.46 → sRGB ≈ #B0B2B5，比网页版 #C6C6C6 深一档
+            tint = SIMD4<Float>(0.46, 0.47, 0.49, 1)
+        }
+        guard let url = resourceURL(named: res, ext: "glb"),
               let data = try? Data(contentsOf: url) else { return nil }
-        return build(from: data)
+        return build(from: data, tint: tint)
     }
 
     static func resourceURL(named name: String, ext: String) -> URL? {
@@ -82,7 +92,7 @@ enum GLBCarModelLoader {
 
     // MARK: - GLB 构建主流程
 
-    static func build(from data: Data) -> RKCarModel? {
+    static func build(from data: Data, tint: SIMD4<Float>? = nil) -> RKCarModel? {
         do {
             let (json, bin) = try parseGLB(data)
             guard let buffers = json["buffers"] as? [[String: Any]],
@@ -400,7 +410,7 @@ enum GLBCarModelLoader {
                     let mat: PhysicallyBasedMaterial
                     if let cached = materialCache[matIdx] { mat = cached }
                     else {
-                        mat = makeMaterial(params, textures: imageTextures)
+                        mat = makeMaterial(params, textures: imageTextures, tint: tint)
                         materialCache[matIdx] = mat
                     }
 
@@ -673,9 +683,14 @@ enum GLBCarModelLoader {
     }
 
     private static func makeMaterial(_ p: MatParams,
-                                     textures: [Int: TextureResource]) -> PhysicallyBasedMaterial {
+                                     textures: [Int: TextureResource],
+                                     tint: SIMD4<Float>? = nil) -> PhysicallyBasedMaterial {
         var m = PhysicallyBasedMaterial()
-        let c = p.baseColor
+        var c = p.baseColor
+        // 配色变体：整体乘色调（线性空间），贴图颜色 × tint
+        if let tint {
+            c = SIMD4<Float>(c.x * tint.x, c.y * tint.y, c.z * tint.z, c.w)
+        }
         let lowerName = p.name.lowercased()
         let isGlass = lowerName.contains("glass") || lowerName.contains("window")
         var baseAlpha: CGFloat = 1
