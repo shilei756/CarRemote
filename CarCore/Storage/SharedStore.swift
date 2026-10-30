@@ -12,45 +12,21 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
     case univK = "univ_k"                   // UNI-K
     case cs7520 = "cs75_20"                 // CS75 20款
     case cs75Black = "cs75_black"            // CS75PLUS 黑色（用户网站新增 2D 图，增加不替换）
-    // 「我的爱车」3D 车模库（从该 App 提取的 GLB 静态车模，仅查看旋转）
-    case c211 = "c211"                       // 逸动PLUS
-    case c236 = "c236"                       // 代号 C236
-    case c281 = "c281"                       // UNI-V
-    case c281phev = "c281phev"               // UNI-V 智电（代号 C281-PHEV）
-    case c589 = "c589"                       // 代号 C589
-    case cd569 = "cd569"                     // 代号 CD569
-    case s202 = "s202"                       // 代号 S202
-    case s203 = "s203"                       // 代号 S203
-    case s203phev = "s203phev"               // 代号 S203-PHEV
-    case s311 = "s311"                       // 代号 S311
-    case s311mca = "s311mca"                 // 代号 S311-MCA
-    case s311mca1phev = "s311mca1phev"       // 代号 S311-MCA1-PHEV
 
-    /// 「我的爱车」车模库的车型代号集合（displayName 暂以代号展示，
-    /// 中文名后续在此常量表补全即可）
-    public static let catalogCodes: Set<String> = [
-        "c211", "c236", "c281", "c281phev", "c589", "cd569",
-        "s202", "s203", "s203phev", "s311", "s311mca", "s311mca1phev"
+    /// 「我的爱车」GLB 官方车模 ↔ 现有 2D 车型映射（能对应上的都接 3D，其余车型已删除）：
+    ///   c211=逸动PLUS（已有官方 .rk 全件模，保留联动更佳）  c281=UNI-V
+    ///   c589=三代逸动   s311=CS75PLUS 二代   s311mca1phev=CS75PLUS 三代（无对应 2D，已删）
+    ///   cd569=CS35PLUS / s202=UNI-T / s203=CS55PLUS / c236 / c281phev / s311mca：无 2D 对应，已删
+    public static let glbModelNames: [CarModelStyle: String] = [
+        .univ: "c281",          // UNI-V → C281 官方 GLB（门/窗/尾门/天窗/车轮全联动）
+        .yidong3: "c589",       // 三代逸动 → C589 官方 GLB
+        .cs75: "s311",          // CS75PLUS → S311 二代官方 GLB
+        .cs75Black: "s311",     // CS75PLUS 黑色（同 S311 车身）
+        .cs7520: "s311"         // CS75 20款（暂以二代模顶替，一代模暂缺）
     ]
-
-    /// 是否为「我的爱车」3D 车模库车型（GLB 静态展示，无门窗/灯光联动）
-    public var isCatalogModel: Bool {
-        Self.catalogCodes.contains(rawValue)
-    }
-
-    /// 车模库代号显示名（C281=UNI-V、C211=逸动PLUS 已知，其余先展示代号）
-    public var catalogDisplayName: String {
-        switch rawValue {
-        case "c211": return "逸动PLUS"
-        case "c281": return "UNI-V"
-        case "c281phev": return "UNI-V 智电"
-        default: return rawValue.uppercased()
-        }
-    }
 
     /// 展示名（网页版 CAR_MODELS.name）
     public var displayName: String {
-        if isCatalogModel { return catalogDisplayName }
         switch self {
         case .yidong: return "逸动PLUS"
         case .yidongWhite: return "逸动PLUS 白色"
@@ -60,23 +36,19 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
         case .univK: return "UNI-K"
         case .cs7520: return "CS75 20款"
         case .cs75Black: return "CS75 黑色"
-        default: return rawValue.uppercased()
         }
     }
 
     public var sfSymbol: String {
-        if isCatalogModel { return "view.3d" }
         switch self {
         case .yidong, .yidongWhite, .yidong3: return "car"
         case .univ: return "car.rear"
         case .cs75, .cs75Black, .univK, .cs7520: return "car.front"
-        default: return "car"
         }
     }
 
-    /// 侧视大图资源名（网页版 /static/img/*_side.png；车模库车型暂无 2D 图，返回空串）
+    /// 侧视大图资源名（网页版 /static/img/*_side.png）
     public var sideImageName: String {
-        if isCatalogModel { return "" }
         switch self {
         case .yidong: return "car_yidong"
         case .yidongWhite: return "car_yidong_white"
@@ -86,13 +58,11 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
         case .univK: return "car_univ_k"
         case .cs7520: return "car_cs75_20"
         case .cs75Black: return "car_cs75_black"
-        default: return ""
         }
     }
 
-    /// 俯视小图资源名（网页版 /static/img/*_top.png，车况卡右侧；车模库车型暂无）
+    /// 俯视小图资源名（网页版 /static/img/*_top.png，车况卡右侧）
     public var topImageName: String {
-        if isCatalogModel { return "" }
         switch self {
         case .yidong: return "car_top_yidong"
         case .yidongWhite: return "car_top_yidong_white"
@@ -102,48 +72,35 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
         case .univK: return "car_top_univ_k"
         case .cs7520: return "car_top_cs75_20"
         case .cs75Black: return "car_top_cs75_black"
-        default: return ""
         }
     }
 
-    /// 是否有内置官方 3D 车模。
-    ///
-    /// 1.1.4 用户决策：**仅保留逸动PLUS（C211，智慧云控官方全件模）**，
-    /// UNI-V / UNI-K / CS75PLUS / CS75 一律退回 2D 车图 ——
-    /// 官方展厅模的车漆贴图是整车身 UV 展平图，白化处理后仍与真实车色观感不符，
-    /// 且包体增重明显，故移除其 3D 资源（对应 .rk.json/.rk.bin/贴图已从 bundle 删除）。
+    /// 是否有内置官方 3D 车模（.rk 全件模或「我的爱车」GLB 官方模）
     public var has3DModel: Bool {
         guard #available(iOS 15.0, *) else { return false }
-        if isCatalogModel { return true }
-        switch self {
-        case .yidong, .yidongWhite: return true
-        default: return false
-        }
+        return model3DName != nil
     }
 
-    /// 3D 车模资源名（Bundle 内 .rk.json/.rk.bin，不带扩展名；无 3D 车模时为 nil）
-    ///
-    /// 1.1.4 起仅逸动PLUS 保留 3D 车模（智慧云控官方 C211 全件模，
-    /// 逐扇车门/车窗/车轮独立可动）；其余车型只有 2D 车图。
+    /// 3D 车模资源名：
+    ///   - "xxx.glb" →「我的爱车」GLB 官方模（GLBCarModelLoader 解析，门窗/尾门/天窗/车轮联动）
+    ///   - 其余     → 智慧云控 .rk 官方全件模（Car3DView .rk 管线）
     public var model3DName: String? {
-        guard has3DModel else { return nil }
-        if isCatalogModel { return rawValue }   // 「我的爱车」GLB 车模（资源名 = 代号）
         switch self {
         case .yidong: return "EadoPlus2022Gray"   // C211 全部件模 · 钛光银灰（1.1.4-b110 用户指定，色值 #C6C6C6 对齐官网）
         case .yidongWhite: return "EadoPlus2022"  // C211 全部件模 · 白色款
-        default: return nil
+        default:
+            guard let glb = Self.glbModelNames[self] else { return nil }
+            return "\(glb).glb"
         }
     }
 
     /// 油箱容积 L（网页版 CAR_MODELS.tank：切换车型时联动油量百分比）
     public var tankCapacityL: Double {
-        if isCatalogModel { return 53 }   // 车模库车型以紧凑级轿车油箱兜底
         switch self {
         case .yidong, .yidongWhite, .yidong3: return 53
         case .univ: return 51
         case .cs75, .cs75Black, .cs7520: return 58
         case .univK: return 56
-        default: return 53
         }
     }
 
@@ -359,7 +316,12 @@ public struct AppSettings: Codable, Equatable, Sendable {
         siriEnabledCommands = try container.decodeIfPresent(Set<String>.self, forKey: .siriEnabledCommands)
             ?? Set(CarCommand.allCases.map { $0.rawValue })
         siriMasterEnabled = try container.decodeIfPresent(Bool.self, forKey: .siriMasterEnabled) ?? true
-        carModelStyle = try container.decodeIfPresent(CarModelStyle.self, forKey: .carModelStyle) ?? .yidong
+        // 车型按 String 解码 + 旧值迁移：1.5.1 删除了 12 个「车模库」独立车型 case，
+        // 老用户若存过 c211/c281/c589/s311 等旧值，迁移到对应的现有车型，避免解码失败丢整套设置
+        let styleRaw = try container.decodeIfPresent(String.self, forKey: .carModelStyle) ?? ""
+        let migratedStyles = ["c211": CarModelStyle.yidong, "c281": .univ,
+                              "c589": .yidong3, "s311": .cs75]
+        carModelStyle = CarModelStyle(rawValue: styleRaw) ?? migratedStyles[styleRaw] ?? .yidong
         clubNick = try container.decodeIfPresent(String.self, forKey: .clubNick) ?? ""
         clubAvatar = try container.decodeIfPresent(String.self, forKey: .clubAvatar) ?? ""
         widgetCommands = try container.decodeIfPresent([String].self, forKey: .widgetCommands)

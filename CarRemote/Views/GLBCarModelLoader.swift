@@ -7,9 +7,11 @@
 //  贴图保留 WebP（iOS 14+ ImageIO 原生解码）、顶点保留量化 SHORT/BYTE
 //  （本解析器原生反量化），因此单模型体积控制在 2~6MB。
 //
-//  解析产物：与 Car3DView 现有 .rk 管线同一结构（RKCarModel），
-//  门/窗/灯/轮字典为空 —— 即「仅查看旋转」的静态车模，
-//  完整复用轨道相机（滑动/捏合/双击/自动取景）与挂载系统。
+//  解析产物：与 Car3DView 现有 .rk 管线同一结构（RKCarModel），且**带完整联动**：
+//  官方 *_P 铰链枢轴（Door_FL_P 四门 / LuggageDoor_P 尾门 / Window_T_P 天窗 /
+//  Window_*_P 车窗 / Handle_*_P 把手 / Wheel_*_P 车轮）原样保留为部件实体，
+//  长按点选、车况联动、车轮滚动全部可用；车灯已在离线预处理阶段关闭
+//  （移除 LOn 自发光网格并清零 emissive），完整复用轨道相机与挂载系统。
 //
 //  glTF 规范要点（本文件按此实现）：
 //    - 右手坐标系、+Y 向上；RealityKit 同为右手 +Y 向上，无需轴变换
@@ -141,7 +143,19 @@ enum GLBCarModelLoader {
             // 无 material 字段的 primitive 用默认材质
             if materials.isEmpty { materials = [MatParams()] }
 
-            // ---- 几何：遍历节点树，烘焙世界变换 ----
+            // ---- 几何：按节点树构建，「我的爱车」官方 *_P 铰链枢轴 → 部件联动 ----
+            //
+            // 官方模型骨架（5 款同源，已逐款核验）：
+            //   Door_FL/FR/BL/BR_P  四门铰链枢轴（绕局部 Y 轴 ±75°）
+            //   LuggageDoor_P       尾门枢轴（绕局部 X 轴 +70°）
+            //   Window_T_P          天窗枢轴（后滑 + 7.11° 上翻）
+            //   Window_FL/FR/BL/BR_P 车窗玻璃枢轴（下行 ~0.14m + ±2.97° 微倾）
+            //   Handle_FL/FR/BL/BR_P 门把手枢轴（解锁弹出 ±10.01°）
+            //   Wheel_FL/FR/B_P(+Roll_P) 车轮（绕 X 轴滚动）
+            //
+            // 烘焙策略（与 .rk 管线一致，保证开合动画直接改 rotation 不破坏静止姿态）：
+            //   枢轴实体 = 纯平移（铰链世界坐标），几何顶点按「最近枢轴祖先的世界平移」
+            //   烘焙到铰链局部空间 —— 顶点世界位 = 局部位 + 铰链平移。
             let carRoot = Entity()
             carRoot.name = "carRoot_glb"
 
@@ -150,8 +164,6 @@ enum GLBCarModelLoader {
             var accessorFloatCache: [Int: [Float]] = [:]
             var accessorIndexCache: [Int: [UInt32]] = [:]
             var materialCache: [Int: PhysicallyBasedMaterial] = [:]
-            /// 已烘焙世界变换的 POSITION 顶点缓存（key = accessor 序号），供取景代表点二次扫描
-            var bakedPositions: [Int: [SIMD3<Float>]] = [:]
 
             var boundsMin = SIMD3<Float>(repeating: .greatestFiniteMagnitude)
             var boundsMax = SIMD3<Float>(repeating: -.greatestFiniteMagnitude)
@@ -183,10 +195,113 @@ enum GLBCarModelLoader {
                 _ = worldMatrix(node: r, parent: matrix_identity_float4x4)
             }
 
+            // ---- 官方枢轴分类 ----
+            enum PivotKind { case door, trunk, sunroof, window, handle, wheel }
+            struct PivotSpec {
+                let kind: PivotKind
+                let part: CarPart?
+                let wheel: WheelPosition?
+                let tiltSign: Float   // 官方开合方向符号（左门− 右门+，尾门/天窗 +）
+            }
+            func classifyPivot(_ name: String) -> PivotSpec? {
+                if name.hasSuffix("_Roll_P") { return nil }   // 滚转子枢轴跟随车轮实体
+                switch name {
+                case "Door_FL_P":      return PivotSpec(kind: .door, part: .doorFrontLeft, wheel: nil, tiltSign: -1)
+                case "Door_FR_P":      return PivotSpec(kind: .door, part: .doorFrontRight, wheel: nil, tiltSign: 1)
+                case "Door_BL_P":      return PivotSpec(kind: .door, part: .doorRearLeft, wheel: nil, tiltSign: -1)
+                case "Door_BR_P":      return PivotSpec(kind: .door, part: .doorRearRight, wheel: nil, tiltSign: 1)
+                case "LuggageDoor_P":  return PivotSpec(kind: .trunk, part: .trunk, wheel: nil, tiltSign: 1)
+                case "Window_T_P":     return PivotSpec(kind: .sunroof, part: .sunroof, wheel: nil, tiltSign: 1)
+                case "Window_FL_P":    return PivotSpec(kind: .window, part: .doorFrontLeft, wheel: nil, tiltSign: -1)
+                case "Window_FR_P":    return PivotSpec(kind: .window, part: .doorFrontRight, wheel: nil, tiltSign: 1)
+                case "Window_BL_P":    return PivotSpec(kind: .window, part: .doorRearLeft, wheel: nil, tiltSign: -1)
+                case "Window_BR_P":    return PivotSpec(kind: .window, part: .doorRearRight, wheel: nil, tiltSign: 1)
+                case "Handle_FL_P":    return PivotSpec(kind: .handle, part: .doorFrontLeft, wheel: nil, tiltSign: -1)
+                case "Handle_FR_P":    return PivotSpec(kind: .handle, part: .doorFrontRight, wheel: nil, tiltSign: 1)
+                case "Handle_BL_P":    return PivotSpec(kind: .handle, part: .doorRearLeft, wheel: nil, tiltSign: -1)
+                case "Handle_BR_P":    return PivotSpec(kind: .handle, part: .doorRearRight, wheel: nil, tiltSign: 1)
+                case "Wheel_FL_P":     return PivotSpec(kind: .wheel, part: nil, wheel: .frontLeft, tiltSign: 1)
+                case "Wheel_FR_P":     return PivotSpec(kind: .wheel, part: nil, wheel: .frontRight, tiltSign: 1)
+                case "Wheel_B_P":      return PivotSpec(kind: .wheel, part: nil, wheel: .rearLeft, tiltSign: 1)  // 后轴合成件
+                default: return nil
+                }
+            }
+            // 部件实体命名：part(at:) 沿祖先链查名（doorFL/doorFR/doorBL/doorBR/trunk/sunroof），
+            // 车窗/把手/车轮沿用 .rk 管线同款命名（windowFL/handleFL/wheelFL…）
+            func entityName(for spec: PivotSpec) -> String {
+                let suffix: String
+                switch spec.part ?? (spec.wheel == .frontLeft ? .doorFrontLeft :
+                                     spec.wheel == .frontRight ? .doorFrontRight : .doorRearLeft) {
+                case .doorFrontLeft: suffix = "FL"
+                case .doorFrontRight: suffix = "FR"
+                case .doorRearLeft: suffix = "BL"
+                case .doorRearRight: suffix = "BR"
+                default: suffix = "B"
+                }
+                switch spec.kind {
+                case .door: return "door\(suffix)"
+                case .trunk: return "trunk"
+                case .sunroof: return "sunroof"
+                case .window: return "window\(suffix)"
+                case .handle: return "handle\(suffix)"
+                case .wheel: return "wheel\(suffix)"
+                }
+            }
+
+            // ---- 单次 DFS：建枢轴实体（纯平移）+ 记录每个网格节点的归属枢轴 ----
+            var pivotEntities = [Int: Entity]()
+            var pivotFrames = [Int: SIMD3<Float>]()      // 枢轴世界平移（根空间）
+            var pivotSpecByNode = [Int: PivotSpec]()
+            var ownerPivotOf = [Int: Int]()              // 网格节点 → 最近枢轴祖先
+            func dfsBuild(node: Int, nearestPivot: Int?) {
+                guard node < nodesJSON.count else { return }
+                let name = nodesJSON[node]["name"] as? String ?? ""
+                if let spec = classifyPivot(name) {
+                    let w = worldMatrices[node]
+                    let t = SIMD3<Float>(w.columns.3.x, w.columns.3.y, w.columns.3.z)
+                    let e = Entity()
+                    if let np = nearestPivot, let pe = pivotEntities[np], let pf = pivotFrames[np] {
+                        e.position = t - pf
+                        pe.addChild(e)
+                    } else {
+                        e.position = t
+                        carRoot.addChild(e)
+                    }
+                    e.name = entityName(for: spec)
+                    pivotEntities[node] = e
+                    pivotFrames[node] = t
+                    pivotSpecByNode[node] = spec
+                    if let children = nodesJSON[node]["children"] as? [Int] {
+                        for c in children { dfsBuild(node: c, nearestPivot: node) }
+                    }
+                } else {
+                    if let np = nearestPivot { ownerPivotOf[node] = np }
+                    if let children = nodesJSON[node]["children"] as? [Int] {
+                        for c in children { dfsBuild(node: c, nearestPivot: nearestPivot) }
+                    }
+                }
+            }
+            for r in rootNodes where r < nodesJSON.count {
+                dfsBuild(node: r, nearestPivot: nil)
+            }
+
+            // ---- 网格：顶点按归属枢轴烘焙到铰链局部空间 ----
             var primitiveCounter = 0
+            var fitRecorded = Set<Int>()
+            /// (铰链局部顶点缓存, 链接平移) —— bounds 就绪后统一扫描取景代表点
+            var deferredFit: [(verts: [SIMD3<Float>], frame: SIMD3<Float>)] = []
             for (ni, node) in nodesJSON.enumerated() {
                 guard let meshIdx = node["mesh"] as? Int, meshIdx < meshes.count else { continue }
                 let world = worldMatrices[ni]
+                // 归属枢轴的世界平移（根空间）：顶点局部 = 世界位 − 铰链平移
+                let frameT: SIMD3<Float>
+                if let owner = ownerPivotOf[ni], let f = pivotFrames[owner] {
+                    frameT = f
+                } else {
+                    frameT = .zero
+                }
+                let parentEntity = ownerPivotOf[ni].flatMap { pivotEntities[$0] } ?? carRoot
+
                 let prims = meshes[meshIdx]["primitives"] as? [[String: Any]] ?? []
                 for prim in prims {
                     guard (prim["mode"] as? Int ?? 4) == 4 else { continue }   // 仅三角形
@@ -214,29 +329,31 @@ enum GLBCarModelLoader {
                     } else {
                         indices = Array(0..<UInt32(vc))
                     }
-                    // 三角形数量取整 + 越界剔除
                     if indices.count % 3 != 0 { indices.removeLast(indices.count % 3) }
                     indices = indices.filter { Int($0) < vc }
                     guard indices.count >= 3 else { continue }
 
-                    // 烘焙世界变换
+                    // 烘焙到铰链局部空间（世界位 = 局部位 + 铰链平移）
                     var positions = [SIMD3<Float>](repeating: .zero, count: vc)
                     let col0 = world.columns.0, col1 = world.columns.1
                     let col2 = world.columns.2, col3 = world.columns.3
                     for i in 0..<vc {
                         let x = posFlat[i * 3], y = posFlat[i * 3 + 1], z = posFlat[i * 3 + 2]
-                        let wx = col0.x * x + col1.x * y + col2.x * z + col3.x
-                        let wy = col0.y * x + col1.y * y + col2.y * z + col3.y
-                        let wz = col0.z * x + col1.z * y + col2.z * z + col3.z
-                        positions[i] = SIMD3<Float>(wx, wy, wz)
+                        let lx = col0.x * x + col1.x * y + col2.x * z + col3.x - frameT.x
+                        let ly = col0.y * x + col1.y * y + col2.y * z + col3.y - frameT.y
+                        let lz = col0.z * x + col1.z * y + col2.z * z + col3.z - frameT.z
+                        positions[i] = SIMD3<Float>(lx, ly, lz)
+                        let wx = lx + frameT.x, wy = ly + frameT.y, wz = lz + frameT.z
                         boundsMin.x = min(boundsMin.x, wx); boundsMax.x = max(boundsMax.x, wx)
                         boundsMin.y = min(boundsMin.y, wy); boundsMax.y = max(boundsMax.y, wy)
                         boundsMin.z = min(boundsMin.z, wz); boundsMax.z = max(boundsMax.z, wz)
                     }
-                    // 多个 primitive 常共享同一 POSITION accessor（同一大网格分材质），
-                    // 只需缓存一份供取景扫描
-                    if bakedPositions[posIdx] == nil {
-                        bakedPositions[posIdx] = positions
+                    // 取景代表点：同一 POSITION 同一枢轴只缓存一份（铰链局部坐标 + 链接平移），
+                    // 待全部包围盒就绪后统一扫描（高度分层依赖完整 bounds）
+                    let fitKey = posIdx * 4096 + (ownerPivotOf[ni] ?? nodesJSON.count)
+                    if !fitRecorded.contains(fitKey) {
+                        fitRecorded.insert(fitKey)
+                        deferredFit.append((verts: positions, frame: frameT))
                     }
 
                     // 法线（缺失时按几何面均值补算）
@@ -287,7 +404,7 @@ enum GLBCarModelLoader {
                         materialCache[matIdx] = mat
                     }
 
-                    // 构建网格
+                    // 构建网格，挂到归属枢轴实体（无枢轴则挂车根）
                     var descriptor = MeshDescriptor(name: "glb_p\(primitiveCounter)")
                     primitiveCounter += 1
                     descriptor.positions = MeshBuffers.Positions(positions)
@@ -297,29 +414,80 @@ enum GLBCarModelLoader {
                     descriptor.materials = .allFaces(0)
                     guard let mesh = try? MeshResource.generate(from: [descriptor]) else { continue }
                     let model = ModelEntity(mesh: mesh, materials: [mat])
-                    carRoot.addChild(model)
+                    parentEntity.addChild(model)
                 }
             }
             guard primitiveCounter > 0 else { return nil }
 
+            // ---- 部件字典装配（角度与 .rk 官方清单一致：门 ±75° / 尾门 70° / 把手 10° / 窗倾 2.97° / 天窗 -7.11°）----
+            var partEntities: [CarPart: Entity] = [:]
+            var doorTilt: [CarPart: Float] = [:]
+            var windowEntities: [CarPart: Entity] = [:]
+            var windowRest: [CarPart: SIMD3<Float>] = [:]
+            var windowOpen: [CarPart: SIMD3<Float>] = [:]
+            var windowTilt: [CarPart: Float] = [:]
+            var handleEntities: [CarPart: Entity] = [:]
+            var handleTilt: [CarPart: Float] = [:]
+            var wheelEntities: [WheelPosition: Entity] = [:]
+            var uniqueWheels: [Entity] = []
+            var sunroofRest = SIMD3<Float>.zero
+            var sunroofOpen = SIMD3<Float>.zero
+            var sunroofTilt: Float = 0
+            let deg = Float.pi / 180
+
+            for (node, spec) in pivotSpecByNode {
+                guard let e = pivotEntities[node] else { continue }
+                let rel = e.position   // 相对父枢轴/车根的平移（rest 位）
+                switch spec.kind {
+                case .door:
+                    if let p = spec.part {
+                        partEntities[p] = e
+                        doorTilt[p] = spec.tiltSign * 75 * deg
+                    }
+                case .trunk:
+                    partEntities[.trunk] = e
+                    doorTilt[.trunk] = 70 * deg
+                case .sunroof:
+                    partEntities[.sunroof] = e
+                    sunroofRest = rel
+                    sunroofOpen = rel + SIMD3<Float>(0, 0.05, -0.30)   // 官方：后滑 + 上抬，7.11° 翻转
+                    sunroofTilt = -7.11 * deg
+                case .window:
+                    if let p = spec.part {
+                        windowEntities[p] = e
+                        windowRest[p] = rel
+                        windowOpen[p] = rel + SIMD3<Float>(0, -0.14, 0)  // 玻璃下行（与 .rk 官方量级一致）
+                        windowTilt[p] = spec.tiltSign * 2.97 * deg
+                    }
+                case .handle:
+                    if let p = spec.part {
+                        handleEntities[p] = e
+                        handleTilt[p] = spec.tiltSign * 10.01 * deg
+                    }
+                case .wheel:
+                    if let w0 = spec.wheel {
+                        wheelEntities[w0] = e
+                        if w0 == .rearLeft { wheelEntities[.rearRight] = e }   // 后轴合成件，左右共用
+                        if !uniqueWheels.contains(where: { $0 === e }) { uniqueWheels.append(e) }
+                    }
+                }
+            }
+
             // ---- 取景代表点（与 .rk 管线一致：方位角 × 高度分格取半径最大顶点）----
             guard boundsMin.x <= boundsMax.x else { return nil }
-            let fitCenter = (boundsMin + boundsMax) / 2
             let ySpan = max(boundsMax.y - boundsMin.y, 1e-5)
-            func recordFit(_ p: SIMD3<Float>) {
-                let rel = p - fitCenter
-                let azf = atan2(rel.x, rel.z)
-                var bi = Int((azf + .pi) / (2 * .pi) * Float(fitBuckets))
-                bi = min(max(bi, 0), fitBuckets - 1)
-                var li = Int((p.y - boundsMin.y) / ySpan * Float(fitLayers))
-                li = min(max(li, 0), fitLayers - 1)
-                let k = bi * fitLayers + li
-                let r2 = simd_dot(rel, rel)
-                if r2 > fitBest[k] { fitBest[k] = r2; fitReps[k] = p }
-            }
-            // 遍历已烘焙的 POSITION 顶点补代表点（二遍扫描，与 .rk 管线一致）
-            for (_, verts) in bakedPositions {
-                for p in verts { recordFit(p) }
+            for (verts, frame) in deferredFit {
+                for p in verts {
+                    let rel = p + frame   // 世界坐标（枢轴帧为纯平移帧）
+                    let azf = atan2(rel.x, rel.z)
+                    var bi = Int((azf + .pi) / (2 * .pi) * Float(fitBuckets))
+                    bi = min(max(bi, 0), fitBuckets - 1)
+                    var li = Int((rel.y - boundsMin.y) / ySpan * Float(fitLayers))
+                    li = min(max(li, 0), fitLayers - 1)
+                    let k = bi * fitLayers + li
+                    let r2 = simd_dot(rel, rel)
+                    if r2 > fitBest[k] { fitBest[k] = r2; fitReps[k] = rel }
+                }
             }
             var fitPoints: [SIMD3<Float>] = []
             fitPoints.reserveCapacity(fitBuckets * fitLayers)
@@ -328,11 +496,13 @@ enum GLBCarModelLoader {
             }
 
             return RKCarModel(root: carRoot,
-                              partEntities: [:], windowEntities: [:], handleEntities: [:],
-                              wheelEntities: [:], uniqueWheels: [], lightEntities: [:],
-                              doorTilt: [:], sunroofRest: .zero, sunroofOpen: .zero,
-                              sunroofTilt: 0, windowRest: [:], windowOpen: [:],
-                              windowTilt: [:], handleTilt: [:],
+                              partEntities: partEntities, windowEntities: windowEntities,
+                              handleEntities: handleEntities,
+                              wheelEntities: wheelEntities, uniqueWheels: uniqueWheels,
+                              lightEntities: [:],
+                              doorTilt: doorTilt, sunroofRest: sunroofRest, sunroofOpen: sunroofOpen,
+                              sunroofTilt: sunroofTilt, windowRest: windowRest, windowOpen: windowOpen,
+                              windowTilt: windowTilt, handleTilt: handleTilt,
                               boundsMin: boundsMin, boundsMax: boundsMax,
                               fitPoints: fitPoints)
         } catch {

@@ -235,6 +235,12 @@ struct CarModel3DRepresentable: UIViewRepresentable {
         context.coordinator.view = view
         context.coordinator.allowsVerticalRotation = verticalPanRotates
 
+        // 「我的爱车」GLB 官方模：主页展示模式（对齐其主页陈列）——
+        // 初始斜前视角 + 缓慢自转，拖拽/捏合暂停、闲置 5 秒恢复
+        if modelName.hasSuffix(".glb") {
+            view.enableShowcase(initialAzimuth: .pi * 0.75)
+        }
+
         // 异步加载：glb 解析 + 贴图解码放后台线程（6MB 车模 + 25 个 PBR 材质，
         // 旧设备上同步加载可达数秒，会阻塞主线程让页面转场卡死甚至被系统看门狗杀掉）。
         // 完成后回主线程挂载；解析失败由 completeLoad 置位，UI 自动回退 2D 车图。
@@ -388,6 +394,9 @@ struct CarVisual3DStage: View {
     /// 车轮是否应当滚动（行驶中；接口不上报车速时退化为「已启动」）
     let wheelsRolling: Bool
 
+    /// 是否为「我的爱车」GLB 官方模（拖拽参考该 App：横+纵向均可旋转）
+    private var isGLBModel: Bool { style.model3DName?.hasSuffix(".glb") == true }
+
     /// 展示模式：3D 车模 / 2D 车图（1.1.4 起右上角胶囊滑块切换）
     private enum StageMode { case threeD, twoD }
 
@@ -405,53 +414,27 @@ struct CarVisual3DStage: View {
                     if show3D && !model.loadFailed, let name = style.model3DName {
                         ZStack {
                             CarModel3DRepresentable(state: model, modelName: name,
-                                                    verticalPanRotates: style.isCatalogModel)
+                                                    verticalPanRotates: isGLBModel)
                                 .accessibilityElement(children: .ignore)
                                 .accessibilityLabel(accessibilityModelDescription)
                                 .opacity(model.isLoaded ? 1 : 0)
                             if !model.isLoaded {
-                                // 加载中：2D 车图占位（车模库车型无 2D 图，用图标占位），
-                                // 后台解析完成后无缝替换为 3D
-                                if style.isCatalogModel {
-                                    VStack(spacing: 10) {
-                                        Image(systemName: "view.3d")
-                                            .font(.system(size: 40, weight: .light))
-                                            .foregroundStyle(WebTheme.blue.opacity(0.6))
-                                        Text("正在加载 \(style.displayName) 三维车模")
-                                            .font(.system(size: 11))
-                                            .foregroundStyle(WebTheme.muted)
-                                    }
-                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                } else {
-                                    Image(style.sideImageName)
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fit)
-                                        .accessibilityElement(children: .ignore)
-                                        .accessibilityLabel("正在加载\(style.displayName)三维车模")
-                                }
+                                // 加载中：先用 2D 车图占位，后台解析完成后无缝替换为 3D
+                                Image(style.sideImageName)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .accessibilityElement(children: .ignore)
+                                    .accessibilityLabel("正在加载\(style.displayName)三维车模")
                             }
                         }
                     } else {
                         // 2D 档（1.1.4 用户反馈：「俯视改为 2D 之前的车图」）：
-                        // 直接显示各车型的 2D 侧视大图（与网页版 /static/img/*_side.png 同源）；
-                        // 车模库车型暂无 2D 车图，给出图标占位提示。
-                        if style.isCatalogModel {
-                            VStack(spacing: 8) {
-                                Image(systemName: "view.3d")
-                                    .font(.system(size: 44, weight: .light))
-                                    .foregroundStyle(WebTheme.blue.opacity(0.6))
-                                Text("\(style.displayName) 暂无二维车图，请切回 3D 查看")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(WebTheme.muted)
-                            }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        } else {
-                            Image(style.sideImageName)
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .accessibilityElement(children: .ignore)
-                                .accessibilityLabel("\(style.displayName) 二维车辆图片")
-                        }
+                        // 直接显示各车型的 2D 侧视大图（与网页版 /static/img/*_side.png 同源）
+                        Image(style.sideImageName)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("\(style.displayName) 二维车辆图片")
                     }
                 }
                 // 1.1.4：舞台高度保持 200pt（与 1.1.3 / b102 一致）。
@@ -501,9 +484,8 @@ struct CarVisual3DStage: View {
                         .accessibilityLabel("重置车模视角")
                     }
                     Spacer()
-                    // 3D / 2D 胶囊滑块（对齐智慧云控车模页右上角切换控件）；
-                    // 车模库车型无 2D 车图，不提供该切换
-                    if style.model3DName != nil && !style.isCatalogModel {
+                    // 3D / 2D 胶囊滑块（对齐智慧云控车模页右上角切换控件）
+                    if style.model3DName != nil {
                         stageModeSlider
                     }
                 }
@@ -519,9 +501,8 @@ struct CarVisual3DStage: View {
             }
         }
         .compatOnChange(of: model.loadFailed) { failed in
-            // 3D 加载失败：自动回退 2D 车图；「重置视角/3D」滑块仍可手动重试加载。
-            // 车模库车型无 2D 图且无 3D/2D 滑块，保持 3D 档展示占位提示。
-            if failed && !style.isCatalogModel { mode = .twoD }
+            // 3D 加载失败：自动回退 2D 车图；「重置视角/3D」滑块仍可手动重试加载
+            if failed { mode = .twoD }
         }
         .compatOnChange(of: doorsAndWindows) { _ in syncStatus() }
         .compatOnChange(of: vehicleStarted) { _ in syncVehicleState() }
@@ -580,18 +561,8 @@ struct CarVisual3DStage: View {
     /// 车况联动说明区（可见文字 + 底部手势提示）
     private var controlStrip: some View {
         VStack(spacing: 6) {
-            if style.isCatalogModel {
-                // 车模库车型（「我的爱车」GLB 静态模）：仅查看旋转，无门窗联动
-                Text("\(style.displayName) · 静态三维车模")
-                    .font(.system(size: 10))
-                    .foregroundStyle(WebTheme.muted)
-                    .frame(maxWidth: .infinity, alignment: .center)
-            } else {
-                statusSummary
-            }
-            Text(style.isCatalogModel
-                 ? "拖拽旋转（横+纵） · 双指捏合缩放 · 双击复位视角"
-                 : "滑动旋转车模 · 双指捏合缩放 · 双击复位视角")
+            statusSummary
+            Text("滑动旋转车模 · 双指捏合缩放 · 双击复位视角")
                 .font(.system(size: 9))
                 .foregroundStyle(WebTheme.faint)
                 .frame(maxWidth: .infinity, alignment: .center)
@@ -613,14 +584,10 @@ struct CarVisual3DStage: View {
     private var accessibilityModelDescription: String {
         var parts: [String] = [
             "\(style.displayName) 三维车模",
-            "左右滑动可旋转，双指捏合缩放，双击复位视角"
+            "左右滑动可旋转，双指捏合缩放，双击复位视角",
+            "长按车门、尾门或天窗可开合"
         ]
-        if style.isCatalogModel {
-            parts.append("静态展示车模，可拖拽查看外观细节")
-        } else {
-            parts.append("长按车门、尾门或天窗可开合")
-            parts.append(statusSummaryText)
-        }
+        parts.append(statusSummaryText)
         return parts.joined(separator: "。")
     }
 

@@ -416,7 +416,37 @@ public final class Car3DView: UIView {
 
     // MARK: 轨道相机
 
+    /// 主页展示模式（对齐「我的爱车」主页）：缓慢自转展示，
+    /// 用户拖拽/捏合时暂停，闲置 5 秒后自动恢复
+    public var isShowcase = false
+    private var showcaseCancellable: Cancellable?
+    private var lastUserOrbitTime: CFTimeInterval = 0
+
+    /// 开启展示模式；可指定初始方位角（GLB 官方模用斜前 45° 对齐「我的爱车」主页）
+    public func enableShowcase(initialAzimuth: Float? = nil) {
+        isShowcase = true
+        if let a = initialAzimuth {
+            orbitAzimuth = a
+            applyOrbitCamera()
+        }
+        if showcaseCancellable == nil {
+            showcaseCancellable = arView.scene.subscribe(to: SceneEvents.Update.self) { [weak self] ev in
+                guard let self, self.isShowcase else { return }
+                guard CACurrentMediaTime() - self.lastUserOrbitTime > 5 else { return }
+                // 舒缓展示自转（约 29 秒/圈），自动取景保持整车入画
+                self.orbitAzimuth += Float(ev.deltaTime) * 0.22
+                self.applyOrbitCamera()
+            }
+        }
+    }
+
+    /// 用户手动旋转/缩放 → 暂停展示自转 5 秒
+    private func noteUserOrbitInteraction() {
+        if isShowcase { lastUserOrbitTime = CACurrentMediaTime() }
+    }
+
     public func setOrbit(azimuth: Float? = nil, elevation: Float? = nil, radius: Float? = nil) {
+        noteUserOrbitInteraction()
         if let azimuth = azimuth { orbitAzimuth = azimuth }
         if let elevation = elevation { orbitElevation = min(max(elevation, 0.03), 1.15) }
         if let radius = radius {
@@ -432,12 +462,14 @@ public final class Car3DView: UIView {
     /// 直到用户双击「重置视角」恢复自动取景。
     public func zoom(by factor: Float) {
         guard factor > 0.01, factor < 100 else { return }
+        noteUserOrbitInteraction()
         orbitRadius = min(max(orbitRadius / factor, 1.2), 12)
         autoFrame = false
         applyOrbitCamera()
     }
 
     public func resetCamera() {
+        noteUserOrbitInteraction()
         orbitAzimuth = Self.defaultAzimuth
         orbitElevation = Self.defaultElevation
         orbitRadius = Self.defaultRadius
@@ -559,12 +591,12 @@ public final class Car3DView: UIView {
     /// 不接触任何视图/场景状态，可在任意队列安全调用。
     /// - Parameter name: 资源名（不带扩展名，对应 EadoPlus2022.rk.json / .rk.bin）
     public static func buildCarModel(named name: String) -> RKCarModel? {
-        // 1.5.0 起：「我的爱车」GLB 车模库（c211/c281 等 12 款）走零依赖 GLB 解析器，
-        // 产出与 .rk 管线同结构的静态车模（仅查看旋转，无门窗联动）。
-        // .rk 官方全件模（EadoPlus2022）没有同名 .glb，不会误入此分支。
-        if let glb = GLBCarModelLoader.load(named: name) {
-            return glb
+        // 1.5.0 起：「我的爱车」GLB 官方车模（c281/c589/s311 等，model3DName 带 .glb 后缀）
+        // 走零依赖 GLB 解析器，产出与 .rk 管线同结构且带门窗/尾门/天窗/车轮联动的车模。
+        if name.hasSuffix(".glb") {
+            return GLBCarModelLoader.load(named: String(name.dropLast(4)))
         }
+        // .rk 官方全件模（EadoPlus2022 / EadoPlus2022Gray）：
         // 只要求清单存在：几何文件由 manifest.geometryFile 指定，
         // 配色变体（如灰色逸动 EadoPlus2022Gray）复用同一份 .rk.bin，
         // 因此这里不能按 name 强制要求 "<name>.rk.bin" 存在（否则灰色款加载失败）。

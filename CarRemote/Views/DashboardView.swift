@@ -287,20 +287,6 @@ struct DashboardView: View {
                     wheelsRolling: status.shouldRollWheels
                 )
                 .padding(.horizontal, 20)
-            } else if settings.carModelStyle.isCatalogModel {
-                // 车模库车型（3D 已关或不可用）暂无 2D 车图：图标占位
-                VStack(spacing: 8) {
-                    Image(systemName: "view.3d")
-                        .font(.system(size: 44, weight: .light))
-                        .foregroundStyle(WebTheme.blue.opacity(0.6))
-                    Text("\(settings.carModelStyle.displayName) 暂无二维车图，可到「3D 车模库」查看")
-                        .font(.system(size: 11))
-                        .foregroundStyle(WebTheme.muted)
-                        .multilineTextAlignment(.center)
-                }
-                .frame(height: 200)
-                .padding(.horizontal, 20)
-                .accessibilityLabel("\(settings.carModelStyle.displayName) 暂无二维车图")
             } else {
                 Image(settings.carModelStyle.sideImageName)
                     .resizable()
@@ -498,22 +484,12 @@ struct DashboardView: View {
 
                 // 右列：俯视小车图 + 四角胎压签（网页版 car_top_real 40x97 居中 + .tpv 四角）
                 ZStack {
-                    if settings.carModelStyle.isCatalogModel {
-                        // 车模库车型暂无俯视 2D 图：图标占位（胎压签仍正常显示）
-                        Image(systemName: "car.top.radiowaves.rear")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 40, height: 97)
-                            .foregroundStyle(WebTheme.faint)
-                            .accessibilityLabel("\(settings.carModelStyle.displayName) 暂无俯视图")
-                    } else {
-                        Image(settings.carModelStyle.topImageName)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 40, height: 97)
-                            .opacity(0.9)
-                            .accessibilityLabel("\(settings.carModelStyle.displayName) 俯视图")
-                    }
+                    Image(settings.carModelStyle.topImageName)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 40, height: 97)
+                        .opacity(0.9)
+                        .accessibilityLabel("\(settings.carModelStyle.displayName) 俯视图")
                 }
                 .frame(width: 88, height: 104)
                 .overlay(alignment: .topLeading) {

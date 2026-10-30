@@ -2,14 +2,14 @@
 //  CarModelGalleryView.swift
 //  长安控车 — 3D 车模库
 //
-//  「我的爱车」App 提取的 12 款长安系 GLB 三维车模的浏览页。
+//  「我的爱车」App 提取的官方 GLB 三维车模浏览页（能对应现有 2D 车型的全部接入）。
 //  拖拽逻辑参考「我的爱车」（OrbitControls 风格）：
 //    - 拖拽旋转（横向转方位角 + 纵向转仰角）
 //    - 双指捏合缩放
 //    - 双击重置视角
 //    - 俯视图按钮（0.8s 缓动切到车顶正上方）
 //
-//  车模为静态展示（仅查看旋转，无车门/车窗/灯光联动），
+//  车模带官方铰链枢轴：长按车门/尾门/天窗可开合预览；车灯保持熄灭。
 //  复用仪表盘 CarVisual3DStage 的舞台组件与轨道相机。
 //
 
@@ -18,10 +18,10 @@ import CarCore
 
 /// 3D 车模库浏览页（我的 → 3D 车模库）
 struct CarModelGalleryView: View {
-    /// 车模库全部车型（按代号排序展示）
-    private static let catalogStyles: [CarModelStyle] = CarModelStyle.allCases.filter { $0.isCatalogModel }
+    /// 全部带 3D 车模的车型（.rk 全件模 + 「我的爱车」GLB 官方模）
+    private static let catalogStyles: [CarModelStyle] = CarModelStyle.allCases.filter { $0.has3DModel }
 
-    @State private var selected: CarModelStyle = .c211
+    @State private var selected: CarModelStyle = .yidong
     /// 当前选择的车型换挡时强制重建舞台（Stage 内部 StateObject 随 identity 变化重建）
     @State private var stageGeneration = 0
 
@@ -69,9 +69,10 @@ struct CarModelGalleryView: View {
                             UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         } label: {
                             VStack(spacing: 4) {
-                                Image(systemName: "view.3d")
-                                    .font(.system(size: 17, weight: .medium))
-                                    .foregroundStyle(selected == style ? WebTheme.blue : WebTheme.muted)
+                                Image(style.sideImageName)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(height: 20)
                                 Text(style.displayName)
                                     .font(.system(size: 12, weight: .semibold))
                                     .foregroundStyle(WebTheme.txt)
@@ -106,7 +107,7 @@ struct CarModelGalleryView: View {
         VStack(spacing: 0) {
             CarVisual3DStage(
                 style: selected,
-                doorsAndWindows: CarStatus.DoorsAndWindows(),   // 静态展示，无车况联动
+                doorsAndWindows: CarStatus.DoorsAndWindows(),   // 车况默认全关；长按部件可预览开合
                 vehicleStarted: false,
                 wheelsRolling: false
             )
@@ -125,15 +126,12 @@ struct CarModelGalleryView: View {
             Label("车模说明", systemImage: "info.circle.fill")
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(WebTheme.txt)
-            Text("以下车模提取自「我的爱车」App 的三维展厅资产，共 \(Self.catalogStyles.count) 款长安系车型。")
+            Text("以下车模提取自「我的爱车」App 的三维展厅资产，与「切换车型」共用同一套官方模型。")
                 .font(.system(size: 11.5))
                 .foregroundStyle(WebTheme.muted)
-            Text("拖拽旋转（横+纵）· 双指捏合缩放 · 双击复位视角 · 点「俯视图」缓动切到车顶视角。车模为静态展示，不与实车车况联动。")
+            Text("拖拽旋转（横+纵）· 双指捏合缩放 · 双击复位视角 · 点「俯视图」缓动切到车顶视角 · 长按车门/尾门/天窗可开合预览。车灯保持熄灭。")
                 .font(.system(size: 11.5))
                 .foregroundStyle(WebTheme.muted)
-            Text("部分车型中文名暂未收录，先以代号（如 C236、S202）展示。")
-                .font(.system(size: 10.5))
-                .foregroundStyle(WebTheme.faint)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
