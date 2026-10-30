@@ -70,14 +70,30 @@ final class AppState: ObservableObject {
         // 覆盖安装场景下 Keychain 保留旧凭据、defaults 里没有（从没重新登录过），
         // 小组件进程读不到凭据会一直显示「未登录」。
         SharedStore.saveCredentials(credentials)
-        Task { await verifyAccess(credentials, restoredSession: true) }
+
+        // 秒开：已有车况快照时，先用上次数据把控车页渲染出来，
+        // 授权校验与车况刷新全部在后台异步跑，不再阻塞首屏。
+        if let snapshot = SharedStore.loadStatusSnapshot() {
+            self.status = CarStatus(snapshot: snapshot)
+            self.statusUpdatedAt = snapshot.updatedAt
+            applyCarName()
+            // 立刻进入主界面（首屏构建即可见，无需等待网络）
+            phase = .ready
+            // 后台校验授权；若已失效会在回调里踢回登录 / 卡密网关
+            Task { await verifyAccess(credentials, restoredSession: true, showLoading: false) }
+        } else {
+            // 无快照（极少见，如快照被清）：走原有「先校验再进」流程，避免空壳闪烁
+            Task { await verifyAccess(credentials, restoredSession: true) }
+        }
     }
 
     /// 登录后 / 恢复会话后校验授权（白名单 + 卡密）。
     /// restoredSession = 再次打开 App 时的会话恢复：此时权限失效直接踢出登录态
     ///（清凭据回登录页）；刚登录 / 刚验证卡密的场景仍走卡密网关，避免反复踢出。
-    private func verifyAccess(_ credentials: Credentials, restoredSession: Bool = false) async {
-        phase = .loading
+    /// showLoading = 是否在等待期间展示启动占位（校验网络）；秒开场景传 false，
+    /// 因为界面已用快照先行渲染，无需再回退到加载态。
+    private func verifyAccess(_ credentials: Credentials, restoredSession: Bool = false, showLoading: Bool = true) async {
+        if showLoading { phase = .loading }
         do {
             let status = try await CardService.status(phone: credentials.phone)
             cardStatus = status

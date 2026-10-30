@@ -1,5 +1,62 @@
 import SwiftUI
 import CarCore
+import PhotosUI
+
+// MARK: - 相册图片选择器（iOS 15+ 通用，用于自定义壁纸）
+
+/// 从系统相册选一张图片，通过 onPick 回传 UIImage（已切回主线程）。
+/// 用 PHPicker 而非 PhotosPicker 以兼容 iOS 15 部署目标。
+struct PhotoLibraryPicker: UIViewControllerRepresentable {
+    var onPick: (UIImage) -> Void
+    var onCancel: () -> Void
+
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var config = PHPickerConfiguration()
+        config.filter = .images
+        config.selectionLimit = 1
+        let picker = PHPickerViewController(configuration: config)
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ vc: PHPickerViewController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    final class Coordinator: NSObject, PHPickerViewControllerDelegate {
+        let parent: PhotoLibraryPicker
+        init(_ parent: PhotoLibraryPicker) { self.parent = parent }
+
+        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            picker.dismiss(animated: true)
+            guard let result = results.first else { parent.onCancel(); return }
+            result.itemProvider.loadObject(ofClass: UIImage.self) { object, _ in
+                if let image = object as? UIImage {
+                    DispatchQueue.main.async { self.parent.onPick(image) }
+                } else {
+                    DispatchQueue.main.async { self.parent.onCancel() }
+                }
+            }
+        }
+    }
+}
+
+/// 把图片等比缩放到最大边不超过 maxSide，再压成 JPEG Data（控制壁纸体积）
+func downscaleToJPEG(_ image: UIImage, maxSide: CGFloat = 1280, quality: CGFloat = 0.82) -> Data? {
+    let side = max(image.size.width, image.size.height)
+    guard side > maxSide else {
+        return image.jpegData(compressionQuality: quality)
+    }
+    let scale = maxSide / side
+    let newSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+    let format = UIGraphicsImageRendererFormat.default()
+    format.scale = 1
+    let renderer = UIGraphicsImageRenderer(size: newSize, format: format)
+    let resized = renderer.image { _ in
+        image.draw(in: CGRect(origin: .zero, size: newSize))
+    }
+    return resized.jpegData(compressionQuality: quality)
+}
 
 // MARK: - 空调开通扫码（网页版 openAcQrScan / startAcQr / pollAcStatus）
 
@@ -519,6 +576,9 @@ struct WallpaperSheet: View {
     /// 神兽主题授权（网页版 /myth/check）
     @State private var mythAllowed = false
     @State private var mythChecked = false
+    /// 自定义壁纸选择
+    @State private var showImagePicker = false
+    @State private var hasCustomWallpaper: Bool = SharedStore.loadCustomWallpaper() != nil
 
     /// 当前神兽主题（AppState 持久化发布属性，变化时整树换色）
     private var myth: MythTheme? {
@@ -559,6 +619,17 @@ struct WallpaperSheet: View {
             let access = await MythService.check(phone: phone)
             mythAllowed = access.allowed
         }
+        .sheet(isPresented: $showImagePicker) {
+            PhotoLibraryPicker(
+                onPick: { image in
+                    if let data = downscaleToJPEG(image) {
+                        SharedStore.saveCustomWallpaper(data)
+                        hasCustomWallpaper = true
+                    }
+                },
+                onCancel: { }
+            )
+        }
     }
 
     /// 壁纸选项（push 模式下点选即时保存）
@@ -568,19 +639,54 @@ struct WallpaperSheet: View {
                 title: "樱花飘落",
                 subtitle: "卡片顶部花瓣缓缓飘落（网页版默认）",
                 symbol: "snowflake",
-                selected: sakuraEnabled
+                selected: sakuraEnabled && !hasCustomWallpaper
             ) {
                 sakuraEnabled = true
+                SharedStore.saveCustomWallpaper(nil)
+                hasCustomWallpaper = false
                 if isPushed { SharedStore.saveSakuraEnabled(true) }
             }
             wallpaperOption(
                 title: "纯净背景",
                 subtitle: "仅保留浅色背景与光晕，无花瓣动画",
                 symbol: "circle",
-                selected: !sakuraEnabled
+                selected: !sakuraEnabled && !hasCustomWallpaper
             ) {
                 sakuraEnabled = false
+                SharedStore.saveCustomWallpaper(nil)
+                hasCustomWallpaper = false
                 if isPushed { SharedStore.saveSakuraEnabled(false) }
+            }
+            // 自定义图片：从相册上传作为背景
+            wallpaperOption(
+                title: "自定义图片",
+                subtitle: "从相册选择一张图作为背景（适配液态玻璃控车栏）",
+                symbol: "photo.on.rectangle.angled",
+                selected: hasCustomWallpaper
+            ) {
+                showImagePicker = true
+            }
+            if hasCustomWallpaper {
+                Button {
+                    SharedStore.saveCustomWallpaper(nil)
+                    hasCustomWallpaper = false
+                } label: {
+                    HStack {
+                        Spacer()
+                        Text("移除自定义壁纸")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(WebTheme.red)
+                        Spacer()
+                    }
+                    .padding(.vertical, 11)
+                    .background(WebTheme.card2)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(WebTheme.border, lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
             }
             if mythAllowed {
                 mythSection

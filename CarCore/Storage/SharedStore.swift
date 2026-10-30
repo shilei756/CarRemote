@@ -10,6 +10,7 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
     case cs75 = "cs75"                      // CS75PLUS
     case univK = "univ_k"                   // UNI-K
     case cs7520 = "cs75_20"                 // CS75 20款
+    case cs75Black = "cs75_black"            // CS75PLUS 黑色（用户网站新增 2D 图，增加不替换）
 
     /// 展示名（网页版 CAR_MODELS.name）
     public var displayName: String {
@@ -20,6 +21,7 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
         case .cs75: return "CS75PLUS"
         case .univK: return "UNI-K"
         case .cs7520: return "CS75 20款"
+        case .cs75Black: return "CS75 黑色"
         }
     }
 
@@ -27,7 +29,7 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
         switch self {
         case .yidong, .yidongWhite: return "car"
         case .univ: return "car.rear"
-        case .cs75, .univK, .cs7520: return "car.front"
+        case .cs75, .cs75Black, .univK, .cs7520: return "car.front"
         }
     }
 
@@ -40,6 +42,7 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
         case .cs75: return "car_cs75plus"
         case .univK: return "car_univ_k"
         case .cs7520: return "car_cs75_20"
+        case .cs75Black: return "car_cs75_black"
         }
     }
 
@@ -52,6 +55,7 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
         case .cs75: return "car_top_cs75plus"
         case .univK: return "car_top_univ_k"
         case .cs7520: return "car_top_cs75_20"
+        case .cs75Black: return "car_top_cs75_black"
         }
     }
 
@@ -87,7 +91,7 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
         switch self {
         case .yidong, .yidongWhite: return 53
         case .univ: return 51
-        case .cs75, .cs7520: return 58
+        case .cs75, .cs75Black, .cs7520: return 58
         case .univK: return 56
         }
     }
@@ -535,6 +539,7 @@ public enum SharedStore {
         static let serverBaseURL = "carremote.serverBaseURL"
         static let mythTheme = "carremote.mythTheme"
         static let customCarName = "carremote.customCarName"
+        static let customWallpaper = "carremote.customWallpaper"
     }
 
     private static var defaults: UserDefaults? {
@@ -851,14 +856,30 @@ public enum SharedStore {
         defaults?.set(name, forKey: Key.customCarName)
     }
 
+    /// 自定义壁纸（用户从相册上传的图片 Data；nil = 未设置，走默认背景）。
+    /// 大图走容器文件，App Group UserDefaults 镜像一份供小组件读取。
+    public static func loadCustomWallpaper() -> Data? {
+        if let data = containerFileData(Key.customWallpaper) { return data }
+        if let data = allDefaults.compactMap({ $0.data(forKey: Key.customWallpaper) }).first(where: { !$0.isEmpty }) {
+            return data
+        }
+        return defaults?.data(forKey: Key.customWallpaper)
+    }
+
+    public static func saveCustomWallpaper(_ data: Data?) {
+        writeContainerFile(data, forKey: Key.customWallpaper)
+        allDefaults.forEach { $0.set(data, forKey: Key.customWallpaper) }
+    }
+
     public static func loadAppTheme() -> AppTheme {
-        guard let raw = defaults?.string(forKey: Key.appTheme),
+        // 多组遍历（重签环境下默认组可能失效，对齐其它设置的读取方式）
+        guard let raw = allDefaults.compactMap({ $0.string(forKey: Key.appTheme) }).first(where: { !$0.isEmpty }),
               let theme = AppTheme(rawValue: raw) else { return .light }
         return theme
     }
 
     public static func saveAppTheme(_ theme: AppTheme) {
-        defaults?.set(theme.rawValue, forKey: Key.appTheme)
+        allDefaults.forEach { $0.set(theme.rawValue, forKey: Key.appTheme) }
     }
 
     /// 樱花飘落背景开关（默认开，兼容旧行为）

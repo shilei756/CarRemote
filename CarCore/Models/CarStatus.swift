@@ -19,6 +19,44 @@ public struct CarStatus: @unchecked Sendable {
         self.raw = dict
     }
 
+    /// 从本地车况快照重建（「秒开」用：冷启动先用上次车况把控车页渲染出来，
+    /// 无需等待网络）。门窗/发动机等派生状态按快照布尔值回填为分区字段，
+    /// 与真实车「聚合字段兜底」行为一致；标量字段原样回填，保证展示数值与刷新后一致。
+    public init(snapshot: StatusSnapshot) {
+        var raw: [String: Any] = [:]
+        raw["remainedOilMile"] = snapshot.remainingRangeKm
+        raw["fuelLeftover"] = snapshot.fuelLeftLiters
+        raw["totalOdometer"] = snapshot.totalOdometerKm
+        raw["batteryVoltage"] = snapshot.batteryVoltage
+        raw["vehicleTemperature"] = snapshot.vehicleTempC
+        raw["airConditioningSetTemperature"] = snapshot.acTempC
+        // 门窗状态：整组同态回填为分区字段
+        let doorVal: Int = snapshot.doorUnlocked ? 1 : 0
+        raw["leftFrontDoorStatus"] = doorVal
+        raw["rightFrontDoorStatus"] = doorVal
+        raw["leftRearDoorStatus"] = doorVal
+        raw["rightRearDoorStatus"] = doorVal
+        raw["trunk"] = doorVal
+        raw["hood"] = doorVal
+        let winVal: Int = snapshot.windowOpen ? 1 : 0
+        raw["diverWindow"] = winVal
+        raw["passengerWindow"] = winVal
+        raw["leftRearWindow"] = winVal
+        raw["rightRearWindow"] = winVal
+        raw["sunroof"] = snapshot.sunroofOpen ? 1 : 0
+        // 发动机：用 engineStatus 表达「是否运转」，无转速/车速则按此判定
+        raw["engineStatus"] = snapshot.engineRunning ? 1 : 0
+        // 胎压（缺失项为 nil，展示「--」）
+        let tires = snapshot.tirePressures
+        if tires.count >= 4 {
+            raw["lfTyrePressure"] = tires[0]
+            raw["rfTyrePressure"] = tires[1]
+            raw["lrTyrePressure"] = tires[2]
+            raw["rrTyrePressure"] = tires[3]
+        }
+        self.raw = raw
+    }
+
     // MARK: - 通用取值（容错：数字/字符串/布尔均可）
 
     private static func number(_ dict: [String: Any], _ keys: [String]) -> Double? {

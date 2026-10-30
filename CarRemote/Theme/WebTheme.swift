@@ -168,6 +168,19 @@ extension View {
     }
 }
 
+extension View {
+    /// 控车栏样式：iOS 26 用液态玻璃（Liquid Glass），旧系统回退网页版白卡。
+    /// 配合自定义壁纸时，玻璃栏会透出壁纸，质感最佳。
+    @ViewBuilder
+    func controlBarStyle() -> some View {
+        if #available(iOS 26.0, *) {
+            self.glassEffect()
+        } else {
+            self.webCard()
+        }
+    }
+}
+
 // MARK: - 等宽数字（.num: font-variant-numeric: tabular-nums）
 
 extension View {
@@ -282,46 +295,71 @@ private struct PetalFallModifier: ViewModifier {
 
 /// 控制台浅色背景：#edf0f4 + 右上蓝光晕 + 左中绿光晕
 /// 神兽主题：底色换神兽 --bg0，光晕换主题色，右侧探出神兽水墨图腾（网页版 body::after + #mythWatermark）
+/// 自定义壁纸：用户从相册上传的图片优先整页铺底（适配 iOS 26 液态玻璃控车栏）
 struct WebConsoleBackground: View {
+    /// 用户自定义壁纸（相册上传）；非空时整页铺该图，忽略默认渐变
+    @State private var customImage: UIImage?
+
+    init() {
+        if let data = SharedStore.loadCustomWallpaper(), let img = UIImage(data: data) {
+            _customImage = State(initialValue: img)
+        }
+    }
+
     var body: some View {
         ZStack {
-            WebTheme.bg0
-            if let myth = WebTheme.myth {
-                // 神兽主题：主题色光晕（网页版：右上主色雾 + 左下鎏金雾）
-                RadialGradient(
-                    colors: [Color(hex: myth.mainHex).opacity(0.16), .clear],
-                    center: .init(x: 0.88, y: 0.06),
-                    startRadius: 0,
-                    endRadius: 300
-                )
-                RadialGradient(
-                    colors: [Color(hex: myth.goldHex).opacity(0.12), .clear],
-                    center: .init(x: 0.04, y: 0.94),
-                    startRadius: 0,
-                    endRadius: 280
-                )
-                // 神兽图腾：右上探出（网页版 #mythWatermark）
-                Image(myth.imageName)
+            if let customImage {
+                // 自定义壁纸：整页铺满，叠一层轻量压暗保证卡片/文字可读
+                Image(uiImage: customImage)
                     .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 340)
-                    .rotationEffect(.degrees(-6))
-                    .opacity(0.16)
-                    .position(x: UIScreen.main.bounds.width * 0.78, y: 130)
-                    .allowsHitTesting(false)
+                    .scaledToFill()
+                    .ignoresSafeArea()
+                LinearGradient(
+                    colors: [Color.black.opacity(0.16), Color.black.opacity(0.30)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
             } else {
-                RadialGradient(
-                    colors: [WebTheme.blue.opacity(0.06), .clear],
-                    center: .init(x: 0.8, y: -0.05),
-                    startRadius: 0,
-                    endRadius: 260
-                )
-                RadialGradient(
-                    colors: [WebTheme.green.opacity(0.05), .clear],
-                    center: .init(x: 0.0, y: 0.3),
-                    startRadius: 0,
-                    endRadius: 300
-                )
+                WebTheme.bg0
+                if let myth = WebTheme.myth {
+                    // 神兽主题：主题色光晕（网页版：右上主色雾 + 左下鎏金雾）
+                    RadialGradient(
+                        colors: [Color(hex: myth.mainHex).opacity(0.16), .clear],
+                        center: .init(x: 0.88, y: 0.06),
+                        startRadius: 0,
+                        endRadius: 300
+                    )
+                    RadialGradient(
+                        colors: [Color(hex: myth.goldHex).opacity(0.12), .clear],
+                        center: .init(x: 0.04, y: 0.94),
+                        startRadius: 0,
+                        endRadius: 280
+                    )
+                    // 神兽图腾：右上探出（网页版 #mythWatermark）
+                    Image(myth.imageName)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 340)
+                        .rotationEffect(.degrees(-6))
+                        .opacity(0.16)
+                        .position(x: UIScreen.main.bounds.width * 0.78, y: 130)
+                        .allowsHitTesting(false)
+                } else {
+                    RadialGradient(
+                        colors: [WebTheme.blue.opacity(0.06), .clear],
+                        center: .init(x: 0.8, y: -0.05),
+                        startRadius: 0,
+                        endRadius: 260
+                    )
+                    RadialGradient(
+                        colors: [WebTheme.green.opacity(0.05), .clear],
+                        center: .init(x: 0.0, y: 0.3),
+                        startRadius: 0,
+                        endRadius: 300
+                    )
+                }
             }
         }
         .ignoresSafeArea()

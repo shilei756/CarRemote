@@ -544,7 +544,7 @@ struct DashboardView: View {
                 }
                 .padding(.vertical, 14)
                 .padding(.horizontal, 8)
-                .webCard()
+                .controlBarStyle()
             }
         }
     }
