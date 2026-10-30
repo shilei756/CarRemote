@@ -251,11 +251,25 @@ struct CarVisualView: View {
     let isUnlocked: Bool
 
     var body: some View {
-        Image(style.sideImageName)
-            .resizable()
-            .aspectRatio(contentMode: .fit)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(isUnlocked ? "\(style.displayName) 车辆图片，当前已解锁" : "\(style.displayName) 车辆图片，当前已锁止")
+        Group {
+            if style.isCatalogModel {
+                // 车模库车型暂无 2D 车图：3D 图标占位
+                VStack(spacing: 6) {
+                    Image(systemName: "view.3d")
+                        .font(.system(size: 40, weight: .light))
+                        .foregroundStyle(WebTheme.blue.opacity(0.6))
+                    Text("该车型请到「3D 车模库」查看三维车模")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(WebTheme.muted)
+                }
+            } else {
+                Image(style.sideImageName)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(isUnlocked ? "\(style.displayName) 车辆图片，当前已解锁" : "\(style.displayName) 车辆图片，当前已锁止")
     }
 }
 

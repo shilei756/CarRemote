@@ -445,6 +445,45 @@ public final class Car3DView: UIView {
         applyOrbitCamera()
     }
 
+    /// 「我的爱车」同款俯视图：0.8s 缓动把相机切到车顶正上方（方位角保持不变）。
+    /// 仰角取 87° 而非 90°，避免正好处于轨道相机万向节奇异点。
+    public func setTopView(animated: Bool = true) {
+        animateCameraTo(elevation: 1.518, duration: animated ? 0.8 : 0)
+    }
+
+    /// 相机目标位补间：计算目标轨道位（含自动取景闭式解），再用 RealityKit
+    /// move(to:timingFunction:) 做缓动过渡。轨道状态字段同步更新，
+    /// 保证动画结束后用户的拖拽/捏合从当前位置无跳变地继续。
+    private func animateCameraTo(azimuth: Float? = nil, elevation: Float? = nil,
+                                 radius: Float? = nil, duration: Double) {
+        guard let camera = cameraEntity else { return }
+        if let a = azimuth { orbitAzimuth = a }
+        if let e = elevation { orbitElevation = e }
+        if let r = radius {
+            orbitRadius = min(max(r, 1.2), 12)
+            autoFrame = false
+        } else {
+            autoFrame = true
+        }
+        let radius = autoFrame ? fittedRadius() : orbitRadius
+        orbitRadius = radius
+        let ce = cos(orbitElevation)
+        let target = orbitTarget
+        let pos = SIMD3<Float>(
+            target.x + radius * ce * sin(orbitAzimuth),
+            target.y + radius * sin(orbitElevation),
+            target.z + radius * ce * cos(orbitAzimuth)
+        )
+        guard duration > 0 else {
+            camera.look(at: target, from: pos, relativeTo: nil)
+            return
+        }
+        // 用临时实体求出目标朝向（look 语义与 applyOrbitCamera 完全一致），再做缓动
+        let tmp = Entity()
+        tmp.look(at: target, from: pos, relativeTo: nil)
+        camera.move(to: tmp.transform, relativeTo: nil, duration: duration, timingFunction: .easeInOut)
+    }
+
     /// 当前旋转角度下「整车完整入画」所需的最小相机距离（闭式解）。
     ///
     /// 推导：相机位于 `target + r * dir`，朝向 `-dir`。对任意顶点 p，令
@@ -520,6 +559,12 @@ public final class Car3DView: UIView {
     /// 不接触任何视图/场景状态，可在任意队列安全调用。
     /// - Parameter name: 资源名（不带扩展名，对应 EadoPlus2022.rk.json / .rk.bin）
     public static func buildCarModel(named name: String) -> RKCarModel? {
+        // 1.5.0 起：「我的爱车」GLB 车模库（c211/c281 等 12 款）走零依赖 GLB 解析器，
+        // 产出与 .rk 管线同结构的静态车模（仅查看旋转，无门窗联动）。
+        // .rk 官方全件模（EadoPlus2022）没有同名 .glb，不会误入此分支。
+        if let glb = GLBCarModelLoader.load(named: name) {
+            return glb
+        }
         // 只要求清单存在：几何文件由 manifest.geometryFile 指定，
         // 配色变体（如灰色逸动 EadoPlus2022Gray）复用同一份 .rk.bin，
         // 因此这里不能按 name 强制要求 "<name>.rk.bin" 存在（否则灰色款加载失败）。

@@ -116,15 +116,23 @@ struct SettingsView: View {
                             saveSettings()
                         } label: {
                             VStack(spacing: 6) {
-                                Image(style.sideImageName)
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                                    .frame(height: 42)
+                                if style.isCatalogModel {
+                                    // 车模库车型暂无 2D 车图，用 3D 图标占位
+                                    Image(systemName: "view.3d")
+                                        .font(.system(size: 26, weight: .medium))
+                                        .foregroundStyle(WebTheme.blue.opacity(0.7))
+                                        .frame(height: 42)
+                                } else {
+                                    Image(style.sideImageName)
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fit)
+                                        .frame(height: 42)
+                                }
                                 Text(style.displayName)
                                     .font(.system(size: 12, weight: .semibold))
                                     .foregroundStyle(WebTheme.txt)
                                     .lineLimit(1)
-                                Text("\(Int(style.tankCapacityL))L 油箱")
+                                Text(style.isCatalogModel ? "3D 车模库" : "\(Int(style.tankCapacityL))L 油箱")
                                     .font(.system(size: 9.5))
                                     .foregroundStyle(WebTheme.faint)
                             }
@@ -154,6 +162,32 @@ struct SettingsView: View {
 
     private var settingsListCard: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // 3D 车模库（「我的爱车」提取的 12 款 GLB 三维车模浏览页）
+            NavigationLink {
+                CarModelGalleryView()
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "view.3d")
+                        .font(.system(size: 12))
+                        .foregroundStyle(WebTheme.purple)
+                        .frame(width: 20)
+                    Text("3D 车模库")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(WebTheme.txt)
+                    Text("12 款长安系三维车模浏览")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(WebTheme.faint)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(WebTheme.faint)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 11)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("打开 3D 车模库")
+            rowDivider
             // 3D 车模开关（仅当车型有可用 3D 资产时显示；1.1.2 起暂时禁用 3D 车模）
             if CarModelStyle.yidong.has3DModel {
                 actionRow(symbol: "cube.fill", tint: WebTheme.blue,
