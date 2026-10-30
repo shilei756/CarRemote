@@ -547,7 +547,7 @@ enum GLBCarModelLoader {
         guard let src = CGImageSourceCreateWithData(bytes as CFData, nil),
               let cg = CGImageSourceCreateImageAtIndex(src, 0, [kCGImageSourceShouldCache: false] as CFDictionary)
         else { return nil }
-        return try? TextureResource.generate(from: cg, withName: "glb_tex")
+        return try? TextureResource.generate(from: cg, withName: "glb_tex", options: .init())
     }
 
     // MARK: - 几何兜底
