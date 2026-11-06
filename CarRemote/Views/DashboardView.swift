@@ -105,7 +105,6 @@ struct DashboardView: View {
                             Text("ID. CONTROL")
                                 .font(Font.webLedFont(size: 20))
                                 .foregroundStyle(WebTheme.txt)
-                                .kerning(1)
                                 .accessibilityLabel("ID. CONTROL")
                             Spacer()
                             // 右：远程信号（点击刷新车况）圆钮
