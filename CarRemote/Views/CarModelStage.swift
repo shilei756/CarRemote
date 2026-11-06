@@ -78,6 +78,8 @@ final class Car3DModelState: ObservableObject {
         if let last = lastSyncedStatus {
             applyStatus(last, to: view, duration: 0.001)
         }
+        // 重放当前视角模式（车外/车内），避免视图重建后回退到默认车外
+        view.setViewMode(viewMode)
     }
 
     func ensureAttached(_ view: Car3DView) {
@@ -141,6 +143,13 @@ final class Car3DModelState: ObservableObject {
     /// 「我的爱车」同款俯视图（0.8s 缓动切到车顶正上方）
     func topView() {
         sceneView?.setTopView()
+    }
+
+    /// 车内 / 车外视角切换（复用车模自带座舱几何）
+    @Published var viewMode: Car3DView.ViewMode = .exterior
+    func setViewMode(_ mode: Car3DView.ViewMode) {
+        viewMode = mode
+        sceneView?.setViewMode(mode)
     }
 
     // MARK: 车辆启停 / 行驶状态同步（灯与车轮完全由真实车况驱动）
@@ -484,6 +493,10 @@ struct CarVisual3DStage: View {
                         .accessibilityLabel("重置车模视角")
                     }
                     Spacer()
+                    // 外 / 内 视角切换（车内视觉：复用座舱几何）
+                    if show3D && !model.loadFailed && style.model3DName != nil {
+                        viewModeSlider
+                    }
                     // 3D / 2D 胶囊滑块（对齐智慧云控车模页右上角切换控件）
                     if style.model3DName != nil {
                         stageModeSlider
@@ -533,6 +546,41 @@ struct CarVisual3DStage: View {
         .accessibilityHint("可在三维车模与二维车图之间切换")
     }
 
+    // MARK: 外 / 内 视角切换（车内视觉）
+
+    private var viewModeSlider: some View {
+        HStack(spacing: 0) {
+            viewModeSegment(.exterior, title: "外")
+            viewModeSegment(.interior, title: "内")
+        }
+        .padding(3)
+        .background(Color(.secondarySystemBackground).opacity(0.9))
+        .clipShape(Capsule())
+        .overlay(Capsule().strokeBorder(WebTheme.border, lineWidth: 1))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("车模视角")
+        .accessibilityHint("可在车外展示与车内座舱视角之间切换")
+    }
+
+    private func viewModeSegment(_ segment: Car3DView.ViewMode, title: String) -> some View {
+        let selected = model.viewMode == segment
+        return Button {
+            withAnimation(.easeInOut(duration: 0.18)) { model.setViewMode(segment) }
+        } label: {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(selected ? Color.white : WebTheme.muted)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule().fill(selected ? WebTheme.blue : Color.clear)
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title == "外" ? "车外视角" : "车内视角")
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
+    }
+
     private func stageSegment(_ segment: StageMode, title: String) -> some View {
         let selected = mode == segment
         return Button {
@@ -562,7 +610,8 @@ struct CarVisual3DStage: View {
         var parts: [String] = [
             "\(style.displayName) 三维车模",
             "左右滑动可旋转，双指捏合缩放，双击复位视角",
-            "长按车门、尾门或天窗可开合"
+            "长按车门、尾门或天窗可开合",
+            "右上角可在车外展示与车内座舱视角之间切换"
         ]
         parts.append(statusSummaryText)
         return parts.joined(separator: "。")

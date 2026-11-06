@@ -169,8 +169,24 @@ enum GLBCarModelLoader {
             let carRoot = Entity()
             carRoot.name = "carRoot_glb"
 
+            // 座舱 / 外观分组容器：把 `Int_P` 子树（座椅/仪表台/方向盘等内饰几何）
+            // 独立成可显隐的 interiorRoot，外观（车身/门窗/车轮）挂在 exteriorRoot。
+            // 两者均位于车根原点，因此网格仍按世界坐标烘焙即可正确入位。
+            let exteriorRoot = Entity()
+            exteriorRoot.name = "exteriorRoot"
+            carRoot.addChild(exteriorRoot)
+            let interiorRoot = Entity()
+            interiorRoot.name = "interiorRoot"
+            interiorRoot.isEnabled = false   // 默认只看车外，车内视角再开启
+            carRoot.addChild(interiorRoot)
+
             var worldMatrices = [simd_float4x4](repeating: matrix_identity_float4x4,
                                                 count: max(nodesJSON.count, 1))
+            /// 节点是否处于 `Int_P` 座舱子树内（DFS 传播）
+            var nodeInInterior = [Bool](repeating: false, count: max(nodesJSON.count, 1))
+            /// 座舱几何包围盒（用于把相机切入座舱中心）
+            var interiorBoundsMin = SIMD3<Float>(repeating: .greatestFiniteMagnitude)
+            var interiorBoundsMax = SIMD3<Float>(repeating: -.greatestFiniteMagnitude)
             var accessorFloatCache: [Int: [Float]] = [:]
             var accessorIndexCache: [Int: [UInt32]] = [:]
             var materialCache: [Int: PhysicallyBasedMaterial] = [:]
@@ -263,9 +279,19 @@ enum GLBCarModelLoader {
             var pivotFrames = [Int: SIMD3<Float>]()      // 枢轴世界平移（根空间）
             var pivotSpecByNode = [Int: PivotSpec]()
             var ownerPivotOf = [Int: Int]()              // 网格节点 → 最近枢轴祖先
-            func dfsBuild(node: Int, nearestPivot: Int?) {
+            func dfsBuild(node: Int, nearestPivot: Int?, inInterior: Bool) {
                 guard node < nodesJSON.count else { return }
                 let name = nodesJSON[node]["name"] as? String ?? ""
+                // `Int_P` 起整棵子树为座舱；`Ext_P` 起为外观（显式复位，避免误继承）。
+                let regionInterior: Bool
+                if name == "Int_P" {
+                    regionInterior = true
+                } else if name == "Ext_P" {
+                    regionInterior = false
+                } else {
+                    regionInterior = inInterior
+                }
+                nodeInInterior[node] = regionInterior
                 if let spec = classifyPivot(name) {
                     let w = worldMatrices[node]
                     let t = SIMD3<Float>(w.columns.3.x, w.columns.3.y, w.columns.3.z)
@@ -275,24 +301,25 @@ enum GLBCarModelLoader {
                         pe.addChild(e)
                     } else {
                         e.position = t
-                        carRoot.addChild(e)
+                        // 顶层枢轴（车门/车窗/车轮/尾门）属外观，挂到 exteriorRoot
+                        (regionInterior ? interiorRoot : exteriorRoot).addChild(e)
                     }
                     e.name = entityName(for: spec)
                     pivotEntities[node] = e
                     pivotFrames[node] = t
                     pivotSpecByNode[node] = spec
                     if let children = nodesJSON[node]["children"] as? [Int] {
-                        for c in children { dfsBuild(node: c, nearestPivot: node) }
+                        for c in children { dfsBuild(node: c, nearestPivot: node, inInterior: regionInterior) }
                     }
                 } else {
                     if let np = nearestPivot { ownerPivotOf[node] = np }
                     if let children = nodesJSON[node]["children"] as? [Int] {
-                        for c in children { dfsBuild(node: c, nearestPivot: nearestPivot) }
+                        for c in children { dfsBuild(node: c, nearestPivot: nearestPivot, inInterior: regionInterior) }
                     }
                 }
             }
             for r in rootNodes where r < nodesJSON.count {
-                dfsBuild(node: r, nearestPivot: nil)
+                dfsBuild(node: r, nearestPivot: nil, inInterior: false)
             }
 
             // ---- 网格：顶点按归属枢轴烘焙到铰链局部空间 ----
@@ -310,7 +337,8 @@ enum GLBCarModelLoader {
                 } else {
                     frameT = .zero
                 }
-                let parentEntity = ownerPivotOf[ni].flatMap { pivotEntities[$0] } ?? carRoot
+                let parentEntity = ownerPivotOf[ni].flatMap { pivotEntities[$0] }
+                    ?? (nodeInInterior[ni] ? interiorRoot : exteriorRoot)
 
                 let prims = meshes[meshIdx]["primitives"] as? [[String: Any]] ?? []
                 for prim in prims {
@@ -357,6 +385,14 @@ enum GLBCarModelLoader {
                         boundsMin.x = min(boundsMin.x, wx); boundsMax.x = max(boundsMax.x, wx)
                         boundsMin.y = min(boundsMin.y, wy); boundsMax.y = max(boundsMax.y, wy)
                         boundsMin.z = min(boundsMin.z, wz); boundsMax.z = max(boundsMax.z, wz)
+                        if nodeInInterior[ni] {
+                            interiorBoundsMin.x = min(interiorBoundsMin.x, wx)
+                            interiorBoundsMax.x = max(interiorBoundsMax.x, wx)
+                            interiorBoundsMin.y = min(interiorBoundsMin.y, wy)
+                            interiorBoundsMax.y = max(interiorBoundsMax.y, wy)
+                            interiorBoundsMin.z = min(interiorBoundsMin.z, wz)
+                            interiorBoundsMax.z = max(interiorBoundsMax.z, wz)
+                        }
                     }
                     // 取景代表点：同一 POSITION 同一枢轴只缓存一份（铰链局部坐标 + 链接平移），
                     // 待全部包围盒就绪后统一扫描（高度分层依赖完整 bounds）
@@ -424,6 +460,16 @@ enum GLBCarModelLoader {
                     descriptor.materials = .allFaces(0)
                     guard let mesh = try? MeshResource.generate(from: [descriptor]) else { continue }
                     let model = ModelEntity(mesh: mesh, materials: [mat])
+                    // 座舱内饰多为薄片/内表面，从车内看正面是内壁 —— 强制双-sided，
+                    // 避免切到座舱后内壁被背面剔除而消失。
+                    if nodeInInterior[ni], var mc = model.model {
+                        for i in mc.materials.indices {
+                            var m = mc.materials[i]
+                            m.faceCulling = .none
+                            mc.materials[i] = m
+                        }
+                        model.model = mc
+                    }
                     parentEntity.addChild(model)
                 }
             }
@@ -505,6 +551,16 @@ enum GLBCarModelLoader {
                 fitPoints.append(fitReps[k])
             }
 
+            // 座舱中心与半径（相机切座舱用）：以座舱包围盒中心为注视点，
+            // 半径取包围盒半对角（保证所有内饰几何都在视野球内、不被裁切）。
+            var interiorCenter = SIMD3<Float>(0, 0.5, 0)
+            var interiorRadius: Float = 0.8
+            if interiorBoundsMin.x <= interiorBoundsMax.x {
+                interiorCenter = (interiorBoundsMin + interiorBoundsMax) / 2
+                let extent = interiorBoundsMax - interiorBoundsMin
+                interiorRadius = max(0.5 * simd_length(extent), 0.5)
+            }
+
             return RKCarModel(root: carRoot,
                               partEntities: partEntities, windowEntities: windowEntities,
                               handleEntities: handleEntities,
@@ -514,7 +570,9 @@ enum GLBCarModelLoader {
                               sunroofTilt: sunroofTilt, windowRest: windowRest, windowOpen: windowOpen,
                               windowTilt: windowTilt, handleTilt: handleTilt,
                               boundsMin: boundsMin, boundsMax: boundsMax,
-                              fitPoints: fitPoints)
+                              fitPoints: fitPoints,
+                              interiorRoot: interiorRoot, exteriorRoot: exteriorRoot,
+                              interiorCenter: interiorCenter, interiorRadius: interiorRadius)
         } catch {
             return nil
         }
