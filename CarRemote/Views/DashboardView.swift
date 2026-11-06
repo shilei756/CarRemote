@@ -1,46 +1,68 @@
 import SwiftUI
 import CarCore
 
-/// 主界面：五个标签（控车 / 车况 / 油耗 / 维保 / 我的）
-/// 样式照搬网页版控制台（浅色 + 白卡 + 樱花花瓣 + 浮动车图）
-struct MainTabView: View {
+/// ID.CONTROL 风格三屏外壳：概览 / 空调 / 车库，底部浮动白色胶囊导航。
+/// 废弃原 5-tab 系统 TabView，改用自绘浮动胶囊（激活态红图标 + 灰色圆高亮）。
+struct IDControlShell: View {
     @EnvironmentObject private var appState: AppState
     @StateObject private var tabRouter = TabRouter.shared
 
     var body: some View {
-        TabView(selection: $tabRouter.selectedTab) {
-            DashboardView(appState: appState)
-                .tabItem {
-                    Label("控车", systemImage: "car.circle.fill")
+        ZStack(alignment: .bottom) {
+            Group {
+                switch tabRouter.selectedTab {
+                case .overview: DashboardView(appState: appState)
+                case .climate: ClimateView()
+                case .garage: GarageView()
                 }
-                .tag(TabRouter.Tab.control)
-            VehicleStatusPage()
-                .tabItem {
-                    Label("车况", systemImage: "gauge.with.dots.needle.bottom.50percent")
-                }
-                .tag(TabRouter.Tab.status)
-            FuelTrackerView(appState: appState)
-                .tabItem {
-                    Label("油耗", systemImage: "fuelpump.fill")
-                }
-                .tag(TabRouter.Tab.fuel)
-            MaintenanceView(appState: appState)
-                .tabItem {
-                    Label("维保", systemImage: "wrench.and.screwdriver.fill")
-                }
-                .tag(TabRouter.Tab.maintenance)
-            SettingsView()
-                .tabItem {
-                    Label("我的", systemImage: "person.crop.circle.fill")
-                }
-                .tag(TabRouter.Tab.profile)
+            }
+            // 浮动白色胶囊导航
+            HStack(spacing: 0) {
+                idTabButton(.overview, title: "概览", icon: "square.grid.2x2.fill")
+                idTabButton(.climate, title: "空调", icon: "fan.fill")
+                idTabButton(.garage, title: "车库", icon: "folder.fill")
+            }
+            .padding(.vertical, 9)
+            .padding(.horizontal, 6)
+            .background(
+                Capsule()
+                    .fill(Color.white)
+                    .shadow(color: .black.opacity(0.12), radius: 14, y: 5)
+            )
+            .padding(.horizontal, 26)
+            .padding(.bottom, 18)
         }
+        .ignoresSafeArea(edges: .bottom)
         .tint(WebTheme.blue)
+    }
+
+    private func idTabButton(_ tab: TabRouter.Tab, title: String, icon: String) -> some View {
+        let active = tabRouter.selectedTab == tab
+        return Button {
+            withAnimation(.easeInOut(duration: 0.18)) { tabRouter.select(tab) }
+        } label: {
+            VStack(spacing: 3) {
+                Image(systemName: icon)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(active ? WebTheme.blue : WebTheme.muted)
+                Text(title)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(active ? WebTheme.blue : WebTheme.muted)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 7)
+            .background(
+                active
+                    ? Circle().fill(WebTheme.card2).frame(width: 52, height: 52)
+                    : nil
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
     }
 }
 
-/// 控车主界面：照搬网页版控制台结构
-/// header（车名+状态点） → 浮动车图 → 车况卡 → 快捷控车 → 更多指令 → 定位卡
+/// 控车主界面（ID.CONTROL「概览」屏）：点阵标题 + 居中 3D 车模 + 4 张分区卡
 struct DashboardView: View {
     @EnvironmentObject private var appState: AppState
     @StateObject private var viewModel: DashboardViewModel
@@ -62,54 +84,59 @@ struct DashboardView: View {
                 WebConsoleBackground()
                 ScrollView {
                     VStack(spacing: 12) {
-                        // 顶部栏：左侧「测试版」标签 + 右侧刷新钮（iOS 26 导航栏重塑风险，故放内容区）
-                        HStack {
-                            Text("测试版")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(WebTheme.blue)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(WebTheme.blue.opacity(0.12))
-                                .clipShape(Capsule())
-                                .overlay(Capsule().strokeBorder(WebTheme.blue.opacity(0.4), lineWidth: 1))
+                        // 顶部栏：左设置圆钮 · 居中「ID. CONTROL」点阵标题 · 右远程/刷新圆钮
+                        HStack(spacing: 12) {
+                            // 左：设置圆钮
+                            Button {
+                                showWallpaperSheet = true
+                            } label: {
+                                Circle()
+                                    .strokeBorder(WebTheme.border, lineWidth: 1)
+                                    .frame(width: 34, height: 34)
+                                    .overlay(
+                                        Image(systemName: "slider.horizontal.3")
+                                            .font(.system(size: 15, weight: .semibold))
+                                            .foregroundStyle(WebTheme.txt)
+                                    )
+                            }
+                            .accessibilityLabel("设置")
                             Spacer()
+                            // 中：点阵标题
+                            Text("ID. CONTROL")
+                                .font(Font.webLedFont(size: 20))
+                                .foregroundStyle(WebTheme.txt)
+                                .tracking(1)
+                                .accessibilityLabel("ID. CONTROL")
+                            Spacer()
+                            // 右：远程信号（点击刷新车况）圆钮
                             Button {
                                 Task { await appState.refreshStatus() }
                             } label: {
-                                ZStack {
-                                    Circle()
-                                        .fill(.clear)
-                                        .frame(width: 34, height: 34)
-                                    Circle()
-                                        .strokeBorder(WebTheme.border, lineWidth: 1)
-                                        .frame(width: 34, height: 34)
-                                    if appState.isRefreshing {
-                                        ProgressView()
-                                            .scaleEffect(0.75)
-                                            .tint(WebTheme.muted)
-                                    } else {
-                                        Image(systemName: "arrow.clockwise")
-                                            .font(.system(size: 14, weight: .bold))
+                                Circle()
+                                    .strokeBorder(WebTheme.border, lineWidth: 1)
+                                    .frame(width: 34, height: 34)
+                                    .overlay(
+                                        Image(systemName: "antenna.radiowaves.left.and.right")
+                                            .font(.system(size: 15, weight: .semibold))
                                             .foregroundStyle(WebTheme.txt)
-                                    }
-                                }
+                                    )
                             }
                             .accessibilityLabel("刷新车况")
                             .disabled(appState.isRefreshing)
                         }
                         .padding(.top, 6)
-                        // 居中大标题（车名，可点击改名）—— ID.CONTROL 风格：居中大字
+                        // 车名（点阵 + 下拉箭头），点按改名
                         Button {
                             nameDraft = appState.customCarName
                             showNameEditor = true
                         } label: {
-                            HStack(spacing: 6) {
+                            HStack(spacing: 4) {
                                 Text(appState.carName.isEmpty ? "我的爱车" : appState.carName)
-                                    .font(.system(size: 22, weight: .bold))
+                                    .font(Font.webLedFont(size: 18))
                                     .foregroundStyle(WebTheme.txt)
                                     .lineLimit(1)
-                                Image(systemName: "pencil")
-                                    .font(.system(size: 11, weight: .semibold))
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 10, weight: .bold))
                                     .foregroundStyle(WebTheme.faint)
                             }
                         }
@@ -122,12 +149,7 @@ struct DashboardView: View {
                         }
                         if let status = appState.status {
                             carStage(status: status)
-                            idControlGrid(status: status)
-                            quickControlsCard
-                            moreControlsCard
-                            // 位置改为点击才查询（对齐网页版），默认只显示入口卡
-                            locationEntryCard
-                            moreToolsCard
+                            idOverviewCards(status: status)
                         } else {
                             loadingOrEmpty
                         }
@@ -135,6 +157,7 @@ struct DashboardView: View {
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
+                    .padding(.bottom, 110)
                 }
             .refreshable {
                 await appState.refreshStatus()
@@ -370,111 +393,165 @@ struct DashboardView: View {
     // MARK: - ID.CONTROL 分区大数字卡（测试版专属仪表风）
 
     /// 单张分区卡：细描边 + 图标标签 + 大号等宽数字 + 副标（对齐 ID.CONTROL 深色极简风）
-    private func icStatCard(title: String, value: String, unit: String? = nil,
-                            subtitle: String? = nil, icon: String, accent: Color) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 5) {
-                Image(systemName: icon)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(accent)
-                Text(title)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(WebTheme.muted)
-                Spacer()
-            }
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(value)
-                    .font(.system(size: 30, weight: .bold))
-                    .foregroundStyle(WebTheme.txt)
-                    .monospacedDigit()
-                if let unit {
-                    Text(unit)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(WebTheme.faint)
+    // MARK: - ID.CONTROL 概览分区卡（燃油 / 车辆状态 / 空调 / 停车位置）
+
+    /// 统一白卡容器：白底 + 圆角 + 1px 描边 + 轻投影
+    private func idCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(WebTheme.card)
+            .clipShape(RoundedRectangle(cornerRadius: WebTheme.cardRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: WebTheme.cardRadius, style: .continuous)
+                    .strokeBorder(WebTheme.border, lineWidth: 1)
+            )
+    }
+
+    /// 概览 4 张分区卡（纵向堆叠，对齐 ID. CONTROL 风格）
+    private func idOverviewCards(status: CarStatus) -> some View {
+        VStack(spacing: 12) {
+            fuelCard(status)
+            vehicleStatusCard(status)
+            climateCard(status)
+            parkingCard(status)
+        }
+    }
+
+    /// 燃油卡：点阵大数字（油量% + 续航 km）+ 分段进度条 + 红演示提示
+    private func fuelCard(_ status: CarStatus) -> some View {
+        let pct = status.fuelLeftLiters ?? 0
+        let ratio = min(1, max(0, pct / 100))
+        return idCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("燃油").font(.system(size: 13, weight: .semibold)).foregroundStyle(WebTheme.txt)
+                    Spacer()
+                    Text("演示").font(.system(size: 11)).foregroundStyle(WebTheme.faint)
+                }
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Image(systemName: "fuelpump.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(WebTheme.blue)
+                    Text(CarStatus.format(status.fuelLeftLiters))
+                        .font(Font.webSegFont(size: 34)).foregroundStyle(WebTheme.txt)
+                        .monospacedDigit()
+                    Text("%").font(.system(size: 15, weight: .bold)).foregroundStyle(WebTheme.faint)
+                    Spacer()
+                    Text(CarStatus.format(status.remainingRangeKm))
+                        .font(Font.webSegFont(size: 30)).foregroundStyle(WebTheme.txt)
+                        .monospacedDigit()
+                    Text("km").font(.system(size: 13, weight: .medium)).foregroundStyle(WebTheme.faint)
+                }
+                segmentedBar(ratio: ratio)
+                HStack {
+                    Text("预估续航").font(.system(size: 11)).foregroundStyle(WebTheme.faint)
+                    Spacer()
+                    HStack(spacing: 2) {
+                        Text("燃油详情").font(.system(size: 11, weight: .medium)).foregroundStyle(WebTheme.blue)
+                        Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold)).foregroundStyle(WebTheme.blue)
+                    }
+                }
+                HStack(spacing: 4) {
+                    Image(systemName: "sparkle").font(.system(size: 10)).foregroundStyle(WebTheme.blue)
+                    Text("演示数据 · 绑定车辆后查看真实记录").font(.system(size: 11)).foregroundStyle(WebTheme.blue)
                 }
             }
-            if let subtitle {
-                Text(subtitle)
-                    .font(.system(size: 11))
-                    .foregroundStyle(WebTheme.faint)
-                    .lineLimit(1)
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(WebTheme.card)
-        .clipShape(RoundedRectangle(cornerRadius: WebTheme.cardRadius, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: WebTheme.cardRadius, style: .continuous)
-                .strokeBorder(WebTheme.border, lineWidth: 1)
-        )
-    }
-
-    /// 两列分区网格：续航 / 车况 / 空调 / 充电 / 行程 / 车模库
-    private func idControlGrid(status: CarStatus) -> some View {
-        let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
-        return LazyVGrid(columns: columns, spacing: 12) {
-            // 续航（Battery / Range）
-            icStatCard(
-                title: "续航", value: CarStatus.format(status.remainingRangeKm),
-                unit: "km",
-                subtitle: "油量 \(CarStatus.format(status.fuelLeftLiters)) L",
-                icon: "battery.75", accent: WebTheme.green
-            )
-            // 车况（Vehicle status）：门锁 + 里程 + 胎压
-            icStatCard(
-                title: "车况", value: doorSummary(status),
-                subtitle: "里程 \(CarStatus.format(status.totalOdometerKm)) km · 胎压 \(tireAvgText(status))",
-                icon: "car.side.front.open", accent: WebTheme.blue
-            )
-            // 空调（Climate）
-            icStatCard(
-                title: "空调", value: CarStatus.format(status.acTempC),
-                unit: "°C",
-                subtitle: "车外 \(CarStatus.format(status.vehicleTempC))°C",
-                icon: "thermometer.medium", accent: WebTheme.purple
-            )
-            // 充电（Charging）：燃油车以油量表达能量，副标电瓶电压
-            icStatCard(
-                title: "充电", value: CarStatus.format(status.fuelLeftLiters),
-                unit: "L",
-                subtitle: "电瓶 \(CarStatus.format(status.batteryVoltage)) V",
-                icon: "bolt.fill", accent: WebTheme.amber
-            )
-            // 行程（Trips）
-            icStatCard(
-                title: "行程", value: CarStatus.format(status.lastTripKm),
-                unit: "km",
-                subtitle: "上次油耗 \(CarStatus.format(status.lastTripOilLiters)) L",
-                icon: "road.lanes", accent: WebTheme.purple
-            )
-            // 车模库（Garage）：点击进入官方 3D 车模库
-            NavigationLink {
-                CarModelGalleryView()
-            } label: {
-                icStatCard(
-                    title: "车模库", value: "浏览",
-                    subtitle: "长安系官方三维车模",
-                    icon: "view.3d", accent: WebTheme.blue
-                )
-            }
-            .buttonStyle(.plain)
         }
     }
 
-    /// 门锁状态摘要：全部上锁 = 已锁，否则提示异常
-    private func doorSummary(_ status: CarStatus) -> String {
+    /// 分段进度条：黑方块填充比例，余灰
+    private func segmentedBar(ratio: CGFloat) -> some View {
+        let total = 20
+        let filled = Int((ratio * CGFloat(total)).rounded())
+        return HStack(spacing: 3) {
+            ForEach(0..<total, id: \.self) { i in
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .fill(i < filled ? WebTheme.txt : WebTheme.track)
+                    .frame(height: 8)
+            }
+        }
+    }
+
+    /// 车辆状态卡：车身 / 门锁 / 燃油 三列
+    private func vehicleStatusCard(_ status: CarStatus) -> some View {
         let dw = status.doorsAndWindows
-        if dw.anyDoorUnlocked || dw.anyWindowOpen { return "异常" }
-        return "已锁"
+        let bodyState = (dw.anyDoorUnlocked || dw.anyWindowOpen) ? "已开启·演示" : "已关闭·演示"
+        let lockState = dw.anyDoorUnlocked ? "已开锁" : "已锁车"
+        let fuelPct = CarStatus.format(status.fuelLeftLiters) + "%"
+        return idCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("车辆状态").font(.system(size: 13, weight: .semibold)).foregroundStyle(WebTheme.txt)
+                    Spacer()
+                    Image(systemName: "chevron.right").font(.system(size: 11, weight: .bold)).foregroundStyle(WebTheme.faint)
+                }
+                HStack(spacing: 0) {
+                    statusColumn(icon: "car.side.rear", title: "车身", value: bodyState)
+                    Divider().frame(height: 36).background(WebTheme.border)
+                    statusColumn(icon: "lock.fill", title: "门锁", value: lockState)
+                    Divider().frame(height: 36).background(WebTheme.border)
+                    statusColumn(icon: "fuelpump.fill", title: "燃油", value: fuelPct)
+                }
+                Text("演示车辆状态 · 非实时").font(.system(size: 11)).foregroundStyle(WebTheme.faint)
+            }
+        }
     }
 
-    /// 四轮胎压均值（kPa）
-    private func tireAvgText(_ status: CarStatus) -> String {
-        let vals = status.tirePressures.compactMap { $0.valueKPa }
-        guard !vals.isEmpty else { return "--" }
-        let avg = vals.reduce(0, +) / Double(vals.count)
-        return "\(Int(avg.rounded()))kPa"
+    private func statusColumn(icon: String, title: String, value: String) -> some View {
+        VStack(spacing: 4) {
+            Image(systemName: icon).font(.system(size: 15)).foregroundStyle(WebTheme.muted)
+            Text(title).font(.system(size: 11)).foregroundStyle(WebTheme.faint)
+            Text(value).font(.system(size: 12, weight: .medium)).foregroundStyle(WebTheme.txt)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// 空调卡：点阵温度 + 红圆「调整预览」钮（进入空调页）
+    private func climateCard(_ status: CarStatus) -> some View {
+        idCard {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("空调").font(.system(size: 13, weight: .semibold)).foregroundStyle(WebTheme.txt)
+                    HStack(alignment: .firstTextBaseline, spacing: 2) {
+                        Text(CarStatus.format(status.acTempC))
+                            .font(Font.webSegFont(size: 30)).foregroundStyle(WebTheme.txt).monospacedDigit()
+                        Text("℃").font(.system(size: 14, weight: .bold)).foregroundStyle(WebTheme.faint)
+                    }
+                }
+                Spacer()
+                Button {
+                    TabRouter.shared.select(.climate)
+                } label: {
+                    ZStack {
+                        Circle().fill(WebTheme.blue).frame(width: 44, height: 44)
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.system(size: 16, weight: .semibold)).foregroundStyle(.white)
+                    }
+                }
+                .accessibilityLabel("调整预览空调")
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    /// 停车位置卡
+    private func parkingCard(_ status: CarStatus) -> some View {
+        let hasLoc = status.location != nil
+        return idCard {
+            HStack(spacing: 12) {
+                Image(systemName: "location.fill")
+                    .font(.system(size: 18)).foregroundStyle(WebTheme.blue)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("停车位置").font(.system(size: 13, weight: .semibold)).foregroundStyle(WebTheme.txt)
+                    Text(hasLoc ? "已上报位置" : "绑定车辆后查看位置")
+                        .font(.system(size: 11)).foregroundStyle(WebTheme.faint)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .bold)).foregroundStyle(WebTheme.faint)
+            }
+        }
     }
 
     // MARK: - 车况卡（网页版 user-info-container：油量条 + 续航 + 里程 + 温度 + 电瓶条）
@@ -982,12 +1059,12 @@ struct DashboardView: View {
         case .acActivate:
             viewModel.showACQR = true
         case .vehicleStatus:
-            // 车况已独立成底部「车况」标签页
-            TabRouter.shared.select(.status)
+            // 车况已并入底部「车库」页列表，跳转至车库
+            TabRouter.shared.select(.garage)
         case .panorama:
             viewModel.showEmbed = .panorama
         case .maintenance:
-            TabRouter.shared.select(.maintenance)
+            TabRouter.shared.select(.garage)
         case .wallpaper:
             showWallpaperSheet = true
         case .customize:

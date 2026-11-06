@@ -7,11 +7,11 @@ import CarCore
 /// 夜间模式取值来自网页版 `html.dark` 规则块（--bg0:#101318 等）
 /// 神兽主题激活时整套配色切换为神兽调色板（网页版 html.glass.myth-* 规则块）
 ///
-/// ⚠️ 测试分支（test/id-control-style）专属：本分支复刻「上汽大众 ID.CONTROL」深色仪表风，
-/// 强制全局深色 + 神兽主题关闭，与正式版（main）彻底隔离——正式版后续更新不涉及此分支。
+/// ⚠️ 测试分支（test/id-control-style）专属：本分支复刻「上汽大众 ID.CONTROL」浅色仪表风，
+/// 强制全局浅色 + 红色主强调 + 点阵字体，与正式版（main）彻底隔离——正式版后续更新不涉及此分支。
 enum WebTheme {
-    /// 测试版：强制深色（ID.CONTROL 深色仪表风），忽略用户偏好与系统外观
-    static var isDark: Bool { true }
+    /// 测试版：强制浅色（ID.CONTROL 浅色仪表风），忽略用户偏好与系统外观
+    static var isDark: Bool { false }
 
     /// 测试版：关闭神兽主题，避免配色被覆盖
     static var myth: MythTheme? { nil }
@@ -56,8 +56,8 @@ enum WebTheme {
     // 神兽主题下主色染主题色（网页版：按键与图标随神兽换色）
     static var blue: Color {
         if let myth { return Color(hex: myth.mainHex) }
-        // 测试版 ID.CONTROL 风格主强调色：科技青蓝
-        return Color(hex: 0x38bdf8)
+        // 测试版 ID.CONTROL 风格主强调色：大众 ID 红
+        return Color(hex: 0xE3000F)
     }
     static let green = Color(hex: 0x22c55e)
     static let amber = Color(hex: 0xf59e0b)
@@ -84,7 +84,7 @@ enum WebTheme {
             )
         }
         return LinearGradient(
-            colors: [Color(hex: 0x38bdf8), Color(hex: 0x2563eb)],
+            colors: [Color(hex: 0xE3000F), Color(hex: 0xb3000b)],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
@@ -366,15 +366,15 @@ struct WebConsoleBackground: View {
                         .position(x: UIScreen.main.bounds.width * 0.78, y: 130)
                         .allowsHitTesting(false)
                 } else {
-                    // 测试版 ID.CONTROL 深色氛围：纯黑底 + 顶部中央一抹科技青微光（车模后方），底部再补一层极淡辉光
+                    // 测试版 ID.CONTROL 浅色氛围：浅灰底（bg0）+ 顶部中央一抹极淡红色微光（车模后方），底部再补一层更淡辉光
                     RadialGradient(
-                        colors: [WebTheme.blue.opacity(0.10), .clear],
+                        colors: [WebTheme.blue.opacity(0.06), .clear],
                         center: .init(x: 0.5, y: 0.12),
                         startRadius: 0,
                         endRadius: 360
                     )
                     RadialGradient(
-                        colors: [WebTheme.blue.opacity(0.05), .clear],
+                        colors: [WebTheme.blue.opacity(0.03), .clear],
                         center: .init(x: 0.5, y: 1.05),
                         startRadius: 0,
                         endRadius: 300

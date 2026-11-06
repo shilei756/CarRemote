@@ -138,4 +138,20 @@ extension Font {
             return .system(.body, design: .rounded).bold()
         }
     }
+
+    /// 点阵 / 像素 LED 字体（ID. Control 风格）。优先用嵌入的 VT323 点阵字；
+    /// 缺失字形（如 ℃ 等非 ASCII）由系统自动回退，字体未注册时整体回退等宽系统字。
+    /// 通过 UIAppFonts 登记 "VT323-Regular.ttf"。
+    static func webDotFont(size: CGFloat) -> Font {
+        if #available(iOS 14.0, *) {
+            return Font.custom("VT323-Regular", size: size, relativeTo: .body)
+        }
+        return Font.custom("VT323-Regular", size: size)
+    }
+
+    /// 点阵标题字（"ID. CONTROL" / 车名等）
+    static func webLedFont(size: CGFloat) -> Font { webDotFont(size: size) }
+
+    /// 点阵大数字字（油量 % / 续航 km / 温度 ℃ 等）
+    static func webSegFont(size: CGFloat) -> Font { webDotFont(size: size) }
 }

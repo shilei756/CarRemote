@@ -244,20 +244,18 @@ struct EmbedTarget: Identifiable, Equatable {
     static let panorama = EmbedTarget(id: "panorama")
 }
 
-/// 底部 Tab 路由（更多功能磁贴跨页跳转用）
+/// 底部 Tab 路由（ID.CONTROL 三屏：概览 / 空调 / 车库）
 @MainActor
 final class TabRouter: ObservableObject {
     static let shared = TabRouter()
 
     enum Tab: Int, CaseIterable {
-        case control = 0
-        case status = 1
-        case fuel = 2
-        case maintenance = 3
-        case profile = 4
+        case overview = 0
+        case climate = 1
+        case garage = 2
     }
 
-    @Published var selectedTab: Tab = .control
+    @Published var selectedTab: Tab = .overview
 
     func select(_ tab: Tab) {
         selectedTab = tab
