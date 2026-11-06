@@ -20,7 +20,7 @@ struct GarageView: View {
                         Text("车库")
                             .font(Font.webLedFont(size: 20))
                             .foregroundStyle(WebTheme.txt)
-                            .tracking(1)
+                            .kerning(1)
                         Spacer()
                         circleButton(icon: "antenna.radiowaves.left.and.right") {
                             Task { await appState.refreshStatus() }
