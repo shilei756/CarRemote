@@ -3,33 +3,35 @@ import CarCore
 
 // MARK: - 网页版设计规范（照搬 https://a9db267525c1cf6b2.app.workbuddy.host/ 控制台）
 
-/// 控制台浅色主题（与网页版 /user_info 的 :root CSS 变量一一对应）
+/// 控制台主题（与网页版 /user_info 的 :root CSS 变量一一对应）
 /// 夜间模式取值来自网页版 `html.dark` 规则块（--bg0:#101318 等）
 /// 神兽主题激活时整套配色切换为神兽调色板（网页版 html.glass.myth-* 规则块）
+///
+/// ⚠️ 测试分支（test/id-control-style）专属：本分支复刻「上汽大众 ID.CONTROL」深色仪表风，
+/// 强制全局深色 + 神兽主题关闭，与正式版（main）彻底隔离——正式版后续更新不涉及此分支。
 enum WebTheme {
-    /// 当前主题：读持久化键（ThemeManager.set 时同步写入，与 @Published theme 同源）
-    /// 直接读 UserDefaults 而非 ThemeManager.shared，避免 @MainActor 隔离传播到全部静态色值
-    static var isDark: Bool { SharedStore.loadAppTheme() == .dark && myth == nil }
+    /// 测试版：强制深色（ID.CONTROL 深色仪表风），忽略用户偏好与系统外观
+    static var isDark: Bool { true }
 
-    /// 当前神兽主题（nil = 经典默认）
-    static var myth: MythTheme? { SharedStore.loadMythTheme() }
+    /// 测试版：关闭神兽主题，避免配色被覆盖
+    static var myth: MythTheme? { nil }
 
     // 背景与卡片
     static var bg0: Color {
         if let myth { return Color(hex: myth.bgHex) }
-        return isDark ? Color(hex: 0x101318) : Color(hex: 0xedf0f4)
+        return isDark ? Color(hex: 0x060608) : Color(hex: 0xedf0f4)
     }
     static var card: Color {
         if myth != nil { return Color(hex: 0xffffff) }
-        return isDark ? Color(hex: 0x181c23) : Color(hex: 0xffffff)
+        return isDark ? Color(hex: 0x101012) : Color(hex: 0xffffff)
     }
     static var card2: Color {
         if let myth { return Color(hex: myth.bgHex).opacity(0.55) }
-        return isDark ? Color(hex: 0x20252e) : Color(hex: 0xf1f4f8)
+        return isDark ? Color(hex: 0x191a1d) : Color(hex: 0xf1f4f8)
     }
     static var border: Color {
         if let myth { return Color(hex: myth.mainHex).opacity(0.22) }
-        return isDark ? Color(hex: 0x2a3038) : Color(hex: 0xe4e9f0)
+        return isDark ? Color(hex: 0x2b2b30) : Color(hex: 0xe4e9f0)
     }
     static var track: Color {
         if let myth { return Color(hex: myth.mainHex).opacity(0.15) }
@@ -39,35 +41,36 @@ enum WebTheme {
     // 文字
     static var txt: Color {
         if let myth { return Color(hex: myth.txtHex) }
-        return isDark ? Color(hex: 0xe7eaef) : Color(hex: 0x1e293b)
+        return isDark ? Color(hex: 0xf2f2f5) : Color(hex: 0x1e293b)
     }
     static var muted: Color {
         if let myth { return Color(hex: myth.mutedHex) }
-        return isDark ? Color(hex: 0x9aa3b2) : Color(hex: 0x64748b)
+        return isDark ? Color(hex: 0x9b9ba2) : Color(hex: 0x64748b)
     }
     static var faint: Color {
         if let myth { return Color(hex: myth.faintHex) }
-        return isDark ? Color(hex: 0x64748b) : Color(hex: 0x94a3b8)
+        return isDark ? Color(hex: 0x67676e) : Color(hex: 0x94a3b8)
     }
 
     // 语义色（网页版 --blue/--green/--amber/--red/--purple）
     // 神兽主题下主色染主题色（网页版：按键与图标随神兽换色）
     static var blue: Color {
         if let myth { return Color(hex: myth.mainHex) }
-        return Color(hex: 0x3b82f6)
+        // 测试版 ID.CONTROL 风格主强调色：科技青蓝
+        return Color(hex: 0x38bdf8)
     }
     static let green = Color(hex: 0x22c55e)
     static let amber = Color(hex: 0xf59e0b)
     static let red = Color(hex: 0xef4444)
     static var purple: Color {
         if let myth { return Color(hex: myth.deepHex) }
-        return Color(hex: 0x7c3aed)
+        return Color(hex: 0xa78bfa)
     }
 
     // 大按钮描边色（.cbig.lock / .cbig.unlock）
     static var lockBorder: Color {
         if let myth { return Color(hex: myth.mainHex).opacity(0.45) }
-        return isDark ? Color(hex: 0x3a424d) : Color(hex: 0xcbd5e1)
+        return isDark ? Color(hex: 0x33333a) : Color(hex: 0xcbd5e1)
     }
 
     // 导航胶囊渐变（.nav-btn：linear-gradient(135deg,#8b5cf6,#6366f1)）
@@ -81,7 +84,7 @@ enum WebTheme {
             )
         }
         return LinearGradient(
-            colors: [Color(hex: 0x8b5cf6), Color(hex: 0x6366f1)],
+            colors: [Color(hex: 0x38bdf8), Color(hex: 0x2563eb)],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
@@ -90,7 +93,8 @@ enum WebTheme {
     // 卡片：白底 + 圆角 20 + 阴影 0 2px 10px rgba(15,23,42,.04) + 1px 边框
     static let cardRadius: CGFloat = 20
     static var cardShadow: Color {
-        isDark ? Color.black.opacity(0.3) : Color(red: 15/255, green: 23/255, blue: 42/255).opacity(0.04)
+        // 测试版纯黑底：深色阴影不可见，统一清零，保持 ID.CONTROL 扁平干净观感
+        isDark ? Color.clear : Color(red: 15/255, green: 23/255, blue: 42/255).opacity(0.04)
     }
 }
 
@@ -362,15 +366,16 @@ struct WebConsoleBackground: View {
                         .position(x: UIScreen.main.bounds.width * 0.78, y: 130)
                         .allowsHitTesting(false)
                 } else {
+                    // 测试版 ID.CONTROL 深色氛围：纯黑底 + 顶部中央一抹科技青微光（车模后方），底部再补一层极淡辉光
                     RadialGradient(
-                        colors: [WebTheme.blue.opacity(0.06), .clear],
-                        center: .init(x: 0.8, y: -0.05),
+                        colors: [WebTheme.blue.opacity(0.10), .clear],
+                        center: .init(x: 0.5, y: 0.12),
                         startRadius: 0,
-                        endRadius: 260
+                        endRadius: 360
                     )
                     RadialGradient(
-                        colors: [WebTheme.green.opacity(0.05), .clear],
-                        center: .init(x: 0.0, y: 0.3),
+                        colors: [WebTheme.blue.opacity(0.05), .clear],
+                        center: .init(x: 0.5, y: 1.05),
                         startRadius: 0,
                         endRadius: 300
                     )

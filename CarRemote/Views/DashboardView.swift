@@ -87,9 +87,18 @@ struct DashboardView: View {
                                         .strokeBorder(WebTheme.border, lineWidth: 1)
                                 )
                             }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("编辑车辆名称")
-                            Spacer()
+            .buttonStyle(.plain)
+            .accessibilityLabel("编辑车辆名称")
+            // 测试版标记
+            Text("测试版")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(WebTheme.blue)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(WebTheme.blue.opacity(0.12))
+                .clipShape(Capsule())
+                .overlay(Capsule().strokeBorder(WebTheme.blue.opacity(0.4), lineWidth: 1))
+            Spacer()
                             // 网页版 .icon-round 圆形刷新钮（与车名同行齐平）
                             Button {
                                 Task { await appState.refreshStatus() }
@@ -277,33 +286,47 @@ struct DashboardView: View {
 
     private func carStage(status: CarStatus) -> some View {
         VStack(spacing: 0) {
-            if settings.car3DEnabled && settings.carModelStyle.has3DModel {
-                // 官方 3D 车模（长安智慧云控展厅资产）：
-                // 左右滑动旋转 / 捏合缩放 / 长按部件开合 / 车窗车门随真实车况逐扇联动
-                CarVisual3DStage(
-                    style: settings.carModelStyle,
-                    doorsAndWindows: status.doorsAndWindows,
-                    vehicleStarted: status.isVehicleStarted,
-                    wheelsRolling: status.shouldRollWheels
+            ZStack {
+                // 测试版 ID.CONTROL 风格：车模后方柔和科技光晕（模拟展厅聚光）
+                RadialGradient(
+                    colors: [WebTheme.blue.opacity(0.16), .clear],
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: 170
                 )
-                .padding(.horizontal, 20)
-            } else {
-                Image(settings.carModelStyle.sideImageName)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(height: 200)
+                .frame(width: 300, height: 210)
+                .blur(radius: 18)
+                .accessibilityHidden(true)
+                .allowsHitTesting(false)
+
+                if settings.car3DEnabled && settings.carModelStyle.has3DModel {
+                    // 官方 3D 车模（长安智慧云控展厅资产）：
+                    // 左右滑动旋转 / 捏合缩放 / 长按部件开合 / 车窗车门随真实车况逐扇联动
+                    CarVisual3DStage(
+                        style: settings.carModelStyle,
+                        doorsAndWindows: status.doorsAndWindows,
+                        vehicleStarted: status.isVehicleStarted,
+                        wheelsRolling: status.shouldRollWheels
+                    )
                     .padding(.horizontal, 20)
-                    .accessibilityLabel("\(settings.carModelStyle.displayName) 车辆图片")
+                } else {
+                    Image(settings.carModelStyle.sideImageName)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(height: 200)
+                        .padding(.horizontal, 20)
+                        .accessibilityLabel("\(settings.carModelStyle.displayName) 车辆图片")
+                }
             }
 
-            // 椭圆阴影（网页版 .car-shadow：径向渐变椭圆呼吸）
+            // 车下微光（ID.CONTROL：车底一圈淡辉光，替代网页版深色椭圆阴影）
             Ellipse()
                 .fill(
                     RadialGradient(
-                        colors: [Color(red: 15/255, green: 23/255, blue: 42/255).opacity(0.55), .clear],
+                        colors: [WebTheme.blue.opacity(0.22), .clear],
                         center: .center,
                         startRadius: 0,
-                        endRadius: 60
+                        endRadius: 70
                     )
                 )
                 .frame(width: 190, height: 12)

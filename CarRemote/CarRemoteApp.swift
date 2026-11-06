@@ -38,6 +38,8 @@ struct RootView: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: appState.phase)
+        // 测试版：强制系统级深色（ID.CONTROL 深色仪表风）——TabView/弹窗/ProgressView 等原生控件随之变深
+        .preferredColorScheme(.dark)
     }
 }
 
