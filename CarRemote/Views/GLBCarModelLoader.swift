@@ -462,11 +462,14 @@ enum GLBCarModelLoader {
                     let model = ModelEntity(mesh: mesh, materials: [mat])
                     // 座舱内饰多为薄片/内表面，从车内看正面是内壁 —— 强制双-sided，
                     // 避免切到座舱后内壁被背面剔除而消失。
+                    // 注意：ModelComponent 的 materials 是 [any Material]，需落到
+                    // 具体材质类型（本项目均为 PhysicallyBasedMaterial）才能访问 faceCulling。
                     if nodeInInterior[ni], var mc = model.model {
                         for i in mc.materials.indices {
-                            var m = mc.materials[i]
-                            m.faceCulling = .none
-                            mc.materials[i] = m
+                            if var pbm = mc.materials[i] as? PhysicallyBasedMaterial {
+                                pbm.faceCulling = .none
+                                mc.materials[i] = pbm
+                            }
                         }
                         model.model = mc
                     }
