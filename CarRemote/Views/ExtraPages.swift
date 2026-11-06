@@ -341,6 +341,29 @@ struct UIScalePage: View {
 
     var body: some View {
         Form {
+            // 一键恢复：无论当前缩放到哪一档，随时可退回原始大小
+            Section {
+                Button {
+                    select(1.0)
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 14, weight: .semibold))
+                        Text("恢复默认大小（100%）")
+                            .font(.system(size: 15, weight: .semibold))
+                        Spacer()
+                        if abs(settings.uiScale - 1.0) < 0.001 {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 13, weight: .semibold))
+                        }
+                    }
+                    .foregroundStyle(WebTheme.blue)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("恢复默认界面大小 100%")
+            } footer: {
+                Text("觉得显示不舒服就点这里一键还原。底部标签栏始终可用，可随时回到本页调整。")
+            }
             Section {
                 ForEach(options) { opt in
                     Button {
@@ -368,7 +391,7 @@ struct UIScalePage: View {
             } header: {
                 Text("界面大小")
             } footer: {
-                Text("缩小整体界面可在一页内显示更多内容。修改后立即生效，重启 App 后按保存值自动恢复。极端缩放下部分控件可能略小，可随时调回 100%。")
+                Text("缩小整体界面可在一页内显示更多内容。修改后立即生效，重启 App 后按保存值自动恢复。底部标签栏始终保持可见可点，可随时切回本页调回 100%。")
             }
         }
         .hideScrollBackground()

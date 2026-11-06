@@ -285,19 +285,19 @@ struct SettingsView: View {
                 rowDivider
             }
             // 行程统计（#5）
-            linkRow(symbol: "chart.bar.fill", tint: WebTheme.muted,
+            linkRow(symbol: "chart.bar.fill", tint: WebTheme.green,
                     title: "行程统计", subtitle: "最近一周 / 一月的里程、油耗与均速") {
                 TripStatsView()
             }
             rowDivider
             // 界面大小（#7）
-            linkRow(symbol: "arrow.up.left.and.arrow.down.right", tint: WebTheme.muted,
+            linkRow(symbol: "arrow.up.left.and.arrow.down.right", tint: WebTheme.purple,
                     title: "界面大小", subtitle: "整体缩放以一页显示更多内容") {
                 UIScalePage()
             }
             rowDivider
             // 手机信息（#8）
-            linkRow(symbol: "iphone", tint: WebTheme.muted,
+            linkRow(symbol: "iphone", tint: WebTheme.blue,
                     title: "手机信息", subtitle: "机型 · 系统 · 安装环境") {
                 DeviceInfoPage()
             }
@@ -369,11 +369,11 @@ struct SettingsView: View {
     private func rowIcon(symbol: String, tint: Color) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(WebTheme.muted.opacity(0.12))
+                .fill(tint.opacity(0.12))
                 .frame(width: 34, height: 34)
             Image(systemName: symbol)
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(WebTheme.muted)
+                .foregroundStyle(tint)
         }
     }
 

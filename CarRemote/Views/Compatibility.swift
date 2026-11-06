@@ -43,24 +43,34 @@ func currentStatusBarHeight() -> CGFloat {
 
 /// 通过窗口 transform 整体等比缩放 App：scale < 1 时一页可显示更多内容。
 /// scale = 1.0 为原始大小。取值夹在 0.5~1.5，默认由 AppSettings.uiScale 提供。
+///
+/// 关键修正：**不能同时设置 `window.frame` 与 `window.transform`**。
+/// 当 transform 非 identity 时，frame 表示「变换后的包围盒」，把 frame 设成
+/// screen/scale 会让 UIKit 反算出 bounds = screen/scale² —— 界面反而被放大并
+/// 向右下溢出，右侧内容被裁、底部 TabBar 直接跑到屏幕外，用户再也无法切回
+/// 设置页把大小改回来。
+///
+/// 正确做法：把 bounds 放大到 screen/scale（布局按更大的逻辑尺寸排布，所以一页
+/// 能显示更多内容），再用 transform 缩回，并把 center 固定在屏幕中心，使缩放后
+/// 的视觉包围盒恰好等于屏幕 —— 不偏移、不裁切、底部标签栏始终可见可点。
 func applyUIScale(_ scale: CGFloat) {
     let clamped = min(max(scale, 0.5), 1.5)
     guard let window = UIApplication.shared.connectedScenes
         .compactMap({ $0 as? UIWindowScene })
         .flatMap({ $0.windows })
         .first(where: { $0.isKeyWindow }) else { return }
-    let base = window.screen.bounds
-    UIView.animate(withDuration: 0.25) {
-        if abs(clamped - 1.0) < 0.001 {
-            window.transform = .identity
-            window.frame = base
-        } else {
-            window.transform = CGAffineTransform(scaleX: clamped, y: clamped)
-            window.frame = CGRect(origin: .zero,
-                                 size: CGSize(width: base.width / clamped,
-                                              height: base.height / clamped))
-        }
+    let screen = window.screen.bounds
+    if abs(clamped - 1.0) < 0.001 {
+        window.transform = .identity
+        window.bounds = screen
+    } else {
+        window.bounds = CGRect(origin: .zero,
+                               size: CGSize(width: screen.width / clamped,
+                                            height: screen.height / clamped))
+        window.transform = CGAffineTransform(scaleX: clamped, y: clamped)
     }
+    // transform 以 center 为锚点，固定到屏幕中心才能避免整体右下偏移
+    window.center = CGPoint(x: screen.midX, y: screen.midY)
 }
 
 // MARK: 标题

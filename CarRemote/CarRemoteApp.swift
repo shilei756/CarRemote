@@ -14,6 +14,13 @@ struct CarRemoteApp: App {
                 .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
                     Task { await appState.handleForeground() }
                 }
+                // 系统偶尔会重置 window.bounds（旋转 / 状态栏变化 / 键盘弹出），
+                // 每次激活重新套用缩放，避免界面变形或底部标签栏错位。
+                .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                    DispatchQueue.main.async {
+                        applyUIScale(CGFloat(SharedStore.loadSettings().uiScale))
+                    }
+                }
         }
     }
 }

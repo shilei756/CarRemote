@@ -43,8 +43,10 @@ settings:
     # ---- 通用构建设置 ----
     SWIFT_VERSION: "5.0"
     SWIFT_STRICT_CONCURRENCY: minimal
-    MARKETING_VERSION: "1.1.3"
-    CURRENT_PROJECT_VERSION: "79"
+    # 版本规则：以后每次更新递增「大版本号」（1.2.0 → 1.3.0 → …），不再停留在 1.1.x。
+    # 构建号随版本 +1；CI 产物名里的 b<run_number> 天然递增，无需手动维护。
+    MARKETING_VERSION: "1.2.0"
+    CURRENT_PROJECT_VERSION: "80"
     IPHONEOS_DEPLOYMENT_TARGET: "15.0"
     SDKROOT: iphoneos
     TARGETED_DEVICE_FAMILY: "1"
