@@ -590,7 +590,7 @@ struct DeviceInfo {
         ]) else { return "--" }
         guard let total = values.volumeTotalCapacity,
               let avail = values.volumeAvailableCapacityForImportantUsage else { return "--" }
-        return "\(gb(avail)) / \(gb(total)) GB"
+        return "\(gb(avail)) / \(gb(Int64(total))) GB"
     }
 
     private static func gb(_ bytes: Int64) -> Int {

@@ -181,6 +181,11 @@ public enum ACService {
         if let rotated, !rotated.isEmpty {
             SharedStore.saveACOpenRefreshToken(rotated)
         }
+        // oauth 响应带新 refresh_token 的有效期：顺手刷新「新版授权剩余」缓存。
+        // 这样自动续期后界面立刻显示新的到期天数，避免缓存一直是旧值。
+        if let expireIn = oauthDict.int("refresh_token_expire_in") {
+            SharedStore.saveACActivationExpire(Date().addingTimeInterval(TimeInterval(expireIn)))
+        }
         return (token, rotated, oauthDict.string("scope"))
     }
 
@@ -197,9 +202,10 @@ public enum ACService {
         // 2. 仅当本地已存有 refresh_token（曾经开通过）才尝试自动续期
         guard let refreshToken = SharedStore.loadACOpenRefreshToken() else { return }
         do {
-            // 3. 主动轮换，刷新成功后重新计算并缓存新的到期时间
+            // 3. 主动轮换。renewOpenToken 内部会用 oauth 响应的
+            //    refresh_token_expire_in 刷新本地到期缓存，界面「授权剩余」随即更新，
+            //    无需再走一次完整链路（旧实现重复调用会命中旧缓存，天数永不变化）。
             _ = try await renewOpenToken(refreshToken)
-            _ = await activationRemainingDays(credentials: credentials)
         } catch {
             // 续期失败（令牌已失效等）：清掉本地 token，回退到扫码开通流程
             SharedStore.saveACOpenRefreshToken(nil)
