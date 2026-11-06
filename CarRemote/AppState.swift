@@ -197,6 +197,11 @@ final class AppState: ObservableObject {
         }
         await refreshStatus()
         await recheckAccess()
+        // #4 空调到期自动续期：回前台时静默尝试轮换延长，用户无需手动扫码。
+        // 作为独立后台任务，不打断车况刷新与权限复查。
+        if let credentials {
+            Task { await ACService.tryAutoRenew(credentials: credentials) }
+        }
     }
 
     private func reportUsage() async {

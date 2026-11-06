@@ -24,6 +24,45 @@ struct NavStack<Content: View>: View {
     }
 }
 
+// MARK: 安全区辅助
+
+/// 当前状态栏高度（全屏页面手动避让用，避免壁纸铺满时顶栏被状态栏遮挡）
+func currentStatusBarHeight() -> CGFloat {
+    if #available(iOS 13.0, *) {
+        return UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first?
+            .statusBarManager?
+            .statusBarFrame.height ?? 0
+    } else {
+        return UIApplication.shared.statusBarFrame.height
+    }
+}
+
+// MARK: 界面整体缩放（#7 界面大小）
+
+/// 通过窗口 transform 整体等比缩放 App：scale < 1 时一页可显示更多内容。
+/// scale = 1.0 为原始大小。取值夹在 0.5~1.5，默认由 AppSettings.uiScale 提供。
+func applyUIScale(_ scale: CGFloat) {
+    let clamped = min(max(scale, 0.5), 1.5)
+    guard let window = UIApplication.shared.connectedScenes
+        .compactMap({ $0 as? UIWindowScene })
+        .flatMap({ $0.windows })
+        .first(where: { $0.isKeyWindow }) else { return }
+    let base = window.screen.bounds
+    UIView.animate(withDuration: 0.25) {
+        if abs(clamped - 1.0) < 0.001 {
+            window.transform = .identity
+            window.frame = base
+        } else {
+            window.transform = CGAffineTransform(scaleX: clamped, y: clamped)
+            window.frame = CGRect(origin: .zero,
+                                 size: CGSize(width: base.width / clamped,
+                                              height: base.height / clamped))
+        }
+    }
+}
+
 // MARK: 标题
 
 extension View {

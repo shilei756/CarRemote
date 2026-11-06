@@ -222,16 +222,38 @@ final class DashboardViewModel: ObservableObject {
         objectWillChange.send()
     }
 
-    // MARK: - 导航到车（高德 URI，与网页版一致）
+    // MARK: - 导航到车（优先拉起高德 App，未安装回退网页版）
 
     func navigateToCar() {
         guard let status = appState?.status, let location = status.location else { return }
         let name = locationInfo?.address ?? "车辆位置"
-        let raw = "https://uri.amap.com/navigation?to=\(location.longitude),\(location.latitude),\(name)&mode=car&coordinate=gaode&callnative=1"
-        let urlString = raw.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? raw
-        if let url = URL(string: urlString) {
-            UIApplication.shared.open(url)
+        let lat = location.latitude
+        let lon = location.longitude
+        // 高德 App 导航 Scheme（iosamap://）：直接拉起 App 内导航，而非打开网页
+        let appRaw = "iosamap://navi?sourceApplication=\(bundleName)&backScheme=carremote&lat=\(lat)&lon=\(lon)&dev=0&style=2"
+        let appString = appRaw.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? appRaw
+        if let appURL = URL(string: appString) {
+            UIApplication.shared.open(appURL, options: [:]) { opened in
+                // 高德未安装或拉起失败 → 回退网页版高德导航
+                guard !opened else { return }
+                let webRaw = "https://uri.amap.com/navigation?to=\(lon),\(lat),\(name)&mode=car&coordinate=gaode&callnative=1"
+                if let webURL = URL(string: webRaw.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? webRaw) {
+                    UIApplication.shared.open(webURL)
+                }
+            }
+            return
         }
+        // 极端兜底：直接走网页版
+        let webRaw = "https://uri.amap.com/navigation?to=\(lon),\(lat),\(name)&mode=car&coordinate=gaode&callnative=1"
+        if let webURL = URL(string: webRaw.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? webRaw) {
+            UIApplication.shared.open(webURL)
+        }
+    }
+
+    private var bundleName: String {
+        Bundle.main.infoDictionary?["CFBundleDisplayName"] as? String
+            ?? Bundle.main.infoDictionary?["CFBundleName"] as? String
+            ?? "长安控车"
     }
 }
 

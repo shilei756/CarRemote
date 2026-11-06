@@ -35,7 +35,7 @@ struct MainTabView: View {
                 }
                 .tag(TabRouter.Tab.profile)
         }
-        .tint(WebTheme.blue)
+        .tint(WebTheme.muted)
     }
 }
 
@@ -115,7 +115,7 @@ struct DashboardView: View {
                             .accessibilityLabel("刷新车况")
                             .disabled(appState.isRefreshing)
                         }
-                        .padding(.top, 2)
+                        .padding(.top, currentStatusBarHeight() + 6)
                         if let errorMessage = appState.errorMessage {
                             errorBanner(errorMessage)
                         }
@@ -133,8 +133,9 @@ struct DashboardView: View {
                         Spacer(minLength: 32)
                     }
                     .padding(.horizontal, 16)
-                    .padding(.top, 8)
+                    .padding(.top, 4)
                 }
+            .ignoresSafeArea(edges: .top)
             .refreshable {
                 await appState.refreshStatus()
             }
@@ -642,11 +643,11 @@ struct DashboardView: View {
                 HStack(spacing: 12) {
                     ZStack {
                         Circle()
-                            .fill(WebTheme.purple.opacity(0.12))
+                            .fill(WebTheme.muted.opacity(0.12))
                             .frame(width: 36, height: 36)
                         Image(systemName: "location.fill")
                             .font(.system(size: 14))
-                            .foregroundStyle(WebTheme.purple)
+                            .foregroundStyle(WebTheme.muted)
                     }
                     VStack(alignment: .leading, spacing: 2) {
                         Text("车辆位置")
@@ -789,7 +790,7 @@ struct DashboardView: View {
         HStack(spacing: 10) {
             Image(systemName: icon)
                 .font(.system(size: 12))
-                .foregroundStyle(WebTheme.purple)
+                .foregroundStyle(WebTheme.muted)
                 .frame(width: 20)
             Text(title)
                 .font(.system(size: 12))
@@ -824,7 +825,7 @@ struct DashboardView: View {
                             if tool != .whitelist || appState.isAdminUser {
                                 moreToolTile(name: tool.displayName,
                                              symbol: tool.sfSymbol,
-                                             color: Color(hex: UInt(tool.colorHex))) {
+                                             color: WebTheme.muted) {
                                     handleTool(tool)
                                 }
                             }
@@ -995,7 +996,7 @@ struct CompactControlButton: View {
     }
 
     private var iconColor: Color {
-        command.isDangerous ? WebTheme.amber : WebTheme.blue
+        command.isDangerous ? WebTheme.amber : WebTheme.muted
     }
 }
 

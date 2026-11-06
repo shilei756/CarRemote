@@ -152,6 +152,60 @@ public enum ACService {
         return max(0, expireIn / 86400)
     }
 
+    // MARK: - 开放平台令牌刷新（与网页版一致，可复用）
+
+    /// 用 refresh_token 向长安开放平台换取 access_token，并自动保存轮换后的新 refresh_token。
+    /// 抽出为静态方法，供空调指令下发与「到期自动续期」共用。
+    public static func renewOpenToken(_ refreshToken: String) async throws -> (accessToken: String, newRefreshToken: String?, scope: String?) {
+        let oauthForm = APIClient.formData([
+            ("redict_uri", ""),
+            ("refresh_token", refreshToken),
+            ("grant_type", "refresh_token"),
+            ("client_secret", "YjIzNWFmZDMxMzAwNDc4NQ=="),
+            ("client_id", "b235afd313004785bfde580c188c47bb")
+        ])
+        let oauthObject = try await APIClient.request(
+            URL(string: "https://open.iov.changan.com.cn/oauth/token")!,
+            method: "POST",
+            headers: ["Content-Type": "application/x-www-form-urlencoded"],
+            body: oauthForm.data(using: String.Encoding.utf8)
+        )
+        guard let oauthDict = oauthObject as? [String: Any],
+              let token = oauthDict.string("access_token"), !token.isEmpty else {
+            let message = (oauthObject as? [String: Any])?.string("error") ?? "刷新失败"
+            throw APIError.server(message)
+        }
+        // 关键：oauth 刷新会轮换 refresh_token，旧的立即作废（再刷只会拿到降级 token）。
+        // 必须把最新的存回本地，否则下次刷新失败。
+        let rotated = oauthDict.string("refresh_token")
+        if let rotated, !rotated.isEmpty {
+            SharedStore.saveACOpenRefreshToken(rotated)
+        }
+        return (token, rotated, oauthDict.string("scope"))
+    }
+
+    // MARK: - 到期自动续期（#4：免去用户手动扫码）
+
+    /// 新版空调到期自动续期：当授权临近到期（≤ thresholdDays 天）时，主动用本地
+    /// refresh_token 轮换延长，用户无需再手动扫码。仅当本地已有 refresh_token 时尝试，
+    /// 令牌彻底失效才回退到「扫码开通」。建议在 App 进入前台时调用。
+    public static func tryAutoRenew(credentials: Credentials, thresholdDays: Int = 7) async {
+        // 1. 先看剩余天数（内部优先用本地到期缓存，避免每次走完整链路）
+        let remaining = await activationRemainingDays(credentials: credentials)
+        // 余量充足：无需续期
+        guard let remaining, remaining <= thresholdDays else { return }
+        // 2. 仅当本地已存有 refresh_token（曾经开通过）才尝试自动续期
+        guard let refreshToken = SharedStore.loadACOpenRefreshToken() else { return }
+        do {
+            // 3. 主动轮换，刷新成功后重新计算并缓存新的到期时间
+            _ = try await renewOpenToken(refreshToken)
+            _ = await activationRemainingDays(credentials: credentials)
+        } catch {
+            // 续期失败（令牌已失效等）：清掉本地 token，回退到扫码开通流程
+            SharedStore.saveACOpenRefreshToken(nil)
+        }
+    }
+
     /// 通过长安开放平台执行空调指令（网页版 newAC）
     /// - Parameters:
     ///   - temperature: 开空调目标温度（16~32，网页版调温弹窗随指令下发；nil 时不下发温度）
@@ -192,39 +246,14 @@ public enum ACService {
         //    A. 网页版同款：/api/open/token(authorize) 的 refresh_token → oauth 刷新
         //    B. /api/open/login 返回的 refresh_token → oauth 刷新
         //    C. inCall 授权码直接当车控 token
-        func oauthRefresh(_ refreshToken: String) async throws -> (String, String?) {
-            let oauthForm = APIClient.formData([
-                ("redict_uri", ""),
-                ("refresh_token", refreshToken),
-                ("grant_type", "refresh_token"),
-                ("client_secret", "YjIzNWFmZDMxMzAwNDc4NQ=="),
-                ("client_id", "b235afd313004785bfde580c188c47bb")
-            ])
-            let oauthObject = try await APIClient.request(
-                URL(string: "https://open.iov.changan.com.cn/oauth/token")!,
-                method: "POST",
-                headers: ["Content-Type": "application/x-www-form-urlencoded"],
-                body: oauthForm.data(using: String.Encoding.utf8)
-            )
-            guard let oauthDict = oauthObject as? [String: Any],
-                  let token = oauthDict.string("access_token"), !token.isEmpty else {
-                let message = (oauthObject as? [String: Any])?.string("error") ?? "刷新失败"
-                throw APIError.server(message)
-            }
-            // 关键：oauth 刷新会轮换 refresh_token，旧的立即作废（再刷只会拿到
-            // scope=car_info user 的降级 token）。必须把最新的存回本地。
-            if let rotated = oauthDict.string("refresh_token"), !rotated.isEmpty {
-                SharedStore.saveACOpenRefreshToken(rotated)
-            }
-            return (token, oauthDict.string("scope"))
-        }
+        //    （oauth 刷新逻辑已抽为静态方法 renewOpenToken，见上方「到期自动续期」区）
 
         var tokenCandidates: [(label: String, token: String)] = []
 
         // A0. 本地最新轮换 token（自己上次刷新存下的，最新鲜、优先）
         if let localRT = SharedStore.loadACOpenRefreshToken() {
             do {
-                let (token, scope) = try await oauthRefresh(localRT)
+                let (token, _, scope) = try await renewOpenToken(localRT)
                 tokenCandidates.append(("localtoken", token))
                 diag += "A0.scope=\(scope ?? "?"); "
             } catch {
@@ -242,7 +271,7 @@ public enum ACService {
             let raw = (try? JSONSerialization.data(withJSONObject: tokenObject)).flatMap { String(data: $0, encoding: .utf8) } ?? "?"
             if let dict = tokenObject as? [String: Any], dict.bool("success") == true,
                let rt = dict.string("refresh_token"), !rt.isEmpty {
-                let (token, scope) = try await oauthRefresh(rt)
+                let (token, _, scope) = try await renewOpenToken(rt)
                 tokenCandidates.append(("webtoken", token))
                 diag += "A.scope=\(scope ?? "?"); "
             } else {
@@ -258,7 +287,7 @@ public enum ACService {
             )
             if let dict = loginObject as? [String: Any], dict.bool("success") == true,
                let rt = dict.string("refresh_token"), !rt.isEmpty {
-                let (token, scope) = try await oauthRefresh(rt)
+                let (token, _, scope) = try await renewOpenToken(rt)
                 tokenCandidates.append(("logintoken", token))
                 diag += "B.scope=\(scope ?? "?"); "
             }

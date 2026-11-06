@@ -269,13 +269,15 @@ public struct AppSettings: Codable, Equatable, Sendable {
     /// 控车页 3D 车模总开关（逸动PLUS 2022 官方车模；关闭后显示 2D 车图）。
     /// 默认开启；若设备上 3D 渲染异常，可在此一键回退。
     public var car3DEnabled: Bool
+    /// 界面整体缩放比例（#7 界面大小）：1.0 = 原始大小，<1 等比缩小以一页显示更多
+    public var uiScale: Double
 
     private enum CodingKeys: String, CodingKey {
         case confirmGateCommands, siriEnabledCommands, siriMasterEnabled,
              carModelStyle, clubNick, clubAvatar, widgetCommands,
              quickCommands, moreCommands, moreTools,
              hiddenQuickCommands, hiddenMoreCommands, hiddenTools,
-             tankCapacityL, car3DEnabled
+             tankCapacityL, car3DEnabled, uiScale
     }
 
     public init(confirmGateCommands: Set<String>,
@@ -292,7 +294,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
                 hiddenMoreCommands: Set<String> = [],
                 hiddenTools: Set<String> = [],
                 tankCapacityL: Double = 50,
-                car3DEnabled: Bool = true) {
+                car3DEnabled: Bool = true,
+                uiScale: Double = 1.0) {
         self.confirmGateCommands = confirmGateCommands
         self.siriEnabledCommands = siriEnabledCommands
         self.siriMasterEnabled = siriMasterEnabled
@@ -308,6 +311,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.hiddenTools = hiddenTools
         self.tankCapacityL = tankCapacityL
         self.car3DEnabled = car3DEnabled
+        self.uiScale = uiScale
     }
 
     /// 旧数据兼容解码：新增字段缺省时给默认值，避免老用户设置丢失
@@ -338,6 +342,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         hiddenTools = try container.decodeIfPresent(Set<String>.self, forKey: .hiddenTools) ?? []
         tankCapacityL = try container.decodeIfPresent(Double.self, forKey: .tankCapacityL) ?? 50
         car3DEnabled = try container.decodeIfPresent(Bool.self, forKey: .car3DEnabled) ?? true
+        uiScale = try container.decodeIfPresent(Double.self, forKey: .uiScale) ?? 1.0
     }
 
     // MARK: 自定义顺序的解析（含补齐/过滤非法值，保证渲染永远有内容）

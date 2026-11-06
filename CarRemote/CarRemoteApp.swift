@@ -38,6 +38,7 @@ struct RootView: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: appState.phase)
+        .onAppear { applyUIScale(SharedStore.loadSettings().uiScale) }
     }
 }
 
