@@ -95,7 +95,7 @@ struct TripStatsView: View {
                 }
 
                 // 总里程大数字
-                SectionCard(title: nil) {
+                SectionCard {
                     HStack(alignment: .lastTextBaseline, spacing: 6) {
                         Text(CarStatus.format(totalMileage))
                             .font(.system(size: 40, weight: .bold, design: .rounded))
@@ -122,7 +122,7 @@ struct TripStatsView: View {
                 }
 
                 // 关键指标
-                SectionCard(title: nil) {
+                SectionCard {
                     HStack(spacing: 0) {
                         metricCell(title: "总油耗", value: CarStatus.format(totalOil) + " L")
                         Divider().frame(height: 36)
@@ -132,7 +132,7 @@ struct TripStatsView: View {
                     }
                 }
 
-                if !isDemo, !records.isEmpty {
+                if !isDemo && !records.isEmpty {
                     SectionCard(title: "行程明细") {
                         LazyVStack(spacing: 8) {
                             ForEach(records) { record in
@@ -379,7 +379,7 @@ struct UIScalePage: View {
         guard abs(settings.uiScale - scale) > 0.001 else { return }
         settings.uiScale = scale
         SharedStore.saveSettings(settings)
-        applyUIScale(scale)
+        applyUIScale(CGFloat(scale))
     }
 }
 
@@ -513,12 +513,16 @@ struct DeviceInfo {
     static var modelName: String {
         var systemInfo = utsname()
         uname(&systemInfo)
-        let machine = withUnsafePointer(to: &systemInfo.machine) {
-            $0.withMemoryRebound(to: CChar.self, capacity: MemoryLayout.size(ofValue: systemInfo.machine)) {
-                String(cString: $0)
-            }
+        // Mirror 逐字节读取 machine 元组（CChar 数组）拼字符串，纯 Swift、无指针、
+        // 无 inout 独占访问，避免 iOS 26 SDK 的 overlapping accesses 编译报错。
+        let mirror = Mirror(reflecting: systemInfo.machine)
+        var bytes: [UInt8] = []
+        for child in mirror.children {
+            guard let byte = child.value as? Int8, byte != 0 else { break }
+            bytes.append(UInt8(byte))
         }
-        return modelMap[machine] ?? machine
+        let identifier = String(decoding: bytes, as: UTF8.self)
+        return modelMap[identifier] ?? (identifier.isEmpty ? "iPhone" : identifier)
     }
 
     private static let modelMap: [String: String] = [
@@ -601,7 +605,7 @@ struct DeviceInfo {
 
     private static func detectInstallEnvironment() -> (name: String, hint: String) {
         // 1. 巨魔 TrollStore：环境变量或安装路径特征
-        if getenv("TROLLSTORE") != nil ||
+        if ProcessInfo.processInfo.environment["TROLLSTORE"] != nil ||
             (Bundle.main.executablePath ?? "").contains("/trollstore/") {
             return ("巨魔 TrollStore", "通过 TrollStore 永久签安装，重启不失效，无需电脑重签。")
         }
