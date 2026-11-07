@@ -321,13 +321,27 @@ struct WebConsoleBackground: View {
         }
     }
 
+    /// 壁纸铺满尺寸：界面缩放会把 window.bounds 放大到 屏幕/scale，
+    /// 这里同步把壁纸放大 1/scale，缩放后视觉尺寸才恰好等于屏幕、不露边。
+    /// 固定尺寸（而非 scaledToFill 的理想尺寸）是为了不撑大父级 ZStack 坐标系。
+    private var wallpaperSize: (CGFloat, CGFloat) {
+        let s = CGFloat(min(max(SharedStore.loadSettings().uiScale, 0.5), 1.5))
+        let b = UIScreen.main.bounds
+        return (b.width / s, b.height / s)
+    }
+
     var body: some View {
         ZStack {
             if let customImage {
-                // 自定义壁纸：整页铺满，叠一层轻量压暗保证卡片/文字可读
+                // 自定义壁纸：整页铺满，叠一层轻量压暗保证卡片/文字可读。
+                // 关键：scaledToFill 的图片理想尺寸会撑大父级 ZStack 坐标系，
+                // 把内容推进状态栏区导致顶部按钮点不到。这里把尺寸钉死为屏幕 point
+                // 尺寸并裁切，背景就只铺满、不再影响任何兄弟视图的布局。
                 Image(uiImage: customImage)
                     .resizable()
                     .scaledToFill()
+                    .frame(width: wallpaperSize.0, height: wallpaperSize.1)
+                    .clipped()
                     .ignoresSafeArea()
                 LinearGradient(
                     colors: [Color.black.opacity(0.16), Color.black.opacity(0.30)],

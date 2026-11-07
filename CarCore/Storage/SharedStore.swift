@@ -271,13 +271,15 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var car3DEnabled: Bool
     /// 界面整体缩放比例（#7 界面大小）：1.0 = 原始大小，<1 等比缩小以一页显示更多
     public var uiScale: Double
+    /// 车辆异常持续提醒（门未锁/窗未关等持续 10 分钟后本地通知）。默认关闭，用户主动开启
+    public var vehicleAlertEnabled: Bool
 
     private enum CodingKeys: String, CodingKey {
         case confirmGateCommands, siriEnabledCommands, siriMasterEnabled,
              carModelStyle, clubNick, clubAvatar, widgetCommands,
              quickCommands, moreCommands, moreTools,
              hiddenQuickCommands, hiddenMoreCommands, hiddenTools,
-             tankCapacityL, car3DEnabled, uiScale
+             tankCapacityL, car3DEnabled, uiScale, vehicleAlertEnabled
     }
 
     public init(confirmGateCommands: Set<String>,
@@ -295,7 +297,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
                 hiddenTools: Set<String> = [],
                 tankCapacityL: Double = 50,
                 car3DEnabled: Bool = true,
-                uiScale: Double = 1.0) {
+                uiScale: Double = 1.0,
+                vehicleAlertEnabled: Bool = false) {
         self.confirmGateCommands = confirmGateCommands
         self.siriEnabledCommands = siriEnabledCommands
         self.siriMasterEnabled = siriMasterEnabled
@@ -312,6 +315,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.tankCapacityL = tankCapacityL
         self.car3DEnabled = car3DEnabled
         self.uiScale = uiScale
+        self.vehicleAlertEnabled = vehicleAlertEnabled
     }
 
     /// 旧数据兼容解码：新增字段缺省时给默认值，避免老用户设置丢失
@@ -343,6 +347,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         tankCapacityL = try container.decodeIfPresent(Double.self, forKey: .tankCapacityL) ?? 50
         car3DEnabled = try container.decodeIfPresent(Bool.self, forKey: .car3DEnabled) ?? true
         uiScale = try container.decodeIfPresent(Double.self, forKey: .uiScale) ?? 1.0
+        vehicleAlertEnabled = try container.decodeIfPresent(Bool.self, forKey: .vehicleAlertEnabled) ?? false
     }
 
     // MARK: 自定义顺序的解析（含补齐/过滤非法值，保证渲染永远有内容）
@@ -559,6 +564,10 @@ public enum SharedStore {
         static let mythTheme = "carremote.mythTheme"
         static let customCarName = "carremote.customCarName"
         static let customWallpaper = "carremote.customWallpaper"
+        static let vehicleAlertSince = "carremote.vehicleAlertSince"
+        static let vehicleAlertReasons = "carremote.vehicleAlertReasons"
+        static let announcementLastID = "carremote.announcementLastID"
+        static let adminSiteBaseURL = "carremote.adminSiteBaseURL"
     }
 
     private static var defaults: UserDefaults? {
@@ -933,5 +942,66 @@ public enum SharedStore {
     public static func saveMaintenanceRecords(_ records: [MaintenanceRecord]) {
         guard let data = try? JSONEncoder().encode(records) else { return }
         defaults?.set(data, forKey: Key.maintenanceRecords)
+    }
+
+    // MARK: 车辆异常持续提醒（本轮新增）
+
+    /// 本轮异常的起始时间；nil = 当前无未解除的异常（或未武装提醒）
+    public static func loadVehicleAlertSince() -> Date? {
+        for d in allDefaults {
+            if let date = d.object(forKey: Key.vehicleAlertSince) as? Date { return date }
+        }
+        return nil
+    }
+
+    public static func saveVehicleAlertSince(_ date: Date?) {
+        allDefaults.forEach {
+            if let date { $0.set(date, forKey: Key.vehicleAlertSince) }
+            else { $0.removeObject(forKey: Key.vehicleAlertSince) }
+        }
+    }
+
+    public static func saveVehicleAlertReasons(_ reasons: [String]) {
+        allDefaults.forEach { $0.set(reasons, forKey: Key.vehicleAlertReasons) }
+    }
+
+    public static func loadVehicleAlertReasons() -> [String] {
+        for d in allDefaults {
+            if let arr = d.stringArray(forKey: Key.vehicleAlertReasons) { return arr }
+        }
+        return []
+    }
+
+    // MARK: 系统公告 / 独立后台地址（本轮新增）
+
+    /// 上次已展示过的公告 id，用于「只在有新公告时弹一次」
+    public static func loadAnnouncementLastID() -> String? {
+        for d in allDefaults {
+            if let id = d.string(forKey: Key.announcementLastID), !id.isEmpty { return id }
+        }
+        return nil
+    }
+
+    public static func saveAnnouncementLastID(_ id: String?) {
+        allDefaults.forEach {
+            if let id { $0.set(id, forKey: Key.announcementLastID) }
+            else { $0.removeObject(forKey: Key.announcementLastID) }
+        }
+    }
+
+    /// 独立网站后台地址（站主可在「我的 → 后台地址」覆盖；未设置时走 APIConfig 默认值）
+    public static func loadAdminSiteBaseURL() -> String? {
+        for d in allDefaults {
+            if let url = d.string(forKey: Key.adminSiteBaseURL), !url.isEmpty { return url }
+        }
+        return nil
+    }
+
+    public static func saveAdminSiteBaseURL(_ url: String?) {
+        let trimmed = url?.trimmingCharacters(in: .whitespacesAndNewlines)
+        allDefaults.forEach {
+            if let trimmed, !trimmed.isEmpty { $0.set(trimmed, forKey: Key.adminSiteBaseURL) }
+            else { $0.removeObject(forKey: Key.adminSiteBaseURL) }
+        }
     }
 }

@@ -16,6 +16,12 @@ public enum APIConfig {
         SharedStore.loadServerBaseURL() ?? defaultSiteBaseURL
     }
 
+    /// 独立网站后台地址（公告发布 / 用户限制）。站主可在 App 设置里覆盖；
+    /// 未单独部署时回退到主后端地址，接口不存在时 App 会静默跳过公告，不影响主流程。
+    public static var adminSiteBaseURL: String {
+        SharedStore.loadAdminSiteBaseURL() ?? defaultSiteBaseURL
+    }
+
     /// 卡密获取联系方式（展示在体验网关页面）
     public static let ownerContactQQ = "2317665079"
 

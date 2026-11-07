@@ -15,23 +15,28 @@ struct SettingsView: View {
     // 新版空调：剩余天数
     @State private var acRemainingDays: Int?
     @State private var showACQR = false
+    // 车辆异常提醒：通知权限被拒时给一次明确提示
+    @State private var alertPermissionDenied = false
 
     var body: some View {
         NavStack {
-            ZStack {
-                WebConsoleBackground()
-                ScrollView {
-                    VStack(spacing: 14) {
-                        profileCard
-                        carModelCard
-                        settingsListCard
-                        developerCard
-                        logoutButton
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 4)
-                    .padding(.bottom, 32)
+            ScrollView {
+                VStack(spacing: 14) {
+                    profileCard
+                    carModelCard
+                    settingsListCard
+                    developerCard
+                    logoutButton
                 }
+                .padding(.horizontal, 16)
+                .padding(.top, 4)
+                .padding(.bottom, 32)
+            }
+            // 背景独立铺满，不参与内容布局；内容严格遵守系统安全区，
+            // 避免自定义壁纸把顶部列表推进状态栏导致点不到。
+            .background {
+                WebConsoleBackground()
+                    .ignoresSafeArea()
             }
             .navigationTitle("我的")
             .navigationBarTitleDisplayMode(.large)
@@ -281,6 +286,60 @@ struct SettingsView: View {
                 linkRow(symbol: "server.rack", tint: WebTheme.muted,
                         title: "服务器地址", subtitle: "切换后端域名，无需重新出包") {
                     serverSettingsPage
+                }
+                rowDivider
+            }
+            // 车辆异常持续提醒（门未锁/窗未关等 10 分钟后本地通知）
+            actionRow(symbol: "bell.badge.fill", tint: WebTheme.red,
+                      title: "车辆异常提醒", subtitle: "门未锁 / 窗未关持续 10 分钟后通知我",
+                      trailing: {
+                Text(settings.vehicleAlertEnabled ? "已开启" : "已关闭")
+                    .font(.system(size: 12))
+                    .foregroundStyle(WebTheme.muted)
+            }) {
+                if settings.vehicleAlertEnabled {
+                    settings.vehicleAlertEnabled = false
+                    saveSettings()
+                } else {
+                    // 上下文驱动请求权限：只在用户主动开启时弹系统授权，不在启动时请求
+                    VehicleAlertService.requestAuthorizationOnEnable { granted in
+                        DispatchQueue.main.async {
+                            if granted {
+                                settings.vehicleAlertEnabled = true
+                                saveSettings()
+                                alertPermissionDenied = false
+                            } else {
+                                alertPermissionDenied = true
+                            }
+                        }
+                    }
+                }
+            }
+            rowDivider
+            if alertPermissionDenied {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(WebTheme.amber)
+                    Text("通知权限被拒绝，请到「系统设置 → 通知 → 长安控车」开启后，再回来打开开关。")
+                        .font(.system(size: 11))
+                        .foregroundStyle(WebTheme.muted)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                rowDivider
+            }
+            // 站主公告
+            linkRow(symbol: "megaphone.fill", tint: WebTheme.amber,
+                    title: "系统公告", subtitle: "查看站主发布的最新公告") {
+                NoticePage()
+            }
+            rowDivider
+            // 独立网站后台（仅站主）：公告发布 / 用户限制 / 后台地址
+            if appState.credentials?.phone == APIConfig.ownerPhone {
+                linkRow(symbol: "lock.shield.fill", tint: WebTheme.purple,
+                        title: "网站后台", subtitle: "公告发布 · 限制用户 · 地址设置") {
+                    AdminSitePage()
                 }
                 rowDivider
             }

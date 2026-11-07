@@ -1,5 +1,13 @@
 import SwiftUI
+import UIKit
 import CarCore
+
+/// 「查询车况」即时反馈条的文案与状态
+private struct RefreshFeedback: Equatable {
+    enum Kind: String { case loading, success, failure }
+    var text: String
+    var kind: Kind
+}
 
 /// 主界面：五个标签（控车 / 车况 / 油耗 / 维保 / 我的）
 /// 样式照搬网页版控制台（浅色 + 白卡 + 樱花花瓣 + 浮动车图）
@@ -52,15 +60,18 @@ struct DashboardView: View {
     @State private var showWallpaperSheet = false
     @State private var showNameEditor = false
     @State private var nameDraft = ""
+    @State private var refreshFeedback: RefreshFeedback?
+    @State private var queryingStatus = false
 
     private var settings: AppSettings { SharedStore.loadSettings() }
 
 
     var body: some View {
         NavStack {
-            ZStack {
-                WebConsoleBackground()
-                ScrollView {
+            // 壁纸单独作为 background 铺满全屏，不参与内容布局计算。
+            // 之前把背景作为 ZStack 兄弟视图 + 给 ScrollView 加 ignoresSafeArea(.top)，
+            // 自定义壁纸 scaledToFill 会把外层坐标系撑开、把顶栏推进状态栏区，导致按钮点不到。
+            ScrollView {
                     VStack(spacing: 12) {
                         // 顶部行：车名 DIY 胶囊 + 刷新钮齐平（iOS 26 导航栏会把按钮重塑成图标导致文字被裁，故放内容区）
                         HStack {
@@ -92,7 +103,7 @@ struct DashboardView: View {
                             Spacer()
                             // 网页版 .icon-round 圆形刷新钮（与车名同行齐平）
                             Button {
-                                Task { await appState.refreshStatus() }
+                                Task { await queryStatusWithFeedback() }
                             } label: {
                                 ZStack {
                                     Circle()
@@ -115,7 +126,7 @@ struct DashboardView: View {
                             .accessibilityLabel("刷新车况")
                             .disabled(appState.isRefreshing)
                         }
-                        .padding(.top, currentStatusBarHeight() + 6)
+                        .padding(.top, 6)
                         if let errorMessage = appState.errorMessage {
                             errorBanner(errorMessage)
                         }
@@ -135,7 +146,6 @@ struct DashboardView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 4)
                 }
-            .ignoresSafeArea(edges: .top)
             .refreshable {
                 await appState.refreshStatus()
             }
@@ -150,8 +160,21 @@ struct DashboardView: View {
                     await appState.refreshStatus()
                 }
             }
+            .background {
+                // 背景层独立铺满全屏，不进入 ZStack 布局计算，内容严格遵守系统安全区
+                WebConsoleBackground()
+                    .ignoresSafeArea()
             }
             .navigationBarHidden(true)
+            // 「查询车况」即时反馈条：位于安全区下方，绝不与状态栏重叠
+            .overlay(alignment: .top) {
+                if let fb = refreshFeedback {
+                    feedbackBanner(fb)
+                        .padding(.top, 8)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .zIndex(20)
+                }
+            }
             .sheet(isPresented: $showNameEditor) {
                 // 弹窗内 TextField 绑定在 iOS 上时序不稳，改用 sheet 表单保证写入可靠
                 VStack(spacing: 16) {
@@ -278,38 +301,15 @@ struct DashboardView: View {
 
     private func carStage(status: CarStatus) -> some View {
         VStack(spacing: 0) {
-            if settings.car3DEnabled && settings.carModelStyle.has3DModel {
-                // 官方 3D 车模（长安智慧云控展厅资产）：
-                // 左右滑动旋转 / 捏合缩放 / 长按部件开合 / 车窗车门随真实车况逐扇联动
-                CarVisual3DStage(
-                    style: settings.carModelStyle,
-                    doorsAndWindows: status.doorsAndWindows,
-                    vehicleStarted: status.isVehicleStarted,
-                    wheelsRolling: status.shouldRollWheels
-                )
-                .padding(.horizontal, 20)
-            } else {
-                Image(settings.carModelStyle.sideImageName)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(height: 200)
-                    .padding(.horizontal, 20)
-                    .accessibilityLabel("\(settings.carModelStyle.displayName) 车辆图片")
+            // 车模 ↔ 座舱 hero 转场：点「座舱」胶囊，车模模糊缩小淡出、
+            // 深色座舱面板交叉缩放淡入；点「车辆」收起回到车模。
+            CockpitStage(
+                currentTemp: status.acTempC,
+                onOpenAC: { temp in viewModel.confirmACTemp(temp) },
+                onCloseAC: { viewModel.execute(.closeAir) }
+            ) {
+                carModelContent(status: status)
             }
-
-            // 椭圆阴影（网页版 .car-shadow：径向渐变椭圆呼吸）
-            Ellipse()
-                .fill(
-                    RadialGradient(
-                        colors: [Color(red: 15/255, green: 23/255, blue: 42/255).opacity(0.55), .clear],
-                        center: .center,
-                        startRadius: 0,
-                        endRadius: 60
-                    )
-                )
-                .frame(width: 190, height: 12)
-                .padding(.top, -4)
-                .opacity(0.9)
 
             // 车况状态徽章（网页版 carStateTags）：正常=绿色「车辆正常」，异常时跟随实时状态
             let badge = status.stateFlags.statusBadge
@@ -332,6 +332,45 @@ struct DashboardView: View {
             .accessibilityLabel("车辆状态：\(badge.text)")
         }
         .padding(.top, 4)
+    }
+
+    /// 车模 + 椭圆阴影。
+    /// 宽度钉死为屏幕 point 宽度（UIScreen.main.bounds 不随窗口缩放变化），
+    /// 这样窗口级「界面大小」缩放时，车模的宽与高按同一比例一起缩小，
+    /// 不会出现「自适应宽度不缩、固定 200pt 高度缩了」导致车模被压扁。
+    private func carModelContent(status: CarStatus) -> some View {
+        let stageWidth = UIScreen.main.bounds.width - 40
+        return VStack(spacing: 0) {
+            if settings.car3DEnabled && settings.carModelStyle.has3DModel {
+                CarVisual3DStage(
+                    style: settings.carModelStyle,
+                    doorsAndWindows: status.doorsAndWindows,
+                    vehicleStarted: status.isVehicleStarted,
+                    wheelsRolling: status.shouldRollWheels
+                )
+                .frame(width: stageWidth)
+            } else {
+                Image(settings.carModelStyle.sideImageName)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: stageWidth, height: 200)
+                    .accessibilityLabel("\(settings.carModelStyle.displayName) 车辆图片")
+            }
+
+            // 椭圆阴影（网页版 .car-shadow：径向渐变椭圆呼吸）
+            Ellipse()
+                .fill(
+                    RadialGradient(
+                        colors: [Color(red: 15/255, green: 23/255, blue: 42/255).opacity(0.55), .clear],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: 60
+                    )
+                )
+                .frame(width: 190, height: 12)
+                .padding(.top, -4)
+                .opacity(0.9)
+        }
     }
 
     /// 胎压小标签（网页版 .tpv：白底圆角小签 + 等宽数字，min-width 27px）
@@ -844,11 +883,81 @@ struct DashboardView: View {
         }
     }
 
+    // MARK: - 查询车况：即时反馈（修复「点了没反应」）
+
+    /// 手动查询车况。之前只发一个静默异步请求，撞上 30s 自动轮询时 refreshStatus
+    /// 会因 isRefreshing 直接 return，用户完全看不到任何回馈。这里补上
+    /// 「正在查询 → 成功/失败」三段式反馈，并保证状态栏下方可见、可自动消失。
+    @MainActor
+    private func queryStatusWithFeedback() async {
+        guard !queryingStatus else { return }
+        queryingStatus = true
+        defer { queryingStatus = false }
+
+        let before = appState.statusUpdatedAt
+        // 清掉上一次的残留错误，保证本次反馈只反映本次结果
+        appState.errorMessage = nil
+        withAnimation(.easeInOut(duration: 0.2)) {
+            refreshFeedback = RefreshFeedback(text: "正在查询车况…", kind: .loading)
+        }
+
+        await appState.refreshStatus()
+
+        let after = appState.statusUpdatedAt
+        let failure = appState.errorMessage ?? ""
+        let result: RefreshFeedback
+        if !failure.isEmpty {
+            result = RefreshFeedback(text: "查询失败：\(failure)", kind: .failure)
+        } else if after != before || appState.status != nil {
+            let stamp = DateFormatter.localizedString(from: after ?? Date(),
+                                                      dateStyle: .none, timeStyle: .short)
+            result = RefreshFeedback(text: "车况已更新 · \(stamp)", kind: .success)
+        } else {
+            result = RefreshFeedback(text: "暂无车况数据，请检查网络后重试", kind: .failure)
+        }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+            refreshFeedback = result
+        }
+
+        try? await Task.sleep(nanoseconds: 2_600_000_000)
+        guard !Task.isCancelled else { return }
+        withAnimation(.easeOut(duration: 0.25)) {
+            refreshFeedback = nil
+        }
+    }
+
+    private func feedbackBanner(_ fb: RefreshFeedback) -> some View {
+        HStack(spacing: 8) {
+            if fb.kind == .loading {
+                ProgressView()
+                    .scaleEffect(0.7)
+            } else {
+                Image(systemName: fb.kind == .success
+                      ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(fb.kind == .success ? WebTheme.green : WebTheme.amber)
+            }
+            Text(fb.text)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(WebTheme.txt)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(WebTheme.card)
+        .clipShape(Capsule())
+        .overlay(Capsule().strokeBorder(WebTheme.border, lineWidth: 1))
+        .shadow(color: Color.black.opacity(0.12), radius: 10, y: 4)
+        .padding(.horizontal, 24)
+        .accessibilityLabel(fb.text)
+    }
+
     /// 磁贴点击分发
     private func handleTool(_ tool: MoreTool) {
         switch tool {
         case .refreshStatus:
-            Task { await appState.refreshStatus() }
+            Task { await queryStatusWithFeedback() }
         case .history:
             viewModel.showHistoryActions = true
         case .messages:

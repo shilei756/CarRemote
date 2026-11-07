@@ -228,6 +228,9 @@ final class AppState: ObservableObject {
             ))
             applyCarName()
             errorMessage = nil
+            // 车辆异常持续提醒：每次拿到新车况都评估（内部幂等，恢复后自动取消预约）
+            VehicleAlertService.evaluate(status: status,
+                                         enabled: SharedStore.loadSettings().vehicleAlertEnabled)
             // 车况快照已更新，立即刷新桌面小组件
             WidgetCenter.shared.reloadAllTimelines()
         } catch {
