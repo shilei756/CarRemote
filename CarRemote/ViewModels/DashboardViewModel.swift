@@ -151,6 +151,42 @@ final class DashboardViewModel: ObservableObject {
         acRemainingDays = await ACService.activationRemainingDays(credentials: credentials)
     }
 
+    // MARK: - 查询车况（对齐网页版 sendQueryStatus：唤醒车机上报最新数据）
+
+    /// 「查询车况」不是简单刷新已缓存的车辆信息，而是下发 UpCarCondition
+    /// 唤醒车机重新上报，随后主动读取车辆位置与最新车况（网页版
+    /// sendQueryStatus → autoRefreshAfterCmd + loadLocationCard 的等价实现）。
+    /// 返回 (是否成功, 反馈文案)，由界面即时展示。
+    func queryVehicleCondition() async -> (ok: Bool, message: String) {
+        guard let appState, let credentials = appState.credentials else {
+            return (false, "未登录，请先登录后再查询")
+        }
+        do {
+            // PIN 校验 → 安全公钥 → 站内加密代理 → execute，链路与网页版完全一致
+            let result = try await CarService.performAction(
+                action: "UpCarCondition", credentials: credentials
+            )
+            guard result.ok else {
+                return (false, result.message)
+            }
+            // 唤醒已送达：立即读取一次最新车辆位置，并弹出详情把读回的
+            // 地址 / 定位时间 / 经纬度 / 车速直接呈现给「查询车况」的用户
+            loadLocation()
+            showLocationDetail = true
+            // 车机上报存在延迟，按网页版 2 / 8 / 15 秒节奏补刷车况与位置
+            Task { [weak self] in
+                for delay: UInt64 in [2, 6, 7] {
+                    try? await Task.sleep(nanoseconds: delay * 1_000_000_000)
+                    await self?.appState?.refreshStatus()
+                    self?.loadLocation()
+                }
+            }
+            return (true, "车况查询已发送，车辆位置与状态即将更新")
+        } catch {
+            return (false, error.localizedDescription)
+        }
+    }
+
     // MARK: - 车辆位置
 
     /// 点击位置入口：查询一次并弹出详情（对齐网页版「点定位 → 弹详情」）

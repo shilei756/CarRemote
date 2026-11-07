@@ -142,6 +142,15 @@ public struct RKCarModel {
     /// 共 96×8 = 768 个点。用于 `fittedRadius` 闭式求解「当前角度下整车完整入画
     /// 所需的最小相机距离」，避免逐帧遍历 12 万顶点。
     let fitPoints: [SIMD3<Float>]
+    /// 座舱几何根（GLB `Int_P` 子树：座椅/仪表台/方向盘等内饰），默认隐藏，
+    /// 仅在「车内视角」模式下启用。与 exteriorRoot 互斥显隐实现 外/内 切换。
+    let interiorRoot: Entity
+    /// 外观几何根（车身/门窗/车轮/尾门），车内视角模式下隐藏。
+    let exteriorRoot: Entity
+    /// 座舱几何中心（车模局部空间），相机切入座舱时的注视点。
+    let interiorCenter: SIMD3<Float>
+    /// 座舱半径（中心到最远内饰顶点），车内视角相机距离基准。
+    let interiorRadius: Float
 }
 
 // MARK: - 车模视图
@@ -172,6 +181,20 @@ public final class Car3DView: UIView {
     /// 是否按当前角度自动取景（保证整车完整入画）。
     /// 旋转时保持开启；用户捏合缩放后关闭，双击「重置视角」时恢复。
     public private(set) var autoFrame = true
+
+    /// 视角模式：车外（默认）/ 车内（座舱视角）。
+    public enum ViewMode: Equatable {
+        case exterior
+        case interior
+    }
+    /// 当前视角模式（车内视角切换车内/车外）
+    public private(set) var viewMode: ViewMode = .exterior
+
+    // 座舱几何分组与相机切入参数（模型挂载后填充）
+    private var interiorRoot: Entity?
+    private var exteriorRoot: Entity?
+    private var interiorCenter = SIMD3<Float>(0, 0.5, 0)
+    private var interiorRadius: Float = 0.8
 
     private static let defaultAzimuth: Float = .pi / 2   // 初始视角：车身正侧面（车头朝左）
     private static let defaultElevation: Float = 0.2514
@@ -475,6 +498,43 @@ public final class Car3DView: UIView {
         orbitRadius = Self.defaultRadius
         autoFrame = true
         applyOrbitCamera()
+    }
+
+    /// 切换车外 / 车内（座舱）视角。
+    /// - `.interior`：隐藏外观、显示座舱，相机切到座舱中心、贴近座舱半径、视线平视，
+    ///   并关闭自动取景（否则整车 fitPoints 会把相机拉远）。展示自转继续生效（座舱内缓慢环视）。
+    /// - `.exterior`：恢复外观、隐藏座舱，相机复位到整车中心并恢复自动取景。
+    public func setViewMode(_ mode: ViewMode, animated: Bool = true) {
+        guard mode != viewMode else { return }
+        viewMode = mode
+        noteUserOrbitInteraction()
+        switch mode {
+        case .interior:
+            exteriorRoot?.isEnabled = false
+            interiorRoot?.isEnabled = true
+            orbitTarget = interiorCenter
+            // 稍微坐进座舱（半径的 0.82），让座椅/方向盘/仪表台环绕视野、不被裁切
+            orbitRadius = max(interiorRadius * 0.82, 0.4)
+            orbitElevation = 0.16          // 近眼平视
+            orbitAzimuth = .pi             // 朝车头方向（座舱内看向仪表台）
+            autoFrame = false
+        case .exterior:
+            interiorRoot?.isEnabled = false
+            exteriorRoot?.isEnabled = true
+            orbitTarget = (modelBoundsMin + modelBoundsMax) / 2
+            orbitElevation = Self.defaultElevation
+            orbitAzimuth = Self.defaultAzimuth
+            orbitRadius = Self.defaultRadius
+            autoFrame = true
+        }
+        if animated {
+            // 复用已存在的缓动补间（含自动取景闭式解），保证切视角平滑无跳变
+            animateCameraTo(azimuth: orbitAzimuth, elevation: orbitElevation,
+                            radius: autoFrame ? nil : orbitRadius,
+                            duration: 0.6)
+        } else {
+            applyOrbitCamera()
+        }
     }
 
     /// 「我的爱车」同款俯视图：0.8s 缓动把相机切到车顶正上方（方位角保持不变）。
@@ -815,6 +875,13 @@ public final class Car3DView: UIView {
             if seenWheels.insert(id).inserted { uniqueWheels.append(w) }
         }
 
+        // 旧版 .rk 全件模无独立座舱几何：座舱根用空实体兜底，
+        // 车内视角（若有入口）将显示空白，外观模式仍正常显示整车。
+        let interiorFallback = Entity()
+        interiorFallback.name = "interiorRoot_fallback"
+        interiorFallback.isEnabled = false
+        let extCenter = (boundsMin + boundsMax) / 2
+        let extRadius = max(0.5 * simd_length(boundsMax - boundsMin), 0.5)
         return RKCarModel(root: carRoot, partEntities: partEntities, windowEntities: windowEntities,
                           handleEntities: handleEntities, wheelEntities: wheelEntities,
                           uniqueWheels: uniqueWheels, lightEntities: lightEntities,
@@ -822,7 +889,9 @@ public final class Car3DView: UIView {
                           sunroofTilt: sunroofTilt, windowRest: windowRest, windowOpen: windowOpen,
                           windowTilt: windowTilt, handleTilt: handleTilt,
                           boundsMin: boundsMin, boundsMax: boundsMax,
-                          fitPoints: fitPoints)
+                          fitPoints: fitPoints,
+                          interiorRoot: interiorFallback, exteriorRoot: carRoot,
+                          interiorCenter: extCenter, interiorRadius: extRadius)
     }
 
     private static func buildModelEntity(part: RKPartDef, manifest: RKManifest, data: Data,
@@ -979,6 +1048,14 @@ public final class Car3DView: UIView {
         // 1.1.4-b109：取景代表点就位，随后 applyOrbitCamera 按当前角度闭式求解半径，
         // 保证旋转到任何方位角车模都完整入画（消除视口这道「空气墙」）。
         fitPoints = build.fitPoints
+        // 座舱分组与车内视角参数就位（默认车外视角：外观显示、座舱隐藏）
+        interiorRoot = build.interiorRoot
+        exteriorRoot = build.exteriorRoot
+        interiorCenter = build.interiorCenter
+        interiorRadius = build.interiorRadius
+        exteriorRoot?.isEnabled = true
+        interiorRoot?.isEnabled = false
+        viewMode = .exterior
         autoFrame = true
         applyOrbitCamera()
         return true
@@ -997,6 +1074,9 @@ public final class Car3DView: UIView {
         carRoot?.removeFromParent()
         carRoot = nil
         fitPoints = []
+        interiorRoot = nil
+        exteriorRoot = nil
+        viewMode = .exterior
         stopWheels()
         wheelCancellable?.cancel()
         wheelCancellable = nil

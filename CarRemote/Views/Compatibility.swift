@@ -159,6 +159,28 @@ extension View {
     }
 }
 
+// MARK: 车模舞台 ↔ 座舱视角 联动
+
+/// 首页把 3D 车模舞台交给「座舱转场」托管时，用环境值下发当前是否车内视角。
+/// - `.standalone`：车库页等独立使用，保留舞台自带全部控件与「外/内」滑块。
+/// - `.managed(interior:)`：首页托管，「外/内」滑块交给座舱胶囊统一控制，
+///   车模相机据 interior 在「车外展示 / 车内座舱」之间切换（复用 GLB 自带内饰几何）。
+enum CarCockpitStageConfig: Equatable {
+    case standalone
+    case managed(interior: Bool)
+}
+
+private struct CarCockpitStageKey: EnvironmentKey {
+    static let defaultValue: CarCockpitStageConfig = .standalone
+}
+
+extension EnvironmentValues {
+    var carCockpitStage: CarCockpitStageConfig {
+        get { self[CarCockpitStageKey.self] }
+        set { self[CarCockpitStageKey.self] = newValue }
+    }
+}
+
 // MARK: 工具栏位置
 
 /// iOS 15 兼容的工具栏位置：iOS 17+ 用 topBar*，iOS 15/16 用

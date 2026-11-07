@@ -329,20 +329,6 @@ struct SettingsView: View {
                 .padding(.vertical, 8)
                 rowDivider
             }
-            // 站主公告
-            linkRow(symbol: "megaphone.fill", tint: WebTheme.amber,
-                    title: "系统公告", subtitle: "查看站主发布的最新公告") {
-                NoticePage()
-            }
-            rowDivider
-            // 独立网站后台（仅站主）：公告发布 / 用户限制 / 后台地址
-            if appState.credentials?.phone == APIConfig.ownerPhone {
-                linkRow(symbol: "lock.shield.fill", tint: WebTheme.purple,
-                        title: "网站后台", subtitle: "公告发布 · 限制用户 · 地址设置") {
-                    AdminSitePage()
-                }
-                rowDivider
-            }
             // 行程统计（#5）
             linkRow(symbol: "chart.bar.fill", tint: WebTheme.green,
                     title: "行程统计", subtitle: "最近一周 / 一月的里程、油耗与均速") {

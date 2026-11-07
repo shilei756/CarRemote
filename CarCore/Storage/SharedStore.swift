@@ -566,8 +566,6 @@ public enum SharedStore {
         static let customWallpaper = "carremote.customWallpaper"
         static let vehicleAlertSince = "carremote.vehicleAlertSince"
         static let vehicleAlertReasons = "carremote.vehicleAlertReasons"
-        static let announcementLastID = "carremote.announcementLastID"
-        static let adminSiteBaseURL = "carremote.adminSiteBaseURL"
     }
 
     private static var defaults: UserDefaults? {
@@ -972,36 +970,4 @@ public enum SharedStore {
         return []
     }
 
-    // MARK: 系统公告 / 独立后台地址（本轮新增）
-
-    /// 上次已展示过的公告 id，用于「只在有新公告时弹一次」
-    public static func loadAnnouncementLastID() -> String? {
-        for d in allDefaults {
-            if let id = d.string(forKey: Key.announcementLastID), !id.isEmpty { return id }
-        }
-        return nil
-    }
-
-    public static func saveAnnouncementLastID(_ id: String?) {
-        allDefaults.forEach {
-            if let id { $0.set(id, forKey: Key.announcementLastID) }
-            else { $0.removeObject(forKey: Key.announcementLastID) }
-        }
-    }
-
-    /// 独立网站后台地址（站主可在「我的 → 后台地址」覆盖；未设置时走 APIConfig 默认值）
-    public static func loadAdminSiteBaseURL() -> String? {
-        for d in allDefaults {
-            if let url = d.string(forKey: Key.adminSiteBaseURL), !url.isEmpty { return url }
-        }
-        return nil
-    }
-
-    public static func saveAdminSiteBaseURL(_ url: String?) {
-        let trimmed = url?.trimmingCharacters(in: .whitespacesAndNewlines)
-        allDefaults.forEach {
-            if let trimmed, !trimmed.isEmpty { $0.set(trimmed, forKey: Key.adminSiteBaseURL) }
-            else { $0.removeObject(forKey: Key.adminSiteBaseURL) }
-        }
-    }
 }

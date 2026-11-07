@@ -37,7 +37,6 @@ struct RootView: View {
     @EnvironmentObject private var appState: AppState
     // 主题观察：主题变化时整棵视图树重算，WebTheme 静态色值随之刷新
     @EnvironmentObject private var themeManager: ThemeManager
-    @StateObject private var announcementCenter = AnnouncementCenter()
 
     var body: some View {
         Group {
@@ -54,23 +53,6 @@ struct RootView: View {
         }
         .animation(.easeInOut(duration: 0.25), value: appState.phase)
         .onAppear { applyUIScale(CGFloat(SharedStore.loadSettings().uiScale)) }
-        // 启动后拉一次站主后台公告；失败静默，仅在有新公告时弹一次
-        .task {
-            if appState.phase == .ready {
-                await announcementCenter.check()
-            }
-        }
-        // 异步恢复登录时会从 .loading 跳到 .ready，补一次公告拉取
-        .onChange(of: appState.phase) { phase in
-            if phase == .ready {
-                Task { await announcementCenter.check() }
-            }
-        }
-        .sheet(item: $announcementCenter.current) { notice in
-            AnnouncementSheet(notice: notice) {
-                announcementCenter.dismiss(notice)
-            }
-        }
         // 点击「车辆异常」通知直接回到控车页
         .onReceive(NotificationCenter.default.publisher(for: .vehicleAlertTapped)) { _ in
             TabRouter.shared.select(.control)

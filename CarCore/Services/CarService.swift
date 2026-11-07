@@ -199,7 +199,11 @@ public enum CarService {
             headers: APIClient.changanHeaders
         )
         let dict = executeObject as? [String: Any] ?? [:]
-        let ok = dict.bool("success") == true || dict.int("code") == 200 || dict.string("code") == "200"
+        // 网页版 execute 成功也可能返回 code=0（UpCarCondition 唤醒指令常见），
+        // 一并按成功处理，避免「指令已下发却误报失败」。
+        let ok = dict.bool("success") == true
+            || dict.int("code") == 0 || dict.int("code") == 200
+            || dict.string("code") == "0" || dict.string("code") == "200"
         let message = dict.string("msg") ?? dict.string("message")
             ?? (ok ? "指令已发送到车机" : "车辆未接受指令")
         // 360 全景等异步任务：解析 data.taskId 供后续轮询取图

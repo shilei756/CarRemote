@@ -101,9 +101,9 @@ struct DashboardView: View {
                             .buttonStyle(.plain)
                             .accessibilityLabel("编辑车辆名称")
                             Spacer()
-                            // 网页版 .icon-round 圆形刷新钮（与车名同行齐平）
+                            // 网页版 .icon-round 圆形刷新钮：仅重拉车况（不下发唤醒指令）
                             Button {
-                                Task { await queryStatusWithFeedback() }
+                                Task { await refreshStatusOnlyWithFeedback() }
                             } label: {
                                 ZStack {
                                     Circle()
@@ -301,8 +301,9 @@ struct DashboardView: View {
 
     private func carStage(status: CarStatus) -> some View {
         VStack(spacing: 0) {
-            // 车模 ↔ 座舱 hero 转场：点「座舱」胶囊，车模模糊缩小淡出、
-            // 深色座舱面板交叉缩放淡入；点「车辆」收起回到车模。
+            // 车模 ↔ 座舱 hero 转场：点「座舱」胶囊，3D 相机切入车模自带的
+            // GLB 内饰几何（座椅/仪表台/方向盘/顶棚）做真实车内空调视角，
+            // 画面同时等比放大；点「车辆」相机退回车外并复原大小。
             CockpitStage(
                 currentTemp: status.acTempC,
                 onOpenAC: { temp in viewModel.confirmACTemp(temp) },
@@ -883,43 +884,59 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - 查询车况：即时反馈（修复「点了没反应」）
+    // MARK: - 刷新车况（顶栏圆形钮 / 下拉刷新，仅重拉数据，不下发指令）
 
-    /// 手动查询车况。之前只发一个静默异步请求，撞上 30s 自动轮询时 refreshStatus
-    /// 会因 isRefreshing 直接 return，用户完全看不到任何回馈。这里补上
-    /// 「正在查询 → 成功/失败」三段式反馈，并保证状态栏下方可见、可自动消失。
+    /// 网页版 refreshStatus()：只重拉一次车况快照，轻量、不占用车机指令队列。
+    @MainActor
+    private func refreshStatusOnlyWithFeedback() async {
+        guard !queryingStatus else { return }
+        queryingStatus = true
+        defer { queryingStatus = false }
+
+        appState.errorMessage = nil
+        withAnimation(.easeInOut(duration: 0.2)) {
+            refreshFeedback = RefreshFeedback(text: "正在刷新车况…", kind: .loading)
+        }
+        await appState.refreshStatus()
+        let failure = appState.errorMessage ?? ""
+        let result = RefreshFeedback(
+            text: failure.isEmpty ? "车况已刷新" : "刷新失败：\(failure)",
+            kind: failure.isEmpty ? .success : .failure
+        )
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+            refreshFeedback = result
+        }
+        try? await Task.sleep(nanoseconds: 2_600_000_000)
+        guard !Task.isCancelled else { return }
+        withAnimation(.easeOut(duration: 0.25)) { refreshFeedback = nil }
+    }
+
+    // MARK: - 查询车况：唤醒车机 + 即时反馈（对齐网页版 sendQueryStatus）
+
+    /// 网页版「查询车况」= 下发 UpCarCondition 唤醒车机重新上报，再读回最新位置与车况，
+    /// 不是简单刷新本地车辆信息。这里保留「正在查询 → 成功/失败」三段式反馈，
+    /// 保证点了有反应，并把网页「车辆位置与状态即将更新」的语义传达出来。
     @MainActor
     private func queryStatusWithFeedback() async {
         guard !queryingStatus else { return }
         queryingStatus = true
         defer { queryingStatus = false }
 
-        let before = appState.statusUpdatedAt
-        // 清掉上一次的残留错误，保证本次反馈只反映本次结果
-        appState.errorMessage = nil
         withAnimation(.easeInOut(duration: 0.2)) {
-            refreshFeedback = RefreshFeedback(text: "正在查询车况…", kind: .loading)
+            refreshFeedback = RefreshFeedback(text: "正在查询车况，请稍候…", kind: .loading)
         }
 
-        await appState.refreshStatus()
+        let outcome = await viewModel.queryVehicleCondition()
 
-        let after = appState.statusUpdatedAt
-        let failure = appState.errorMessage ?? ""
-        let result: RefreshFeedback
-        if !failure.isEmpty {
-            result = RefreshFeedback(text: "查询失败：\(failure)", kind: .failure)
-        } else if after != before || appState.status != nil {
-            let stamp = DateFormatter.localizedString(from: after ?? Date(),
-                                                      dateStyle: .none, timeStyle: .short)
-            result = RefreshFeedback(text: "车况已更新 · \(stamp)", kind: .success)
-        } else {
-            result = RefreshFeedback(text: "暂无车况数据，请检查网络后重试", kind: .failure)
-        }
+        let result = RefreshFeedback(
+            text: outcome.ok ? outcome.message : "查询失败：\(outcome.message)",
+            kind: outcome.ok ? .success : .failure
+        )
         withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
             refreshFeedback = result
         }
 
-        try? await Task.sleep(nanoseconds: 2_600_000_000)
+        try? await Task.sleep(nanoseconds: 3_200_000_000)
         guard !Task.isCancelled else { return }
         withAnimation(.easeOut(duration: 0.25)) {
             refreshFeedback = nil
