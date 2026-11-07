@@ -453,12 +453,12 @@ struct CarVisual3DStage: View {
     @AppStorage("carStageUse2D") private var stageUse2D = false
     /// 加载失败仅本次运行回退 2D，不写持久化档位，避免一次失败长期锁在 2D。
     @State private var failedFallback2D = false
+    /// 只读：档位由持久化的 stageUse2D 与本次运行失败回退共同决定。
+    /// 不提供 setter —— SwiftUI 的 View 是不可变 self，自定义 mutating setter
+    /// 在 Button action 里会编译报 'self' is immutable；切换档位由
+    /// stageSegment 直接写这两个属性（等价于旧版给 @State 赋值）。
     private var mode: StageMode {
-        get { (stageUse2D || failedFallback2D) ? .twoD : .threeD }
-        set {
-            failedFallback2D = false
-            stageUse2D = (newValue == .twoD)
-        }
+        (stageUse2D || failedFallback2D) ? .twoD : .threeD
     }
 
     /// 1.6.0：座舱态强制使用完整分件的座舱模型。
@@ -685,7 +685,10 @@ struct CarVisual3DStage: View {
     private func stageSegment(_ segment: StageMode, title: String) -> some View {
         let selected = mode == segment
         return Button {
-            withAnimation(.easeInOut(duration: 0.18)) { mode = segment }
+            withAnimation(.easeInOut(duration: 0.18)) {
+                failedFallback2D = false
+                stageUse2D = (segment == .twoD)
+            }
         } label: {
             Text(title)
                 .font(.system(size: 13, weight: .semibold))
