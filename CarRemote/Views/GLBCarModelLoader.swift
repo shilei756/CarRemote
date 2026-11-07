@@ -193,6 +193,10 @@ enum GLBCarModelLoader {
 
             var boundsMin = SIMD3<Float>(repeating: .greatestFiniteMagnitude)
             var boundsMax = SIMD3<Float>(repeating: -.greatestFiniteMagnitude)
+            /// 方向盘锚点：全部官方 GLB 都有 `Tex_Trumpet_Int` 节点，用它推导
+            /// 车内第一视角机位，可自动适配轿车 / SUV 不同的坐姿高度。
+            var steerMin = SIMD3<Float>(repeating: .greatestFiniteMagnitude)
+            var steerMax = SIMD3<Float>(repeating: -.greatestFiniteMagnitude)
             let fitBuckets = 96, fitLayers = 8
             var fitBest = [Float](repeating: -1, count: fitBuckets * fitLayers)
             var fitReps = [SIMD3<Float>](repeating: .zero, count: fitBuckets * fitLayers)
@@ -329,6 +333,7 @@ enum GLBCarModelLoader {
             var deferredFit: [(verts: [SIMD3<Float>], frame: SIMD3<Float>)] = []
             for (ni, node) in nodesJSON.enumerated() {
                 guard let meshIdx = node["mesh"] as? Int, meshIdx < meshes.count else { continue }
+                let isSteeringNode = (node["name"] as? String) == "Tex_Trumpet_Int"
                 let world = worldMatrices[ni]
                 // 归属枢轴的世界平移（根空间）：顶点局部 = 世界位 − 铰链平移
                 let frameT: SIMD3<Float>
@@ -392,6 +397,11 @@ enum GLBCarModelLoader {
                             interiorBoundsMax.y = max(interiorBoundsMax.y, wy)
                             interiorBoundsMin.z = min(interiorBoundsMin.z, wz)
                             interiorBoundsMax.z = max(interiorBoundsMax.z, wz)
+                        }
+                        if isSteeringNode {
+                            steerMin.x = min(steerMin.x, wx); steerMax.x = max(steerMax.x, wx)
+                            steerMin.y = min(steerMin.y, wy); steerMax.y = max(steerMax.y, wy)
+                            steerMin.z = min(steerMin.z, wz); steerMax.z = max(steerMax.z, wz)
                         }
                     }
                     // 取景代表点：同一 POSITION 同一枢轴只缓存一份（铰链局部坐标 + 链接平移），
@@ -564,6 +574,16 @@ enum GLBCarModelLoader {
                 interiorRadius = max(0.5 * simd_length(extent), 0.5)
             }
 
+            // 车内第一视角机位（1.5.0）：以方向盘中心为锚点，坐在前排正中、
+            // 眼高略高于方向盘，朝仪表台 → 前挡风玻璃方向看。
+            // 旧的「座舱包围盒中心 + 半对角半径」算法会把相机放到车尾外 1.6 个单位，
+            // 再叠加展示自转，用户看到的就是从车门外斜看进去的一堆内饰零件。
+            let steerCenter: SIMD3<Float> = steerMin.x <= steerMax.x
+                ? (steerMin + steerMax) / 2
+                : SIMD3<Float>(0.36, 0.88, 0.5)
+            let interiorEye = SIMD3<Float>(0, steerCenter.y + 0.22, steerCenter.z - 0.65)
+            let interiorLookAt = SIMD3<Float>(0, steerCenter.y + 0.04, steerCenter.z + 1.15)
+
             return RKCarModel(root: carRoot,
                               partEntities: partEntities, windowEntities: windowEntities,
                               handleEntities: handleEntities,
@@ -575,7 +595,8 @@ enum GLBCarModelLoader {
                               boundsMin: boundsMin, boundsMax: boundsMax,
                               fitPoints: fitPoints,
                               interiorRoot: interiorRoot, exteriorRoot: exteriorRoot,
-                              interiorCenter: interiorCenter, interiorRadius: interiorRadius)
+                              interiorCenter: interiorCenter, interiorRadius: interiorRadius,
+                              interiorEye: interiorEye, interiorLookAt: interiorLookAt)
         } catch {
             return nil
         }

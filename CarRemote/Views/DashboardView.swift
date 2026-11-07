@@ -308,8 +308,8 @@ struct DashboardView: View {
                 currentTemp: status.acTempC,
                 onOpenAC: { temp in viewModel.confirmACTemp(temp) },
                 onCloseAC: { viewModel.execute(.closeAir) }
-            ) {
-                carModelContent(status: status)
+            ) { isCockpit in
+                carModelContent(status: status, isCockpit: isCockpit)
             }
 
             // 车况状态徽章（网页版 carStateTags）：正常=绿色「车辆正常」，异常时跟随实时状态
@@ -339,7 +339,7 @@ struct DashboardView: View {
     /// 宽度钉死为屏幕 point 宽度（UIScreen.main.bounds 不随窗口缩放变化），
     /// 这样窗口级「界面大小」缩放时，车模的宽与高按同一比例一起缩小，
     /// 不会出现「自适应宽度不缩、固定 200pt 高度缩了」导致车模被压扁。
-    private func carModelContent(status: CarStatus) -> some View {
+    private func carModelContent(status: CarStatus, isCockpit: Bool) -> some View {
         let stageWidth = UIScreen.main.bounds.width - 40
         return VStack(spacing: 0) {
             if settings.car3DEnabled && settings.carModelStyle.has3DModel {
@@ -359,18 +359,21 @@ struct DashboardView: View {
             }
 
             // 椭圆阴影（网页版 .car-shadow：径向渐变椭圆呼吸）
-            Ellipse()
-                .fill(
-                    RadialGradient(
-                        colors: [Color(red: 15/255, green: 23/255, blue: 42/255).opacity(0.55), .clear],
-                        center: .center,
-                        startRadius: 0,
-                        endRadius: 60
+            // 座舱第一视角在车内，地面阴影会穿帮，切座舱时移除。
+            if !isCockpit {
+                Ellipse()
+                    .fill(
+                        RadialGradient(
+                            colors: [Color(red: 15/255, green: 23/255, blue: 42/255).opacity(0.55), .clear],
+                            center: .center,
+                            startRadius: 0,
+                            endRadius: 60
+                        )
                     )
-                )
-                .frame(width: 190, height: 12)
-                .padding(.top, -4)
-                .opacity(0.9)
+                    .frame(width: 190, height: 12)
+                    .padding(.top, -4)
+                    .opacity(0.9)
+            }
         }
     }
 

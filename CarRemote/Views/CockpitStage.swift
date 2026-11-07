@@ -4,15 +4,17 @@ import CarCore
 
 // MARK: - 车模舞台 ↔ 车内空调视角 的展开转场
 //
-// 座舱视觉直接复用 GLB 3D 车模自带的 `Int_P` 内饰几何（座椅 / 仪表台 /
-// 方向盘 / 顶棚），通过 Car3DView.setViewMode(.interior) 把相机切入车内做真实
-// 渲染 —— 不再手绘矢量假场景。切换时整个车模舞台按 hero 放大（scaleEffect
-// + 舞台增高），下方浮现「遥控空调」控制卡。
+// 1.5.0：座舱视觉由 GLB 3D 车模的**完整车身 + Int_P 内饰**共同渲染，
+// 相机直接坐进前排眼位朝仪表台 / 前挡风看（Car3DView.setViewMode(.interior)）。
+// 不再隐藏车身外壳、不再让轨道相机在车外绕圈，也不再用手绘矢量假场景。
+// 切换时渲染视口加高 + 72° 广角，形成镜头推进放大的 hero 效果，
+// 下方浮现「遥控空调」控制卡。
 //
 // 全部使用 iOS 15 可用的 SwiftUI API，不依赖 iOS 16+ 专属修饰符。
 
 /// 车模舞台与车内空调视角共用同一个 3D 车模：切到座舱时相机进入车内、画面放大。
-/// carContent 传入原有的 3D/2D 车模视图，通过环境值把「车内视角」下发给车模舞台。
+/// carContent 传入原有的 3D/2D 车模视图，并接收「是否处于座舱态」以便隐藏
+/// 车外展示专用的地面阴影；通过环境值把车内视角下发给车模舞台。
 struct CockpitStage<CarContent: View>: View {
     @Namespace private var tabNamespace
     @State private var showCockpit = false
@@ -29,12 +31,13 @@ struct CockpitStage<CarContent: View>: View {
     let onOpenAC: (Int) -> Void
     /// 关闭空调
     let onCloseAC: () -> Void
-    @ViewBuilder var carContent: () -> CarContent
+    /// 车模内容（参数为是否处于座舱第一视角）
+    @ViewBuilder var carContent: (Bool) -> CarContent
 
     init(currentTemp: Double?,
          onOpenAC: @escaping (Int) -> Void,
          onCloseAC: @escaping () -> Void,
-         @ViewBuilder carContent: @escaping () -> CarContent) {
+         @ViewBuilder carContent: @escaping (Bool) -> CarContent) {
         self.currentTemp = currentTemp
         self.onOpenAC = onOpenAC
         self.onCloseAC = onCloseAC
@@ -51,15 +54,25 @@ struct CockpitStage<CarContent: View>: View {
     var body: some View {
         VStack(spacing: 0) {
             ZStack(alignment: .center) {
+                // 座舱态铺一层「车外天空 → 车内暗部」背景：前挡风玻璃背面被剔除后
+                // 透出的是这层，而不是浅绿龙纹壁纸（1.4.0 的车窗穿帮问题）。
+                if showCockpit { cockpitBackdrop }
+
                 // 3D 车模常驻：切到座舱时把「车内视角」下发给车模舞台，
-                // 由其相机切入 GLB 自带内饰几何；同时整个画面等比放大，
-                // 营造镜头推近进入车内的 hero 效果。
-                carContent()
+                // 由其相机坐进前排、保留完整车身做真实车内渲染。
+                carContent(showCockpit)
                     .environment(\.carCockpitStage, .managed(interior: showCockpit))
-                    .scaleEffect(showCockpit ? 1.26 : 1.0)
             }
-            .frame(height: showCockpit ? 252 : 214)
-            .clipped()
+            .frame(height: showCockpit ? 288 : 214)
+            .clipShape(RoundedRectangle(cornerRadius: showCockpit ? 20 : 0, style: .continuous))
+            .overlay(
+                Group {
+                    if showCockpit {
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .strokeBorder(WebTheme.border, lineWidth: 1)
+                    }
+                }
+            )
             .contentShape(Rectangle())
 
             // 展开后下方浮现「遥控空调」控制卡
@@ -95,6 +108,21 @@ struct CockpitStage<CarContent: View>: View {
             showCockpit = cockpit
         }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+
+    /// 座舱画面背景：模拟从车内透过前挡风玻璃看到的天空（上）与仪表台暗部（下）。
+    /// 用中性冷灰，既不抢内饰的高光，也彻底隔绝自定义壁纸从车窗透出。
+    private var cockpitBackdrop: some View {
+        LinearGradient(
+            stops: [
+                .init(color: Color(red: 0.79, green: 0.84, blue: 0.86), location: 0),
+                .init(color: Color(red: 0.62, green: 0.69, blue: 0.72), location: 0.38),
+                .init(color: Color(red: 0.27, green: 0.31, blue: 0.34), location: 0.70),
+                .init(color: Color(red: 0.11, green: 0.13, blue: 0.15), location: 1)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
     }
 
     // MARK: - 遥控空调控制卡

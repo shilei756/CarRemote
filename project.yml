@@ -46,8 +46,8 @@ settings:
     # 版本规则：以后每次更新递增「大版本号」（1.2.0 → 1.3.0 → …），不再停留在 1.1.x。
     # 构建号随版本 +1；CI 产物名里的 b<run_number> 天然递增，无需手动维护。
     # 版本规则：每次更新递增大版本号（1.2.0 -> 1.3.0 -> 1.4.0 ...），不再停在 1.1.x
-    MARKETING_VERSION: "1.4.0"
-    CURRENT_PROJECT_VERSION: "82"
+    MARKETING_VERSION: "1.5.0"
+    CURRENT_PROJECT_VERSION: "83"
     IPHONEOS_DEPLOYMENT_TARGET: "15.0"
     SDKROOT: iphoneos
     TARGETED_DEVICE_FAMILY: "1"

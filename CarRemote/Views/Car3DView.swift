@@ -149,8 +149,13 @@ public struct RKCarModel {
     let exteriorRoot: Entity
     /// 座舱几何中心（车模局部空间），相机切入座舱时的注视点。
     let interiorCenter: SIMD3<Float>
-    /// 座舱半径（中心到最远内饰顶点），车内视角相机距离基准。
+    /// 座舱半径（中心到最远内饰顶点），保留给外部兼容读取。
     let interiorRadius: Float
+    /// 车内第一视角相机眼位（世界坐标）。由 GLB `Tex_Trumpet_Int`
+    /// 方向盘锚点推导：坐在前排、略高于方向盘、朝车头看。
+    let interiorEye: SIMD3<Float>
+    /// 车内第一视角注视点（仪表台 → 前挡风玻璃方向）。
+    let interiorLookAt: SIMD3<Float>
 }
 
 // MARK: - 车模视图
@@ -195,12 +200,18 @@ public final class Car3DView: UIView {
     private var exteriorRoot: Entity?
     private var interiorCenter = SIMD3<Float>(0, 0.5, 0)
     private var interiorRadius: Float = 0.8
+    /// 车内第一视角（由车模方向盘锚点推导，见 RKCarModel）
+    private var interiorEye = SIMD3<Float>(0, 1.10, -0.15)
+    private var interiorLookAt = SIMD3<Float>(0, 0.92, 1.65)
 
     private static let defaultAzimuth: Float = .pi / 2   // 初始视角：车身正侧面（车头朝左）
     private static let defaultElevation: Float = 0.2514
     /// 垂直视场角（度）。RealityKit 的 `fieldOfViewInDegrees` 按垂直方向应用，
     /// 水平视野由视口宽高比推导 —— fittedRadius 的 tanH/tanV 必须与此一致。
     private static let defaultFOV: Float = 38
+    /// 车内第一视角用广角（72°），把仪表台 / 中控 / A 柱 / 前挡风一起收进画面，
+    /// 视觉上等同「镜头推进放大」。车外展示仍用 38°。
+    private static let interiorFOV: Float = 72
     // 初始相机距离：与 1.1.3-b102 一致（2.4 → 2.12 是 1.1.4「车模稍微放大一点」那次的调整）。
     // 这是用户认可的「之前那种大小」，不再为了「整车完整入画」而调整。
     private static let defaultRadius: Float = 2.12
@@ -290,7 +301,8 @@ public final class Car3DView: UIView {
         super.layoutSubviews()
         // 1.1.4-b109：自动取景的闭式解依赖视口宽高比，因此尺寸变化（旋转屏幕 /
         // 首帧 bounds 就绪）时必须重算相机距离，否则会按旧宽高比取景导致裁切。
-        if bounds.width > 0, cameraEntity != nil {
+        // 座舱第一视角是固定机位，不能被轨道相机的取景重算覆盖。
+        if bounds.width > 0, cameraEntity != nil, viewMode == .exterior {
             applyOrbitCamera()
         }
     }
@@ -454,9 +466,11 @@ public final class Car3DView: UIView {
         }
         if showcaseCancellable == nil {
             showcaseCancellable = arView.scene.subscribe(to: SceneEvents.Update.self) { [weak self] ev in
-                guard let self, self.isShowcase else { return }
+                guard let self, self.isShowcase, self.viewMode == .exterior else { return }
                 guard CACurrentMediaTime() - self.lastUserOrbitTime > 5 else { return }
                 // 舒缓展示自转（约 29 秒/圈），自动取景保持整车入画
+                // 注意：切到座舱第一视角时自转必须停下，否则相机会绕着车厢转圈，
+                // 用户看到的将是「从车门外斜看进去的一堆内饰零件」。
                 self.orbitAzimuth += Float(ev.deltaTime) * 0.22
                 self.applyOrbitCamera()
             }
@@ -501,23 +515,25 @@ public final class Car3DView: UIView {
     }
 
     /// 切换车外 / 车内（座舱）视角。
-    /// - `.interior`：隐藏外观、显示座舱，相机切到座舱中心、贴近座舱半径、视线平视，
-    ///   并关闭自动取景（否则整车 fitPoints 会把相机拉远）。展示自转继续生效（座舱内缓慢环视）。
-    /// - `.exterior`：恢复外观、隐藏座舱，相机复位到整车中心并恢复自动取景。
+    ///
+    /// 1.5.0 重写：早期版本把 `exteriorRoot` 整棵隐藏、只留 `Int_P` 内饰散件，
+    /// 相机仍按「整车轨道」停在车厢外 1.6 单位并随展示自转绕圈 —— 结果就是
+    /// 从车门斜看进去的一堆零件，车窗位置透出壁纸，完全不是座舱。
+    ///
+    /// 正确做法：**保留完整车身**（A 柱 / 车顶 / 天窗 / 车门框 / 挡风玻璃都在外观组），
+    /// 同时开启内饰，把相机直接放到前排眼位朝车头看（第一视角），并停掉轨道自转。
+    /// 车漆/玻璃从内侧看背面被剔除，前挡风自然透出座舱背景，观感与真实车内一致。
     public func setViewMode(_ mode: ViewMode, animated: Bool = true) {
         guard mode != viewMode else { return }
         viewMode = mode
         noteUserOrbitInteraction()
         switch mode {
         case .interior:
-            exteriorRoot?.isEnabled = false
+            exteriorRoot?.isEnabled = true
             interiorRoot?.isEnabled = true
-            orbitTarget = interiorCenter
-            // 稍微坐进座舱（半径的 0.82），让座椅/方向盘/仪表台环绕视野、不被裁切
-            orbitRadius = max(interiorRadius * 0.82, 0.4)
-            orbitElevation = 0.16          // 近眼平视
-            orbitAzimuth = .pi             // 朝车头方向（座舱内看向仪表台）
             autoFrame = false
+            setCameraFOV(Self.interiorFOV)
+            applyInteriorCamera(animated: animated)
         case .exterior:
             interiorRoot?.isEnabled = false
             exteriorRoot?.isEnabled = true
@@ -526,15 +542,37 @@ public final class Car3DView: UIView {
             orbitAzimuth = Self.defaultAzimuth
             orbitRadius = Self.defaultRadius
             autoFrame = true
+            setCameraFOV(Self.defaultFOV)
+            if animated {
+                animateCameraTo(azimuth: orbitAzimuth, elevation: orbitElevation,
+                                radius: nil, duration: 0.6)
+            } else {
+                applyOrbitCamera()
+            }
         }
-        if animated {
-            // 复用已存在的缓动补间（含自动取景闭式解），保证切视角平滑无跳变
-            animateCameraTo(azimuth: orbitAzimuth, elevation: orbitElevation,
-                            radius: autoFrame ? nil : orbitRadius,
-                            duration: 0.6)
-        } else {
-            applyOrbitCamera()
+    }
+
+    /// 修改透视相机 FOV（RealityKit 的 component 是值类型，需整体写回）。
+    private func setCameraFOV(_ degrees: Float) {
+        guard let camera = cameraEntity else { return }
+        var comp = camera.camera
+        comp.fieldOfViewInDegrees = degrees
+        camera.camera = comp
+    }
+
+    /// 把相机固定到前排眼位，朝仪表台 / 前挡风玻璃方向看。
+    /// 不走轨道相机，也不受 autoFrame 影响；`move(to:)` 做 0.55s 镜头推进转场。
+    private func applyInteriorCamera(animated: Bool) {
+        guard let camera = cameraEntity else { return }
+        let eye = interiorEye, look = interiorLookAt
+        guard animated else {
+            camera.look(at: look, from: eye, relativeTo: nil)
+            return
         }
+        let tmp = Entity()
+        tmp.look(at: look, from: eye, relativeTo: nil)
+        camera.move(to: tmp.transform, relativeTo: nil,
+                    duration: 0.55, timingFunction: .easeInOut)
     }
 
     /// 「我的爱车」同款俯视图：0.8s 缓动把相机切到车顶正上方（方位角保持不变）。
@@ -627,6 +665,8 @@ public final class Car3DView: UIView {
     }
 
     private func applyOrbitCamera() {
+        // 座舱第一视角是固定机位，任何轨道取景重算都不得覆盖它。
+        guard viewMode == .exterior else { return }
         guard let camera = cameraEntity else { return }
         let ce = cos(orbitElevation)
         let target = orbitTarget
@@ -891,7 +931,9 @@ public final class Car3DView: UIView {
                           boundsMin: boundsMin, boundsMax: boundsMax,
                           fitPoints: fitPoints,
                           interiorRoot: interiorFallback, exteriorRoot: carRoot,
-                          interiorCenter: extCenter, interiorRadius: extRadius)
+                          interiorCenter: extCenter, interiorRadius: extRadius,
+                          interiorEye: SIMD3<Float>(0, extCenter.y + 0.25, extCenter.z - 0.6),
+                          interiorLookAt: SIMD3<Float>(0, extCenter.y + 0.1, extCenter.z + 1.2))
     }
 
     private static func buildModelEntity(part: RKPartDef, manifest: RKManifest, data: Data,
@@ -1053,10 +1095,13 @@ public final class Car3DView: UIView {
         exteriorRoot = build.exteriorRoot
         interiorCenter = build.interiorCenter
         interiorRadius = build.interiorRadius
+        interiorEye = build.interiorEye
+        interiorLookAt = build.interiorLookAt
         exteriorRoot?.isEnabled = true
         interiorRoot?.isEnabled = false
         viewMode = .exterior
         autoFrame = true
+        setCameraFOV(Self.defaultFOV)
         applyOrbitCamera()
         return true
     }
