@@ -1,8 +1,8 @@
 {
-  "id": "notice-selftest-160",
-  "title": "发布链路自检",
-  "body": "这是一条端到端自检公告，验证完成后会被撤回。",
-  "date": "2026-11-07 14:05",
+  "id": "notice-placeholder",
+  "title": "",
+  "body": "",
+  "date": "",
   "level": "info",
   "enabled": false
 }
