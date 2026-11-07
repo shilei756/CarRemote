@@ -106,6 +106,7 @@ private struct QuickControlButtons: View {
         case .flashLight: return .blue
         case .unlockDoor: return .orange
         case .lockDoor: return .green
+        case .oneKeyLock: return .mint
         case .whistle: return .purple
         case .remoteSearchCar: return .cyan
         case .openEngine: return .red

@@ -112,7 +112,32 @@ public enum CarService {
 
     /// 执行控车指令
     public static func execute(command: CarCommand, credentials: Credentials) async throws -> CommandResult {
-        try await performAction(action: command.rawValue, credentials: credentials)
+        // 1.7.0 一键闭锁是虚拟指令：网页版 doLockAll 用两条真实指令顺序下发，
+        // 这里统一展开，App 首页 / 桌面小组件 / Siri 三条链路自动一致。
+        if command == .oneKeyLock {
+            return try await executeOneKeyLock(credentials: credentials)
+        }
+        return try await performAction(action: command.rawValue, credentials: credentials)
+    }
+
+    /// 一键锁车（网页版 doLockAll）：先锁车门，间隔约 4.5 秒再关窗，
+    /// 给车机留出执行时间；两条共用一次结果反馈。
+    private static func executeOneKeyLock(credentials: Credentials) async throws -> CommandResult {
+        let lock = try await performAction(action: CarCommand.lockDoor.rawValue,
+                                          credentials: credentials)
+        guard lock.ok else {
+            return CommandResult(ok: false, message: "闭锁失败：\(lock.message)", taskId: nil)
+        }
+        // 与网页版 setTimeout 4500ms 一致：车门锁到位后再升窗
+        try? await Task.sleep(nanoseconds: 4_500_000_000)
+        // 第一条指令内部可能已轮换并保存新凭据，第二条用最新凭据避免 token 失效
+        let fresh = SharedStore.loadCredentials() ?? credentials
+        let close = try await performAction(action: CarCommand.closeWindow.rawValue,
+                                           credentials: fresh)
+        if close.ok {
+            return CommandResult(ok: true, message: "车门已锁、车窗已关", taskId: nil)
+        }
+        return CommandResult(ok: false, message: "车门已锁，但关窗失败：\(close.message)", taskId: nil)
     }
 
     /// 通用指令下发（含 360 全景 photograph），复用 PIN 校验 → 公钥 → 加密 → execute 链路

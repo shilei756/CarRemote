@@ -426,7 +426,14 @@ public struct AppSettings: Codable, Equatable, Sendable {
     )
 
     public func needsConfirm(command: CarCommand) -> Bool {
-        confirmGateCommands.contains(command.rawValue)
+        // 1.7.0 一键闭锁是 LockDoor + CloseWindow 的组合：网页版
+        // confirmGateNeed('LockDoor') || confirmGateNeed('CloseWindow')，
+        // 两条任一需要确认就先弹一次确认，避免拆开后漏掉防误触。
+        if command == .oneKeyLock {
+            return confirmGateCommands.contains(CarCommand.lockDoor.rawValue)
+                || confirmGateCommands.contains(CarCommand.closeWindow.rawValue)
+        }
+        return confirmGateCommands.contains(command.rawValue)
     }
 
     public func siriAllows(command: CarCommand) -> Bool {

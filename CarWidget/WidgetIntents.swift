@@ -57,7 +57,7 @@ enum WidgetSlotRunner {
         guard var snapshot = SharedStore.loadStatusSnapshot() else { return }
         switch command {
         case .unlockDoor: snapshot.doorUnlocked = true
-        case .lockDoor: snapshot.doorUnlocked = false
+        case .lockDoor, .oneKeyLock: snapshot.doorUnlocked = false
         case .openEngine: snapshot.engineRunning = true
         case .closeEngine: snapshot.engineRunning = false
         default: return

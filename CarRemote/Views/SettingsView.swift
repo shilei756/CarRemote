@@ -649,7 +649,9 @@ struct ConfirmSettingsPage: View {
     var body: some View {
         Form {
             Section {
-                ForEach(CarCommand.allCases, id: \.self) { command in
+                // 1.7.0：「一键闭锁」是两条指令的组合，确认规则跟随
+                // 「闭锁 / 关窗」，不单独出现在这里，避免开关点了没反应。
+                ForEach(CarCommand.allCases.filter { $0 != .oneKeyLock }, id: \.self) { command in
                     Toggle(isOn: confirmBinding(for: command)) {
                         Label(command.displayName, systemImage: command.sfSymbol)
                     }

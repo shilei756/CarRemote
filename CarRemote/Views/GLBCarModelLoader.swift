@@ -484,26 +484,31 @@ enum GLBCarModelLoader {
             }
             guard primitiveCounter > 0 else { return nil }
 
-            // ---- 底盘封板（1.6.0）----
-            // 官方 GLB 车模只有车身外壳，车底是开放的：车门打开或从侧下方看时，
-            // 会直接透出 App 壁纸背景（用户反馈「漏底盘」）。按整车包围盒补一块
-            // 深色哑光底板，挂在车根上常驻显示（不随内/外视角显隐）。
-            // 位置略低于座舱地板、高于轮胎接地点，不会穿出车身或挡住车轮。
-            if boundsMin.x <= boundsMax.x, boundsMin.z <= boundsMax.z {
-                let plateW = (boundsMax.x - boundsMin.x) * 0.94
-                let plateD = (boundsMax.z - boundsMin.z) * 0.92
-                // 位置：略高于轮胎接地点、低于内饰地板（各车型地板 y≈0.24~0.40），
-                // 从侧下方看能封住空腔，又不会横穿车轮或盖住座舱地板。
-                let plateY = boundsMin.y + min(0.17, (boundsMax.y - boundsMin.y) * 0.12)
-                let plateCenter = SIMD3<Float>((boundsMin.x + boundsMax.x) / 2,
-                                               plateY,
-                                               (boundsMin.z + boundsMax.z) / 2)
-                var plateDesc = MeshDescriptor(name: "glb_chassis_plate")
+            // ---- 座舱地板托底（1.7.0 修正）----
+            // 1.6.0 曾按「整车包围盒」铺了一块 0.94×0.92 的纯黑水平大平板，
+            // 实机看车底是一坨黑色平行四边形：板子比车身还宽、左右超出车轮，
+            // 透视下整片暴露在车身轮廓外（用户反馈「车底盘一坨黑色」）。
+            //
+            // 改为只补「座舱地板正下方」一小块：尺寸取内饰包围盒、位置贴地板
+            // 下沿、颜色改深灰哑光。它完全收在车身内部，车外斜上方视角会被
+            // 车身侧面与侧裙遮住；只在打开车门 / 车内往下看时挡住空腔，
+            // 不再透出壁纸背景。「不漏底盘」主要靠 1.6.0 的内饰常驻 +
+            // 非玻璃材质双面渲染，这块只是地板衬底，不需要铺满整车。
+            if interiorBoundsMin.x <= interiorBoundsMax.x,
+               interiorBoundsMin.z <= interiorBoundsMax.z {
+                let floorW = (interiorBoundsMax.x - interiorBoundsMin.x) * 0.92
+                let floorD = (interiorBoundsMax.z - interiorBoundsMin.z) * 0.78
+                let interiorHeight = interiorBoundsMax.y - interiorBoundsMin.y
+                let floorY = interiorBoundsMin.y - min(0.04, interiorHeight * 0.05)
+                let floorCenter = SIMD3<Float>((interiorBoundsMin.x + interiorBoundsMax.x) / 2,
+                                               floorY,
+                                               (interiorBoundsMin.z + interiorBoundsMax.z) / 2)
+                var plateDesc = MeshDescriptor(name: "glb_cabin_floor_plate")
                 plateDesc.positions = MeshBuffers.Positions([
-                    SIMD3<Float>(-plateW / 2, 0, -plateD / 2),
-                    SIMD3<Float>( plateW / 2, 0, -plateD / 2),
-                    SIMD3<Float>( plateW / 2, 0,  plateD / 2),
-                    SIMD3<Float>(-plateW / 2, 0,  plateD / 2)
+                    SIMD3<Float>(-floorW / 2, 0, -floorD / 2),
+                    SIMD3<Float>( floorW / 2, 0, -floorD / 2),
+                    SIMD3<Float>( floorW / 2, 0,  floorD / 2),
+                    SIMD3<Float>(-floorW / 2, 0,  floorD / 2)
                 ])
                 plateDesc.normals = MeshBuffers.Normals(
                     [SIMD3<Float>(0, 1, 0), SIMD3<Float>(0, 1, 0),
@@ -512,12 +517,13 @@ enum GLBCarModelLoader {
                 plateDesc.materials = .allFaces(0)
                 if let plateMesh = try? MeshResource.generate(from: [plateDesc]) {
                     var plateMat = PhysicallyBasedMaterial()
-                    plateMat.baseColor = .init(tint: UIColor(white: 0.075, alpha: 1))
+                    // 深灰而非纯黑：即使某个低角度瞥到边缘，也不会是刺眼黑块
+                    plateMat.baseColor = .init(tint: UIColor(white: 0.20, alpha: 1))
                     plateMat.metallic = .init(floatLiteral: 0)
-                    plateMat.roughness = .init(floatLiteral: 0.96)
+                    plateMat.roughness = .init(floatLiteral: 0.92)
                     plateMat.faceCulling = .none
                     let plate = ModelEntity(mesh: plateMesh, materials: [plateMat])
-                    plate.position = plateCenter
+                    plate.position = floorCenter
                     carRoot.addChild(plate)
                 }
             }

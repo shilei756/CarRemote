@@ -5,7 +5,10 @@ import SwiftUI
 public enum CarCommand: String, CaseIterable, Sendable {
     case flashLight = "FlashLight"           // 闪灯
     case unlockDoor = "UnLockDoor"           // 开锁
-    case lockDoor = "LockDoor"               // 闭锁
+    case lockDoor = "LockDoor"               // 闭锁（点按后让用户选「普通 / 一键」）
+    /// 1.7.0 一键闭锁：网页版 doLockAll 的虚拟指令，不下发单个指令名，
+    /// 由 CarService 展开为 LockDoor → 4.5s → CloseWindow（车门 + 全部车窗）。
+    case oneKeyLock = "OneKeyLock"
     case whistle = "Whistle"                 // 鸣笛
     case remoteSearchCar = "RemoteSearchCar" // 寻车
     case openEngine = "OpenEngine"           // 点火
@@ -39,6 +42,7 @@ public enum CarCommand: String, CaseIterable, Sendable {
         case .flashLight: return "闪灯"
         case .unlockDoor: return "开锁"
         case .lockDoor: return "闭锁"
+        case .oneKeyLock: return "一键闭锁"
         case .whistle: return "鸣笛"
         case .remoteSearchCar: return "寻车"
         case .openEngine: return "点火"
@@ -58,6 +62,7 @@ public enum CarCommand: String, CaseIterable, Sendable {
         case .flashLight: return "light.beacon.max"
         case .unlockDoor: return "lock.open"
         case .lockDoor: return "lock"
+        case .oneKeyLock: return "lock.circle.fill"
         case .whistle: return "speaker.wave.2"
         case .remoteSearchCar: return "car.circle"
         case .openEngine: return "flame"
@@ -75,7 +80,7 @@ public enum CarCommand: String, CaseIterable, Sendable {
     /// 高危操作（语音/快捷执行前应提醒）
     public var isDangerous: Bool {
         switch self {
-        case .unlockDoor, .lockDoor, .openEngine, .closeEngine: return true
+        case .unlockDoor, .lockDoor, .oneKeyLock, .openEngine, .closeEngine: return true
         default: return false
         }
     }

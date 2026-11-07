@@ -266,6 +266,12 @@ struct DashboardView: View {
                 ACTempSheet(viewModel: viewModel)
                     .environmentObject(appState)
             }
+            .sheet(isPresented: $viewModel.showLockSheet) {
+                LockMethodSheet(
+                    onNormal: { viewModel.lockNormal() },
+                    onOneKey: { viewModel.lockAll() }
+                )
+            }
             .alert("确认执行", isPresented: confirmBinding) {
                 Button("取消", role: .cancel) { viewModel.cancelPending() }
                 Button("确认执行", role: .destructive) { viewModel.confirmPending() }
@@ -1088,6 +1094,81 @@ struct DashboardView: View {
     private var confirmMessage: String {
         guard let command = viewModel.pendingConfirm else { return "" }
         return "「\(command.displayName)」属于高危操作，确认要通过远程指令执行吗？"
+    }
+}
+
+// MARK: - 闭锁方式选择层（1.7.0，对齐网页版 lockSheetModal）
+
+/// 点「闭锁」不再直接下发，先让用户选「普通锁车 / 一键锁车」。
+/// 一键锁车 = 先锁车门，间隔约 4.5 秒再关全部车窗（网页版 doLockAll）。
+struct LockMethodSheet: View {
+    let onNormal: () -> Void
+    let onOneKey: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ZStack {
+            WebTheme.bg0.ignoresSafeArea()
+            VStack(spacing: 20) {
+                VStack(spacing: 6) {
+                    Text("选择锁车方式")
+                        .font(.system(size: 19, weight: .bold))
+                        .foregroundStyle(WebTheme.txt)
+                    Text("一键锁车会先锁车门，再自动关闭全部车窗")
+                        .font(.system(size: 12))
+                        .foregroundStyle(WebTheme.muted)
+                        .multilineTextAlignment(.center)
+                }
+
+                HStack(spacing: 12) {
+                    methodCard(symbol: "lock.fill", title: "普通锁车", subtitle: "仅锁车门",
+                               tint: WebTheme.blue, action: onNormal)
+                    methodCard(symbol: "lock.circle.fill", title: "一键锁车",
+                               subtitle: "车门 + 全部车窗", tint: WebTheme.green, action: onOneKey)
+                }
+
+                Button { dismiss() } label: {
+                    Text("取消")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(WebTheme.muted)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(WebTheme.card)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("取消，不执行锁车")
+            }
+            .padding(.horizontal, 20)
+        }
+    }
+
+    private func methodCard(symbol: String, title: String, subtitle: String,
+                            tint: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 10) {
+                Image(systemName: symbol)
+                    .font(.system(size: 26, weight: .semibold))
+                    .foregroundStyle(tint)
+                Text(title)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(WebTheme.txt)
+                Text(subtitle)
+                    .font(.system(size: 10))
+                    .foregroundStyle(WebTheme.muted)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 22)
+            .background(tint.opacity(0.10))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(tint.opacity(0.45), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(title)，\(subtitle)")
     }
 }
 

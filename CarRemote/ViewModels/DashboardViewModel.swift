@@ -9,6 +9,8 @@ final class DashboardViewModel: ObservableObject {
 
     @Published var executingCommand: CarCommand?
     @Published var pendingConfirm: CarCommand?
+    /// 1.7.0 闭锁方式选择层（网页版 openLockSheet：普通锁车 / 一键锁车）
+    @Published var showLockSheet = false
     @Published var toast: String?
     @Published var showMoreControls = false
 
@@ -48,10 +50,16 @@ final class DashboardViewModel: ObservableObject {
 
     // MARK: - 指令执行
 
-    /// 点击控车按钮：新版链路开空调先弹调温窗（网页版 openAcTempModal），高危操作先弹防误触确认
+    /// 点击控车按钮：新版链路开空调先弹调温窗（网页版 openAcTempModal），
+    /// 点「闭锁」先弹锁车方式选择层（网页版 openLockSheet），高危操作先弹防误触确认
     func execute(_ command: CarCommand) {
         if command == .openAir, acMode == .new {
             showACTempModal = true
+            return
+        }
+        // 1.7.0：闭锁不再直接下发，先让用户选「普通锁车」或「一键锁车」
+        if command == .lockDoor {
+            showLockSheet = true
             return
         }
         if settings.needsConfirm(command: command) {
@@ -59,6 +67,26 @@ final class DashboardViewModel: ObservableObject {
             return
         }
         run(command)
+    }
+
+    /// 选择层 →「普通锁车」：与原闭锁行为一致（仅 LockDoor）
+    func lockNormal() {
+        showLockSheet = false
+        if settings.needsConfirm(command: .lockDoor) {
+            pendingConfirm = .lockDoor
+            return
+        }
+        run(.lockDoor)
+    }
+
+    /// 选择层 →「一键锁车」：LockDoor → 4.5s → CloseWindow
+    func lockAll() {
+        showLockSheet = false
+        if settings.needsConfirm(command: .oneKeyLock) {
+            pendingConfirm = .oneKeyLock
+            return
+        }
+        run(.oneKeyLock)
     }
 
     func confirmPending() {
@@ -126,11 +154,14 @@ final class DashboardViewModel: ObservableObject {
 
     private func toastText(command: CarCommand, result: CommandResult, temperature: Int? = nil) -> String {
         if result.ok {
+            // 一键闭锁是两条指令的组合，直接展示合并后的执行结果
+            if command == .oneKeyLock { return "✅ \(result.message)" }
             if command == .openAir, let temperature {
                 return "✅ 开空调指令已发送（目标 \(temperature)°C）"
             }
             return "✅ \(command.displayName)指令已发送"
         }
+        if command == .oneKeyLock { return "❌ \(result.message)" }
         return "❌ \(command.displayName)失败：\(result.message)"
     }
 
