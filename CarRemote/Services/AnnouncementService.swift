@@ -138,7 +138,14 @@ enum AnnouncementService {
     /// 拉取线上公告。多源串行回退：
     /// - 常规读取优先 jsDelivr（国内稳定、无限流），发布时已 purge，内容是最新的；
     /// - 发布页刷新用 preferRealtime，优先 GitHub API contents（raw，实时无 CDN 缓存）；
-    /// - raw.githubusercontent 作为境外网络兜底（本环境不可达，但用户网络可能可达）。
+    /// - raw.githubusercontent 作为境外 / 部分网络下的实时兜底；
+    /// - 三个源全部读一遍，取发布时间最新的一条（见下方实现说明）。
+    /// 1.7.0 关键修正：**不能「第一个源成功就返回」**。
+    /// 实测 jsDelivr 对 `@main` 分支有缓存，站主发布后 purge 也需要约 1–2 分钟
+    /// 才能全网生效；这段时间 CDN 仍会返回上一条公告（甚至是 enabled=false
+    /// 的占位文件），若直接返回就会把刚发布的公告整个漏掉。
+    /// 改为把可用源都读一遍，按「发布时间 + id」取最新的一条：
+    /// CDN 快但可能有延迟，GitHub API / raw 实时兜底，两者互相校正。
     static func fetchLatest(preferRealtime: Bool = false) async throws -> SiteAnnouncement {
         let ts = Int(Date().timeIntervalSince1970)
         let api = "\(contentsAPI)?ref=\(branch)&t=\(ts)"
@@ -146,29 +153,46 @@ enum AnnouncementService {
         let raw = "\(rawURL)?t=\(ts)"
         let ordered = preferRealtime ? [api, cdn, raw] : [cdn, api, raw]
 
+        var candidates: [SiteAnnouncement] = []
         var lastCode = -1
-        for urlString in ordered {
+        for (index, urlString) in ordered.enumerated() {
+            // 前两个源（CDN + API）已有结果就不必再打第三个 raw：
+            // 部分网络下 raw 不可达，白等一个超时没有意义。
+            if index >= 2, !candidates.isEmpty { break }
             guard let url = URL(string: urlString) else { continue }
             var request = URLRequest(url: url,
                                      cachePolicy: .reloadIgnoringLocalAndRemoteCacheData,
-                                     timeoutInterval: 10)
+                                     timeoutInterval: 8)
             if urlString == api {
                 // 直接取文件原始内容，避免再解析 base64；带 t 参数规避中间缓存
                 request.setValue("application/vnd.github.raw", forHTTPHeaderField: "Accept")
                 request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
+                // 站主设备已保存令牌时用认证请求，避开匿名 60 次/小时限流
+                if let token = githubToken, !token.isEmpty {
+                    request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                }
             }
             do {
                 let (data, response) = try await URLSession.shared.data(for: request)
                 let code = (response as? HTTPURLResponse)?.statusCode ?? -1
                 lastCode = code
                 guard code == 200, !data.isEmpty else { continue }
-                // API 被限流 / 文件不存在时会返回 JSON 错误体，decode 失败即继续下一个源
+                // API 被限流 / 文件不存在时会返回 JSON 错误体，decode 失败即跳过
                 if let notice = try? JSONDecoder().decode(SiteAnnouncement.self, from: data) {
-                    return notice
+                    candidates.append(notice)
                 }
             } catch {
                 continue
             }
+        }
+
+        // date 格式为 "yyyy-MM-dd HH:mm"，字符串序即时间序；
+        // 占位公告 date 为空串，永远排在真实公告之前，不会被误选。
+        if let newest = candidates.max(by: { lhs, rhs in
+            if lhs.date != rhs.date { return lhs.date < rhs.date }
+            return lhs.id < rhs.id
+        }) {
+            return newest
         }
         throw AnnouncementError.unavailable(lastCode)
     }
@@ -650,7 +674,7 @@ struct OwnerAnnouncementPage: View {
         do {
             try await AnnouncementService.publish(notice, token: token)
             statusText = enabled
-                ? "已发布。用户下次打开 App 或回到前台即可看到这条公告。"
+                ? "已发布。用户下次打开 App 或回到前台即可看到（CDN 约 1–2 分钟全网生效，App 已做多源取最新，不会漏读）。"
                 : "已下线，用户端不再弹出公告。"
             statusOK = true
             await center.refreshLatest()
