@@ -62,6 +62,7 @@ final class Car3DModelState: ObservableObject {
     // MARK: 挂载
 
     func attach(_ view: Car3DView) {
+        guard !view.isRetired else { return }
         sceneView = view
         availableParts = view.availableParts
         hasWindows = view.hasWindows
@@ -83,6 +84,7 @@ final class Car3DModelState: ObservableObject {
     }
 
     func ensureAttached(_ view: Car3DView) {
+        guard !view.isRetired else { return }
         if sceneView !== view { attach(view) }
     }
 
@@ -100,9 +102,10 @@ final class Car3DModelState: ObservableObject {
         return loadGeneration
     }
 
-    /// 后台加载完成（主线程调用）：代次不匹配说明视图已重建，直接丢弃
+    /// 后台加载完成（主线程调用）：代次不匹配、或视图已被 dismantleUIView
+    /// 标记废弃（1.8.0），一律丢弃，绝不把模型挂到已移除的 ARView 上。
     func completeLoad(generation: Int, view: Car3DView, model: RKCarModel?) {
-        guard generation == loadGeneration else { return }
+        guard generation == loadGeneration, !view.isRetired else { return }
         if let model, view.attach(model) {
             attach(view)
             isLoaded = true
@@ -257,12 +260,21 @@ struct CarModel3DRepresentable: UIViewRepresentable {
         // 异步加载：glb 解析 + 贴图解码放后台线程（6MB 车模 + 25 个 PBR 材质，
         // 旧设备上同步加载可达数秒，会阻塞主线程让页面转场卡死甚至被系统看门狗杀掉）。
         // 完成后回主线程挂载；解析失败由 completeLoad 置位，UI 自动回退 2D 车图。
-        let generation = state.beginLoad()
+        //
+        // 1.8.0：beginLoad 推迟到下一个 runloop。makeUIView 处于 SwiftUI 视图
+        // 更新阶段，在这里改 @ObservedObject 的 @Published 会立刻触发新一轮
+        // body 计算；座舱/车外切换又恰好会重建 representable，两者叠加会把
+        // 主线程更新循环占满。视图若已被移除则跳过，不做无谓解析。
         let name = modelName
-        Task.detached(priority: .userInitiated) {
-            let build = Car3DView.buildCarModel(named: name)
-            await MainActor.run {
-                state.completeLoad(generation: generation, view: view, model: build)
+        let state = self.state
+        DispatchQueue.main.async {
+            guard !view.isRetired else { return }
+            let generation = state.beginLoad()
+            Task.detached(priority: .userInitiated) {
+                let build = Car3DView.buildCarModel(named: name)
+                await MainActor.run {
+                    state.completeLoad(generation: generation, view: view, model: build)
+                }
             }
         }
 
@@ -304,11 +316,23 @@ struct CarModel3DRepresentable: UIViewRepresentable {
 
     func updateUIView(_ uiView: Car3DView, context: Context) {
         context.coordinator.view = uiView
-        state.ensureAttached(uiView)
+        // 1.8.0：仅在模型已挂载后才 ensureAttached。加载期间反复 attach 一个
+        // 空视图会连改多个 @Published，在视图更新阶段触发递归重算；
+        // 加载完成的挂载统一由 completeLoad 负责。
+        if state.isLoaded { state.ensureAttached(uiView) }
         // 座舱第一视角锁定手势，避免拖拽把相机拉出车外。
         for g in uiView.gestureRecognizers ?? [] where g.name == "car3d-interaction" {
             g.isEnabled = !cockpitLocked
         }
+    }
+
+    /// 1.8.0：视图销毁时必须显式停掉 RealityKit 每帧订阅与渲染 session。
+    /// 旧版缺这一步，换模型重建 ARView 时旧场景仍逐帧回调，新旧两个
+    /// RealityKit 场景争用主线程 → 3D 档点座舱卡死（2D 档无旧 ARView 故正常）。
+    static func dismantleUIView(_ uiView: Car3DView, coordinator: Coordinator) {
+        uiView.prepareForRemoval()
+        coordinator.state.detach()
+        coordinator.view = nil
     }
 
     // MARK: 手势协调器
@@ -424,7 +448,18 @@ struct CarVisual3DStage: View {
     private enum StageMode { case threeD, twoD }
 
     @StateObject private var model = Car3DModelState()
-    @State private var mode: StageMode = .threeD
+    /// 1.8.0：3D / 2D 档位持久化。换模型车型切「座舱 / 车辆」会重建整个舞台
+    /// 实例，@State 会丢档位，导致从座舱返回时莫名跳回 3D。
+    @AppStorage("carStageUse2D") private var stageUse2D = false
+    /// 加载失败仅本次运行回退 2D，不写持久化档位，避免一次失败长期锁在 2D。
+    @State private var failedFallback2D = false
+    private var mode: StageMode {
+        get { (stageUse2D || failedFallback2D) ? .twoD : .threeD }
+        set {
+            failedFallback2D = false
+            stageUse2D = (newValue == .twoD)
+        }
+    }
 
     /// 1.6.0：座舱态强制使用完整分件的座舱模型。
     /// c281(UNI-V)/c589(三代逸动) 的 Int_P 只有 5 个贴图面片，缺门板与侧壁；
@@ -469,9 +504,10 @@ struct CarVisual3DStage: View {
                             CarModel3DRepresentable(state: model, modelName: name,
                                                     verticalPanRotates: isGLBModel && !cockpitInterior,
                                                     cockpitLocked: cockpitInterior)
-                                // 座舱/车外可能加载不同 GLB（如 UNI-V → 白逸动），
-                                // 按模型名重建视图以重新解析；同一模型则复用已加载实例，
-                                // 切换只动相机与手势，不闪占位图。
+                                // 1.8.0：父层已按「外/内」把换模型车型拆成独立
+                                // 舞台实例，本实例生命周期内 name 恒定，此 id 不再
+                                // 变化 → 绝不会在同一个 ARView 中途换 GLB。
+                                // 同模型车型切换只动相机与手势，不闪占位图。
                                 .id("car3d-\(name)")
                                 .accessibilityElement(children: .ignore)
                                 .accessibilityLabel(accessibilityModelDescription)
@@ -563,8 +599,9 @@ struct CarVisual3DStage: View {
             // 车况摘要文字 / 手势提示一并移除（车况徽标仍在舞台外展示）。
         }
         .compatOnChange(of: model.loadFailed) { failed in
-            // 3D 加载失败：自动回退 2D 车图；「重置视角/3D」滑块仍可手动重试加载
-            if failed { mode = .twoD }
+            // 3D 加载失败：本次运行回退 2D 车图（不写持久化档位）；
+            // 「重置视角/3D」滑块仍可手动重试加载
+            if failed { failedFallback2D = true }
         }
         .compatOnChange(of: doorsAndWindows) { _ in syncStatus() }
         .compatOnChange(of: vehicleStarted) { _ in syncVehicleState() }

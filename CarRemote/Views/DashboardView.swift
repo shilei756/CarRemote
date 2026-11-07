@@ -347,6 +347,18 @@ struct DashboardView: View {
     /// 不会出现「自适应宽度不缩、固定 200pt 高度缩了」导致车模被压扁。
     private func carModelContent(status: CarStatus, isCockpit: Bool) -> some View {
         let stageWidth = UIScreen.main.bounds.width - 40
+        let style = settings.carModelStyle
+        // 1.8.0：座舱模型与车外模型不同的车型（UNI-V c281 / 三代逸动 c589，
+        // 座舱统一改用白逸动 c211 完整内饰），把「车外」与「座舱」拆成两个
+        // 完全独立的舞台实例，各自从创建到销毁只加载一份 GLB。
+        //
+        // 旧实现在同一个 CarVisual3DStage 内按模型名改 .id 换 GLB：销毁旧
+        // ARView 时没有停掉 SceneEvents.Update 订阅与渲染 session，新旧两个
+        // RealityKit 场景会争用主线程，实机表现为「3D 档点座舱直接卡死」。
+        // 2D 档没有已运行的 ARView（点座舱是新建舞台），所以一直正常。
+        // 车外/座舱同模型的车型保持单实例复用，切换只动相机，不闪占位图。
+        let modelSwaps = style.cockpitModelName != (style.model3DName ?? style.cockpitModelName)
+        let stageIdentity = modelSwaps ? (isCockpit ? "cockpit" : "exterior") : "shared"
         return VStack(spacing: 0) {
             // 1.6.0：座舱态一律创建 3D 舞台（哪怕是 2D 档、关了 3D 开关、
             // 或车型没有 3D 车模），由舞台内部切到白逸动完整座舱；
@@ -360,6 +372,9 @@ struct DashboardView: View {
                     car3DEnabled: settings.car3DEnabled
                 )
                 .frame(width: stageWidth)
+                // 标识变化时 SwiftUI 销毁整个舞台（含 @StateObject 与 ARView）
+                // 并新建，等价于 2D 档点座舱那条已验证正常的路径。
+                .id("car-stage-\(style.rawValue)-\(stageIdentity)")
             } else {
                 Image(settings.carModelStyle.sideImageName)
                     .resizable()

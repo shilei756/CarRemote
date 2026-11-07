@@ -301,6 +301,8 @@ public final class Car3DView: UIView {
 
     public override func layoutSubviews() {
         super.layoutSubviews()
+        // 1.8.0：视图已被移除后不再重算相机，避免废弃 ARView 继续占渲染循环。
+        guard !isRetired else { return }
         // 1.1.4-b109：自动取景的闭式解依赖视口宽高比，因此尺寸变化（旋转屏幕 /
         // 首帧 bounds 就绪）时必须重算相机距离，否则会按旧宽高比取景导致裁切。
         // 座舱第一视角是固定机位，不能被轨道相机的取景重算覆盖。
@@ -441,6 +443,8 @@ public final class Car3DView: UIView {
         // iOS 15–17 无稳定代码生成 IBL 的 API，退化为「强化灯位 + 清漆层」方案
         //（见 setupLighting / makeMaterial），视觉上同样有影棚级高光。
         Task { @MainActor in
+            // 1.8.0：视图可能已在异步生成期间被销毁，不再给废弃 ARView 挂环境贴图。
+            guard !isRetired else { return }
             if #available(iOS 18.0, *) {
                 if let res = try? await EnvironmentResource(equirectangular: cg, withName: "studio") {
                     arView.environment.lighting.resource = res
@@ -458,6 +462,9 @@ public final class Car3DView: UIView {
     public var isShowcase = false
     private var showcaseCancellable: Cancellable?
     private var lastUserOrbitTime: CFTimeInterval = 0
+    /// 1.8.0：视图已被 UIViewRepresentable.dismantleUIView 标记移除。
+    /// 后台 GLB 解析完成时据此丢弃结果，避免把模型挂到废弃的 ARView 上。
+    private(set) var isRetired = false
 
     /// 开启展示模式；可指定初始方位角（GLB 官方模用斜前 45° 对齐「我的爱车」主页）
     public func enableShowcase(initialAzimuth: Float? = nil) {
@@ -1131,6 +1138,23 @@ public final class Car3DView: UIView {
         stopWheels()
         wheelCancellable?.cancel()
         wheelCancellable = nil
+    }
+
+    /// 1.8.0：UIViewRepresentable 被销毁时调用，彻底停掉这个 ARView 的
+    /// 每帧订阅与渲染 session，并清空场景实体。
+    ///
+    /// 旧版没有这一步：座舱/车外切换要换 GLB 时，SwiftUI 销毁旧 ARView 并
+    /// 新建一个，但旧 ARView 的 `SceneEvents.Update` 订阅仍逐帧回调，
+    /// 两个 RealityKit 场景同时争用主线程 → 界面卡死（实机：UNI-V /
+    /// 三代逸动 3D 档点座舱卡死，2D 档因没有已运行的 ARView 而正常）。
+    public func prepareForRemoval() {
+        guard !isRetired else { return }
+        isRetired = true
+        isShowcase = false
+        showcaseCancellable?.cancel()
+        showcaseCancellable = nil
+        arView.session.pause()
+        clearModel()
     }
 
     // MARK: 部件控制
