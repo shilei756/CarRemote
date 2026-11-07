@@ -342,12 +342,16 @@ struct DashboardView: View {
     private func carModelContent(status: CarStatus, isCockpit: Bool) -> some View {
         let stageWidth = UIScreen.main.bounds.width - 40
         return VStack(spacing: 0) {
-            if settings.car3DEnabled && settings.carModelStyle.has3DModel {
+            // 1.6.0：座舱态一律创建 3D 舞台（哪怕是 2D 档、关了 3D 开关、
+            // 或车型没有 3D 车模），由舞台内部切到白逸动完整座舱；
+            // 车外态才按用户设置决定 3D 车模 / 2D 车图。
+            if isCockpit || (settings.car3DEnabled && settings.carModelStyle.has3DModel) {
                 CarVisual3DStage(
                     style: settings.carModelStyle,
                     doorsAndWindows: status.doorsAndWindows,
                     vehicleStarted: status.isVehicleStarted,
-                    wheelsRolling: status.shouldRollWheels
+                    wheelsRolling: status.shouldRollWheels,
+                    car3DEnabled: settings.car3DEnabled
                 )
                 .frame(width: stageWidth)
             } else {

@@ -233,6 +233,9 @@ struct CarModel3DRepresentable: UIViewRepresentable {
     /// 「我的爱车」车模库同款拖拽：纵向滑动也旋转（仰角）。
     /// 仪表盘舞台保持 false（纵向滑动透传给页面滚动），独立车模库页用 true。
     var verticalPanRotates = false
+    /// 1.6.0：座舱第一视角锁定 —— 禁用全景展示自转、不挂手势识别器，
+    /// 避免用户拖拽把相机拉出车外、把车内视角转坏。
+    var cockpitLocked = false
 
     func makeCoordinator() -> Coordinator {
         Coordinator(state: state)
@@ -245,8 +248,9 @@ struct CarModel3DRepresentable: UIViewRepresentable {
         context.coordinator.allowsVerticalRotation = verticalPanRotates
 
         // 「我的爱车」GLB 官方模：主页展示模式（对齐其主页陈列）——
-        // 初始斜前视角 + 缓慢自转，拖拽/捏合暂停、闲置 5 秒恢复
-        if modelName.hasSuffix(".glb") {
+        // 初始斜前视角 + 缓慢自转，拖拽/捏合暂停、闲置 5 秒恢复。
+        // 座舱第一视角不启用：相机要固定在驾驶位，不能绕车转。
+        if modelName.hasSuffix(".glb"), !cockpitLocked {
             view.enableShowcase(initialAzimuth: .pi * 0.75)
         }
 
@@ -262,32 +266,38 @@ struct CarModel3DRepresentable: UIViewRepresentable {
             }
         }
 
-        // 横向滑动 → 旋转车模（与 ScrollView 纵向滚动手势并存）
-        let pan = UIPanGestureRecognizer(target: context.coordinator,
-                                         action: #selector(Coordinator.handlePan(_:)))
-        pan.delegate = context.coordinator
-        view.addGestureRecognizer(pan)
+        // 座舱第一视角锁定：手势照常挂载但禁用，切回车辆时再启用，
+        // 这样座舱/车外共用同一份已加载模型，切换不用重新解析 GLB。
+        let gestures: [UIGestureRecognizer] = {
+            // 横向滑动 → 旋转车模（与 ScrollView 纵向滚动手势并存）
+            let pan = UIPanGestureRecognizer(target: context.coordinator,
+                                             action: #selector(Coordinator.handlePan(_:)))
+            pan.delegate = context.coordinator
 
-        // 捏合 → 缩放
-        let pinch = UIPinchGestureRecognizer(target: context.coordinator,
-                                             action: #selector(Coordinator.handlePinch(_:)))
-        pinch.delegate = context.coordinator
-        view.addGestureRecognizer(pinch)
+            // 捏合 → 缩放
+            let pinch = UIPinchGestureRecognizer(target: context.coordinator,
+                                                 action: #selector(Coordinator.handlePinch(_:)))
+            pinch.delegate = context.coordinator
 
-        // 长按车身部件 → 直接开合（智慧云控「触控点控车」）
-        let longPress = UILongPressGestureRecognizer(target: context.coordinator,
-                                                     action: #selector(Coordinator.handleLongPress(_:)))
-        longPress.minimumPressDuration = 0.45
-        longPress.allowableMovement = 12
-        longPress.delegate = context.coordinator
-        view.addGestureRecognizer(longPress)
+            // 长按车身部件 → 直接开合（智慧云控「触控点控车」）
+            let longPress = UILongPressGestureRecognizer(target: context.coordinator,
+                                                         action: #selector(Coordinator.handleLongPress(_:)))
+            longPress.minimumPressDuration = 0.45
+            longPress.allowableMovement = 12
+            longPress.delegate = context.coordinator
 
-        // 双击 → 重置视角
-        let doubleTap = UITapGestureRecognizer(target: context.coordinator,
-                                               action: #selector(Coordinator.handleDoubleTap(_:)))
-        doubleTap.numberOfTapsRequired = 2
-        doubleTap.delegate = context.coordinator
-        view.addGestureRecognizer(doubleTap)
+            // 双击 → 重置视角
+            let doubleTap = UITapGestureRecognizer(target: context.coordinator,
+                                                   action: #selector(Coordinator.handleDoubleTap(_:)))
+            doubleTap.numberOfTapsRequired = 2
+            doubleTap.delegate = context.coordinator
+            return [pan, pinch, longPress, doubleTap]
+        }()
+        for g in gestures {
+            g.name = "car3d-interaction"
+            g.isEnabled = !cockpitLocked
+            view.addGestureRecognizer(g)
+        }
 
         return view
     }
@@ -295,6 +305,10 @@ struct CarModel3DRepresentable: UIViewRepresentable {
     func updateUIView(_ uiView: Car3DView, context: Context) {
         context.coordinator.view = uiView
         state.ensureAttached(uiView)
+        // 座舱第一视角锁定手势，避免拖拽把相机拉出车外。
+        for g in uiView.gestureRecognizers ?? [] where g.name == "car3d-interaction" {
+            g.isEnabled = !cockpitLocked
+        }
     }
 
     // MARK: 手势协调器
@@ -402,9 +416,9 @@ struct CarVisual3DStage: View {
     let vehicleStarted: Bool
     /// 车轮是否应当滚动（行驶中；接口不上报车速时退化为「已启动」）
     let wheelsRolling: Bool
-
-    /// 是否为「我的爱车」GLB 官方模（拖拽参考该 App：横+纵向均可旋转）
-    private var isGLBModel: Bool { style.model3DName?.hasSuffix(".glb") == true }
+    /// 1.6.0：用户关闭 3D 车模时，车外显示 2D 车图，但点「座舱」仍要能进 3D 座舱。
+    /// 独立车模库页不传（默认 true）。
+    var car3DEnabled: Bool = true
 
     /// 展示模式：3D 车模 / 2D 车图（1.1.4 起右上角胶囊滑块切换）
     private enum StageMode { case threeD, twoD }
@@ -412,7 +426,21 @@ struct CarVisual3DStage: View {
     @StateObject private var model = Car3DModelState()
     @State private var mode: StageMode = .threeD
 
-    private var show3D: Bool { mode == .threeD }
+    /// 1.6.0：座舱态强制使用完整分件的座舱模型。
+    /// c281(UNI-V)/c589(三代逸动) 的 Int_P 只有 5 个贴图面片，缺门板与侧壁；
+    /// 无 3D 车模的车型（如 UNI-K）更是完全没有车内几何。
+    /// 这三类统一改用白逸动 c211 的完整座舱，车外仍显示各车型自己的车模/车图。
+    private var activeModelName: String? {
+        if cockpitInterior { return style.cockpitModelName }
+        return style.model3DName
+    }
+
+    /// 座舱态强制进 3D：即使当前停在 2D 档、用户关了 3D 开关、或车型没有
+    /// 3D 车模，点「座舱」都会直接切到 3D 车内第一视角。
+    private var show3D: Bool { cockpitInterior || (car3DEnabled && mode == .threeD) }
+
+    /// 是否为「我的爱车」GLB 官方模（拖拽参考该 App：横+纵向均可旋转）
+    private var isGLBModel: Bool { activeModelName?.hasSuffix(".glb") == true }
 
     /// 首页「座舱转场」托管：车模相机由座舱胶囊切换到车外 / 车内（GLB 自带内饰）。
     /// 车库页等独立使用为 .standalone，不受影响。
@@ -434,12 +462,17 @@ struct CarVisual3DStage: View {
         VStack(spacing: 0) {
             ZStack(alignment: .top) {
                 Group {
-                    // 仅当当前车型有内置 3D 资产（style.model3DName != nil）时展示 3D，
-                    // 其他车型自动回退 2D 车图
-                    if show3D && !model.loadFailed, let name = style.model3DName {
+                    // 座舱态一律启用座舱专用模型（可能是白逸动 c211），
+                    // 车外态才用车型自己的 3D 资产；无资产时回退 2D 车图。
+                    if show3D && !model.loadFailed, let name = activeModelName {
                         ZStack {
                             CarModel3DRepresentable(state: model, modelName: name,
-                                                    verticalPanRotates: isGLBModel)
+                                                    verticalPanRotates: isGLBModel && !cockpitInterior,
+                                                    cockpitLocked: cockpitInterior)
+                                // 座舱/车外可能加载不同 GLB（如 UNI-V → 白逸动），
+                                // 按模型名重建视图以重新解析；同一模型则复用已加载实例，
+                                // 切换只动相机与手势，不闪占位图。
+                                .id("car3d-\(name)")
                                 .accessibilityElement(children: .ignore)
                                 .accessibilityLabel(accessibilityModelDescription)
                                 .opacity(model.isLoaded ? 1 : 0)

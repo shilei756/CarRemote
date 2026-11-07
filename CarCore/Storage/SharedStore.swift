@@ -95,6 +95,23 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
         }
     }
 
+    /// 座舱（车内第一视角）使用的 3D 模型。
+    ///
+    /// 1.6.0：按「内饰建模完整度」分流。c211 / s311 的 `Int_P` 有 15+ 个分件网格
+    /// （座椅、仪表台、门内板、顶棚都是独立几何）；而 c281(UNI-V) / c589(三代逸动)
+    /// 的 `Int_P` 只有 5 个贴图面片，缺门板与侧壁，切进车内两侧会透出背景，
+    /// 即用户反馈的「座舱建模不完整」。无 3D 车模的车型同理。
+    /// 这三类统一改用白逸动（`c211.glb`，也就是 .yidongWhite）的完整座舱渲染，
+    /// 车外仍显示各车型自己的车模/车图，互不影响。
+    public var cockpitModelName: String {
+        switch self {
+        case .univ, .yidong3, .univK:
+            return "c211.glb"                  // 白逸动 · 完整分件座舱
+        default:
+            return model3DName ?? "c211.glb"
+        }
+    }
+
     /// 油箱容积 L（网页版 CAR_MODELS.tank：切换车型时联动油量百分比）
     public var tankCapacityL: Double {
         switch self {

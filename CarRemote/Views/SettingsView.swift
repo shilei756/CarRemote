@@ -288,6 +288,12 @@ struct SettingsView: View {
                     serverSettingsPage
                 }
                 rowDivider
+                // 1.6.0 发布公告（仅站主本人可见）：普通用户看不到入口，只收弹窗
+                linkRow(symbol: "megaphone.fill", tint: WebTheme.purple,
+                        title: "发布公告", subtitle: "向所有用户推送 App 内公告") {
+                    OwnerAnnouncementPage()
+                }
+                rowDivider
             }
             // 车辆异常持续提醒（门未锁/窗未关等 10 分钟后本地通知）
             actionRow(symbol: "bell.badge.fill", tint: WebTheme.red,

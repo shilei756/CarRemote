@@ -177,7 +177,11 @@ enum GLBCarModelLoader {
             carRoot.addChild(exteriorRoot)
             let interiorRoot = Entity()
             interiorRoot.name = "interiorRoot"
-            interiorRoot.isEnabled = false   // 默认只看车外，车内视角再开启
+            // 1.6.0：内饰必须常驻显示。车外视角透过打开的车门/车窗本就应该看到
+            // 座椅、地板与仪表台；旧版默认隐藏整棵 Int_P，导致车门打开后是空壳、
+            // 底盘直接漏出壁纸背景（用户反馈「漏底盘且没有座椅」）。
+            // 内外视角的差异只由相机位置决定，不再靠互斥显隐几何来切换。
+            interiorRoot.isEnabled = true
             carRoot.addChild(interiorRoot)
 
             var worldMatrices = [simd_float4x4](repeating: matrix_identity_float4x4,
@@ -470,23 +474,53 @@ enum GLBCarModelLoader {
                     descriptor.materials = .allFaces(0)
                     guard let mesh = try? MeshResource.generate(from: [descriptor]) else { continue }
                     let model = ModelEntity(mesh: mesh, materials: [mat])
-                    // 座舱内饰多为薄片/内表面，从车内看正面是内壁 —— 强制双-sided，
-                    // 避免切到座舱后内壁被背面剔除而消失。
-                    // 注意：ModelComponent 的 materials 是 [any Material]，需落到
-                    // 具体材质类型（本项目均为 PhysicallyBasedMaterial）才能访问 faceCulling。
-                    if nodeInInterior[ni], var mc = model.model {
-                        for i in mc.materials.indices {
-                            if var pbm = mc.materials[i] as? PhysicallyBasedMaterial {
-                                pbm.faceCulling = .none
-                                mc.materials[i] = pbm
-                            }
-                        }
-                        model.model = mc
-                    }
+                    // 1.6.0：非玻璃材质一律双面（统一在 makeMaterial 里设置）。
+                    // 官方 GLB 的门内板、A 柱内衬、车顶内衬、轮拱内壁都建在外观组，
+                    // 且是单面朝外的薄壳：车内第一视角看过去会被背面剔除 → 两侧
+                    // 透出壁纸背景（「座舱建模不完整」）；车门打开后从车外看进去
+                    // 门板内侧消失 → 像空壳。玻璃保持单面，让前挡风透出座舱背景。
                     parentEntity.addChild(model)
                 }
             }
             guard primitiveCounter > 0 else { return nil }
+
+            // ---- 底盘封板（1.6.0）----
+            // 官方 GLB 车模只有车身外壳，车底是开放的：车门打开或从侧下方看时，
+            // 会直接透出 App 壁纸背景（用户反馈「漏底盘」）。按整车包围盒补一块
+            // 深色哑光底板，挂在车根上常驻显示（不随内/外视角显隐）。
+            // 位置略低于座舱地板、高于轮胎接地点，不会穿出车身或挡住车轮。
+            if boundsMin.x <= boundsMax.x, boundsMin.z <= boundsMax.z {
+                let plateW = (boundsMax.x - boundsMin.x) * 0.94
+                let plateD = (boundsMax.z - boundsMin.z) * 0.92
+                // 位置：略高于轮胎接地点、低于内饰地板（各车型地板 y≈0.24~0.40），
+                // 从侧下方看能封住空腔，又不会横穿车轮或盖住座舱地板。
+                let plateY = boundsMin.y + min(0.17, (boundsMax.y - boundsMin.y) * 0.12)
+                let plateCenter = SIMD3<Float>((boundsMin.x + boundsMax.x) / 2,
+                                               plateY,
+                                               (boundsMin.z + boundsMax.z) / 2)
+                var plateDesc = MeshDescriptor(name: "glb_chassis_plate")
+                plateDesc.positions = MeshBuffers.Positions([
+                    SIMD3<Float>(-plateW / 2, 0, -plateD / 2),
+                    SIMD3<Float>( plateW / 2, 0, -plateD / 2),
+                    SIMD3<Float>( plateW / 2, 0,  plateD / 2),
+                    SIMD3<Float>(-plateW / 2, 0,  plateD / 2)
+                ])
+                plateDesc.normals = MeshBuffers.Normals(
+                    [SIMD3<Float>(0, 1, 0), SIMD3<Float>(0, 1, 0),
+                     SIMD3<Float>(0, 1, 0), SIMD3<Float>(0, 1, 0)])
+                plateDesc.primitives = .triangles([0, 1, 2, 0, 2, 3])
+                plateDesc.materials = .allFaces(0)
+                if let plateMesh = try? MeshResource.generate(from: [plateDesc]) {
+                    var plateMat = PhysicallyBasedMaterial()
+                    plateMat.baseColor = .init(tint: UIColor(white: 0.075, alpha: 1))
+                    plateMat.metallic = .init(floatLiteral: 0)
+                    plateMat.roughness = .init(floatLiteral: 0.96)
+                    plateMat.faceCulling = .none
+                    let plate = ModelEntity(mesh: plateMesh, materials: [plateMat])
+                    plate.position = plateCenter
+                    carRoot.addChild(plate)
+                }
+            }
 
             // ---- 部件字典装配（角度与 .rk 官方清单一致：门 ±75° / 尾门 70° / 把手 10° / 窗倾 2.97° / 天窗 -7.11°）----
             var partEntities: [CarPart: Entity] = [:]
@@ -804,7 +838,12 @@ enum GLBCarModelLoader {
         if p.alphaMode == "BLEND" {
             m.blending = .transparent(opacity: 1.0)
         }
-        if p.doubleSided { m.faceCulling = .none }
+        // 1.6.0：除玻璃外全部强制双面。GLB 的门内板 / A柱内衬 / 车顶内衬 /
+        // 轮拱内壁都是单面朝外的薄片，从车内或打开车门后看背面会被剔除，
+        // 露出空壳与壁纸背景。车外看时背面被车身正面遮挡（深度测试），不穿帮。
+        // 玻璃保持单面：前挡风从车内看背面被剔除，正好透出座舱背景；
+        // 若玻璃也双面，半透明正反面叠加会把前挡风糊成一片灰。
+        if !isGlass { m.faceCulling = .none }
         return m
     }
 

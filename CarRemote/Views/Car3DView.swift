@@ -142,10 +142,12 @@ public struct RKCarModel {
     /// 共 96×8 = 768 个点。用于 `fittedRadius` 闭式求解「当前角度下整车完整入画
     /// 所需的最小相机距离」，避免逐帧遍历 12 万顶点。
     let fitPoints: [SIMD3<Float>]
-    /// 座舱几何根（GLB `Int_P` 子树：座椅/仪表台/方向盘等内饰），默认隐藏，
-    /// 仅在「车内视角」模式下启用。与 exteriorRoot 互斥显隐实现 外/内 切换。
+    /// 座舱几何根（GLB `Int_P` 子树：座椅/仪表台/方向盘等内饰）。
+    /// 1.6.0 起常驻显示：车外视角透过车窗/打开的车门本就应看到座椅与地板，
+    /// 隐藏它会让车身变成空壳、底盘直接漏出壁纸背景。
+    /// 外/内视角差异只由相机位置决定，不再互斥显隐几何。
     let interiorRoot: Entity
-    /// 外观几何根（车身/门窗/车轮/尾门），车内视角模式下隐藏。
+    /// 外观几何根（车身/门窗/车轮/尾门/门内板/A柱内衬），车内外均常驻显示。
     let exteriorRoot: Entity
     /// 座舱几何中心（车模局部空间），相机切入座舱时的注视点。
     let interiorCenter: SIMD3<Float>
@@ -535,7 +537,9 @@ public final class Car3DView: UIView {
             setCameraFOV(Self.interiorFOV)
             applyInteriorCamera(animated: animated)
         case .exterior:
-            interiorRoot?.isEnabled = false
+            // 1.6.0：内饰常驻，不再隐藏。车外视角透过车窗能看到座椅与地板，
+            // 打开车门也不会露出空壳/壁纸背景。
+            interiorRoot?.isEnabled = true
             exteriorRoot?.isEnabled = true
             orbitTarget = (modelBoundsMin + modelBoundsMax) / 2
             orbitElevation = Self.defaultElevation
@@ -1090,15 +1094,17 @@ public final class Car3DView: UIView {
         // 1.1.4-b109：取景代表点就位，随后 applyOrbitCamera 按当前角度闭式求解半径，
         // 保证旋转到任何方位角车模都完整入画（消除视口这道「空气墙」）。
         fitPoints = build.fitPoints
-        // 座舱分组与车内视角参数就位（默认车外视角：外观显示、座舱隐藏）
+        // 座舱分组与车内视角参数就位
         interiorRoot = build.interiorRoot
         exteriorRoot = build.exteriorRoot
         interiorCenter = build.interiorCenter
         interiorRadius = build.interiorRadius
         interiorEye = build.interiorEye
         interiorLookAt = build.interiorLookAt
+        // 1.6.0：内外几何均常驻显示，视角切换只动相机。
+        // 旧版把 interiorRoot 默认 isEnabled=false，导致车外看进去是空壳。
         exteriorRoot?.isEnabled = true
-        interiorRoot?.isEnabled = false
+        interiorRoot?.isEnabled = true
         viewMode = .exterior
         autoFrame = true
         setCameraFOV(Self.defaultFOV)
