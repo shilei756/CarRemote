@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import CarCore
 
 // MARK: - 网页版设计规范（照搬 https://a9db267525c1cf6b2.app.workbuddy.host/ 控制台）
@@ -6,52 +7,80 @@ import CarCore
 /// 控制台浅色主题（与网页版 /user_info 的 :root CSS 变量一一对应）
 /// 夜间模式取值来自网页版 `html.dark` 规则块（--bg0:#101318 等）
 /// 神兽主题激活时整套配色切换为神兽调色板（网页版 html.glass.myth-* 规则块）
+///
+/// 1.10.0 关键修复：所有色值改为 **UIKit 动态色**（UIColor dynamicProvider）。
+/// 之前是 `static var` 里读 UserDefaults 求值的「快照色」，只有 SwiftUI body
+/// 重算才会刷新；而 TabBar / Form / `.secondary` 等系统语义色由 UIKit trait
+/// 自动驱动，两者不同源，手机深色时就出现「只黑了贴片」的割裂。
+/// 动态色与系统语义色共用同一个 `userInterfaceStyle` trait，系统切换深浅时
+/// 自动重解析，无需任何视图重算，从此整体一起变深 / 一起变浅。
 enum WebTheme {
-    /// 当前主题：读持久化键（ThemeManager.set 时同步写入，与 @Published theme 同源）
-    /// 直接读 UserDefaults 而非 ThemeManager.shared，避免 @MainActor 隔离传播到全部静态色值。
-    /// 1.9.0：追加「手机系统必须也是深色」这一条件——手机关掉深色模式时，
-    /// 即便 App 内夜间模式开关仍为开启，界面也立即同步回浅色。
+    /// 当前深色是否生效（与动态色闭包、preferredColorScheme 共用同一 trait 判定）
     static var isDark: Bool {
-        SharedStore.loadAppTheme() == .dark && SharedStore.systemIsDark && myth == nil
+        UITraitCollection.current.userInterfaceStyle == .dark && myth == nil
     }
 
     /// 当前神兽主题（nil = 经典默认）
     static var myth: MythTheme? { SharedStore.loadMythTheme() }
 
+    /// 是否需要深色：**只依赖 trait**。
+    /// trait 由 AppearanceRoot 的 preferredColorScheme 统一钉死（跟随系统 or 强制浅色），
+    /// 与 TabBar / Form / `.secondary` 等系统语义色看到的是同一个 trait，
+    /// 因此绝不会再出现「系统控件黑了、自定义白卡还是白的」的割裂。
+    private static func prefersDark(_ trait: UITraitCollection) -> Bool {
+        trait.userInterfaceStyle == .dark && SharedStore.loadMythTheme() == nil
+    }
+
+    private static func uiColor(_ hex: UInt) -> UIColor {
+        UIColor(
+            red: CGFloat((hex >> 16) & 0xFF) / 255,
+            green: CGFloat((hex >> 8) & 0xFF) / 255,
+            blue: CGFloat(hex & 0xFF) / 255,
+            alpha: 1
+        )
+    }
+
+    /// 深浅自适应色：trait 变化时 UIKit 自动重新解析，不依赖 SwiftUI 重绘
+    private static func adaptive(light: UInt, dark: UInt) -> Color {
+        Color(uiColor: UIColor { trait in
+            prefersDark(trait) ? uiColor(dark) : uiColor(light)
+        })
+    }
+
     // 背景与卡片
     static var bg0: Color {
         if let myth { return Color(hex: myth.bgHex) }
-        return isDark ? Color(hex: 0x101318) : Color(hex: 0xedf0f4)
+        return adaptive(light: 0xedf0f4, dark: 0x101318)
     }
     static var card: Color {
         if myth != nil { return Color(hex: 0xffffff) }
-        return isDark ? Color(hex: 0x181c23) : Color(hex: 0xffffff)
+        return adaptive(light: 0xffffff, dark: 0x181c23)
     }
     static var card2: Color {
         if let myth { return Color(hex: myth.bgHex).opacity(0.55) }
-        return isDark ? Color(hex: 0x20252e) : Color(hex: 0xf1f4f8)
+        return adaptive(light: 0xf1f4f8, dark: 0x20252e)
     }
     static var border: Color {
         if let myth { return Color(hex: myth.mainHex).opacity(0.22) }
-        return isDark ? Color(hex: 0x2a3038) : Color(hex: 0xe4e9f0)
+        return adaptive(light: 0xe4e9f0, dark: 0x2a3038)
     }
     static var track: Color {
         if let myth { return Color(hex: myth.mainHex).opacity(0.15) }
-        return isDark ? Color(hex: 0x2a3038) : Color(hex: 0xe8edf3)
+        return adaptive(light: 0xe8edf3, dark: 0x2a3038)
     }
 
     // 文字
     static var txt: Color {
         if let myth { return Color(hex: myth.txtHex) }
-        return isDark ? Color(hex: 0xe7eaef) : Color(hex: 0x1e293b)
+        return adaptive(light: 0x1e293b, dark: 0xe7eaef)
     }
     static var muted: Color {
         if let myth { return Color(hex: myth.mutedHex) }
-        return isDark ? Color(hex: 0x9aa3b2) : Color(hex: 0x64748b)
+        return adaptive(light: 0x64748b, dark: 0x9aa3b2)
     }
     static var faint: Color {
         if let myth { return Color(hex: myth.faintHex) }
-        return isDark ? Color(hex: 0x64748b) : Color(hex: 0x94a3b8)
+        return adaptive(light: 0x94a3b8, dark: 0x64748b)
     }
 
     // 语义色（网页版 --blue/--green/--amber/--red/--purple）
@@ -71,7 +100,7 @@ enum WebTheme {
     // 大按钮描边色（.cbig.lock / .cbig.unlock）
     static var lockBorder: Color {
         if let myth { return Color(hex: myth.mainHex).opacity(0.45) }
-        return isDark ? Color(hex: 0x3a424d) : Color(hex: 0xcbd5e1)
+        return adaptive(light: 0xcbd5e1, dark: 0x3a424d)
     }
 
     // 导航胶囊渐变（.nav-btn：linear-gradient(135deg,#8b5cf6,#6366f1)）
@@ -94,7 +123,11 @@ enum WebTheme {
     // 卡片：白底 + 圆角 20 + 阴影 0 2px 10px rgba(15,23,42,.04) + 1px 边框
     static let cardRadius: CGFloat = 20
     static var cardShadow: Color {
-        isDark ? Color.black.opacity(0.3) : Color(red: 15/255, green: 23/255, blue: 42/255).opacity(0.04)
+        Color(uiColor: UIColor { trait in
+            prefersDark(trait)
+                ? UIColor.black.withAlphaComponent(0.3)
+                : UIColor(red: 15/255, green: 23/255, blue: 42/255, alpha: 0.04)
+        })
     }
 }
 

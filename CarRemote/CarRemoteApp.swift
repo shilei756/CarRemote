@@ -17,7 +17,7 @@ struct CarRemoteApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            AppearanceRoot()
                 .environmentObject(appState)
                 .environmentObject(themeManager)
                 .environmentObject(announcementCenter)
@@ -55,15 +55,42 @@ struct CarRemoteApp: App {
     }
 }
 
+/// 外观根（1.10.0）：把「系统语义色」与「WebTheme 自定义色」钉到同一个 colorScheme。
+///
+/// 之前割裂的根因：TabBar / Form / `.secondary` 文字 / `Color(.systemBackground)`
+/// 这些系统控件无条件跟随手机深浅，而 WebTheme 是读 UserDefaults 求值的静态快照色，
+/// 还额外要求「App 内夜间开关已开」。于是手机深色、开关没开时，
+/// 只有系统控件变黑、自定义白卡还是白的 —— 就是「只黑了贴片」。
+///
+/// 现在只有两态，不再猜测「系统真实深浅」（UIScreen 的 userInterfaceStyle 在 iOS 上
+/// 常返回 unspecified，不可靠）：
+///  - App 内夜间开关【开】且无神兽主题 → `nil`（不干预，完全跟随手机系统深浅）；
+///  - 开关【关】或有神兽主题 → `.light`（强制浅色，压住系统控件的自动变黑）。
+/// 自定义色同时改为 UIKit 动态色，跟随同一个 trait 自动重解析，
+/// 于是系统控件与自定义卡片永远整体一起变深 / 一起变浅，不再割裂。
+private struct AppearanceRoot: View {
+    @EnvironmentObject private var themeManager: ThemeManager
+    @EnvironmentObject private var appState: AppState
+
+    private var preferredScheme: ColorScheme? {
+        // 神兽主题有自己一整套配色，强制浅色以免系统控件擅自变黑
+        if appState.mythTheme != nil { return .light }
+        return themeManager.theme == .dark ? nil : .light
+    }
+
+    var body: some View {
+        RootView()
+            .preferredColorScheme(preferredScheme)
+            // 主题 / 神兽主题切换时触发一次重绘，动态色随之重解析
+            .animation(.easeInOut(duration: 0.2), value: preferredScheme)
+    }
+}
+
 /// 根视图：根据登录/授权状态切换界面
 struct RootView: View {
     @EnvironmentObject private var appState: AppState
-    // 主题观察：主题变化时整棵视图树重算，WebTheme 静态色值随之刷新
-    @EnvironmentObject private var themeManager: ThemeManager
     // 1.6.0 公告中心：只在进入主界面后呈现弹窗，登录 / 卡密网关阶段不打扰
     @EnvironmentObject private var announcementCenter: AnnouncementCenter
-    // 1.9.0 #3：跟随手机白夜模式
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         Group {
@@ -96,13 +123,7 @@ struct RootView: View {
         .animation(.easeInOut(duration: 0.25), value: appState.phase)
         .onAppear {
             applyUIScale(CGFloat(SharedStore.loadSettings().uiScale))
-            // 首次进入同步一次系统深浅（冷启动时系统可能已是浅色）
-            themeManager.syncSystem(isDark: colorScheme == .dark)
             VehicleAlertService.clearAppBadge()
-        }
-        // 控制中心 / 设置里切换深浅、或系统按时自动切换时立即同步
-        .onChange(of: colorScheme) { newValue in
-            themeManager.syncSystem(isDark: newValue == .dark)
         }
         // 点击「车辆异常」通知直接回到控车页
         .onReceive(NotificationCenter.default.publisher(for: .vehicleAlertTapped)) { _ in

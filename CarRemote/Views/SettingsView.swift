@@ -1,6 +1,7 @@
 import SwiftUI
 import CarCore
 import UIKit
+import WidgetKit
 
 /// 我的（网页版 my 页样式：个人卡 + 切换车型横滑卡 + 设置列表行逐项进入子页 + 开发者信息 + 退出登录）
 struct SettingsView: View {
@@ -20,11 +21,11 @@ struct SettingsView: View {
     // 车辆异常提醒：通知权限被拒时给一次明确提示
     @State private var alertPermissionDenied = false
 
-    /// 1.9.0：显示「实际生效」状态。App 内开了夜间但手机是浅色时，
-    /// 明确告诉用户为什么界面还是浅色，避免以为开关坏了。
+    /// 1.10.0：夜间模式开关只有两态 —— 开 = 跟随手机系统深浅，关 = 强制浅色。
+    /// 文案直接说明「跟随」，不再用 1.9.0 的「暂未生效」暗示开关坏了。
     private var themeStatusText: String {
         if appTheme == .dark {
-            return colorScheme == .dark ? "已开启" : "手机为浅色，暂未生效"
+            return colorScheme == .dark ? "已开启 · 深色" : "已开启 · 跟随手机（当前浅色）"
         }
         return "已关闭"
     }
@@ -248,11 +249,17 @@ struct SettingsView: View {
                 LayoutEditorSheet(isPushed: true, viewModel: DashboardViewModel(appState: appState))
             }
             rowDivider
-            // 防误触确认
+            // 防误触确认（App 内控车）
             linkRow(symbol: "hand.raised.fill", tint: Color.orange,
                     title: "防误触确认", subtitle: "开锁等操作前需二次确认，按需开启") {
                 ConfirmSettingsPage(settings: $settings)
             }
+            rowDivider
+            // 1.10.0 小组件防误触：A 方案二次点按确认，默认关，开了才生效
+            toggleRow(symbol: "hand.tap.fill", tint: Color.orange,
+                      title: "小组件防误触",
+                      subtitle: "开启后，小组件上的开锁 / 闭锁 / 一键闭锁 / 点火 / 熄火需 8 秒内再点一次确认",
+                      isOn: widgetGuardBinding)
             rowDivider
             // 小组件控制按钮
             linkRow(symbol: "square.grid.2x2.fill", tint: WebTheme.purple,
@@ -426,6 +433,31 @@ struct SettingsView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    /// 行内开关的行（Toggle 自带交互区，不进子页、不显示箭头）
+    private func toggleRow(symbol: String, tint: Color, title: String, subtitle: String,
+                           isOn: Binding<Bool>) -> some View {
+        HStack(spacing: 12) {
+            rowIcon(symbol: symbol, tint: tint)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 14.5, weight: .medium))
+                    .foregroundStyle(WebTheme.txt)
+                Text(subtitle)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(WebTheme.faint)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 8)
+            Toggle("", isOn: isOn)
+                .labelsHidden()
+                .tint(WebTheme.blue)
+                .fixedSize()
+        }
+        .padding(.vertical, 12)
+        .accessibilityLabel(title)
+        .accessibilityHint(subtitle)
     }
 
     private func rowIcon(symbol: String, tint: Color) -> some View {
@@ -609,6 +641,20 @@ struct SettingsView: View {
 
     // MARK: - 工具
 
+    /// 1.10.0 小组件防误触开关：同时写进 AppSettings 与独立共享轻量键
+    /// （多通道 + 小组件沙盒缓存兜底），并立即刷新时间线让开关在桌面生效。
+    private var widgetGuardBinding: Binding<Bool> {
+        Binding(
+            get: { settings.widgetGuardEnabled },
+            set: { enabled in
+                settings.widgetGuardEnabled = enabled
+                SharedStore.saveSettings(settings)
+                SharedStore.saveWidgetGuardEnabled(enabled)
+                WidgetCenter.shared.reloadAllTimelines()
+            }
+        )
+    }
+
     private func saveSettings() {
         SharedStore.saveSettings(settings)
     }
@@ -668,7 +714,7 @@ struct ConfirmSettingsPage: View {
                     }
                 }
             } footer: {
-                Text("开启后，执行开锁 / 闭锁 / 点火 / 熄火等指令前会弹窗确认。")
+                Text("开启后，App 内执行开锁 / 闭锁 / 点火 / 熄火等指令前会弹窗确认。桌面小组件的防误触是独立开关，在「我的 → 小组件防误触」里设置。")
             }
         }
         .hideScrollBackground()
@@ -755,7 +801,7 @@ struct WidgetButtonsPage: View {
                     }
                 }
             } footer: {
-                Text("桌面小组件底部的 5 个控车按钮，点一下直接执行（不打开 App）。改完回到桌面等几秒自动刷新。")
+                Text("桌面小组件底部的 5 个控车按钮，点一下直接执行（不打开 App）。改完回到桌面等几秒自动刷新。若已在「我的」打开「小组件防误触」，开锁 / 闭锁 / 一键闭锁 / 点火 / 熄火需 8 秒内再点一次同一按钮才执行。")
             }
         }
         .hideScrollBackground()

@@ -14,7 +14,18 @@ final class AppState: ObservableObject {
         case ready
     }
 
-    @Published var phase: Phase = .loading
+    @Published var phase: Phase = .loading {
+        didSet {
+            // 1.10.0：会话恢复期间（loading）到达的小组件深链先暂存，
+            // 等状态落定后再补处理。之前 .loading 会被 handleWidgetURL 的
+            // `phase == .ready` 守卫直接挡掉，指令凭空丢失 —— 这是 iOS 16
+            // 深链链路「点了小组件却没执行」的主因。
+            if oldValue == .loading, phase != .loading, let url = deferredWidgetURL {
+                deferredWidgetURL = nil
+                Task { handleWidgetURL(url) }
+            }
+        }
+    }
     @Published var credentials: Credentials?
     @Published var cardStatus: CardService.CardStatus?
     /// 左上角展示名：DIY 名优先，其次官网车名
@@ -43,6 +54,8 @@ final class AppState: ObservableObject {
     @Published var pendingWidgetCommand: CarCommand?
     /// 执行结果 / 绑定指引（一次性提示）
     @Published var widgetCommandResult: String?
+    /// 1.10.0：启动 / 会话恢复阶段暂存的小组件深链，状态落定后补处理
+    private var deferredWidgetURL: URL?
 
     private var foregroundBeated = false
 
@@ -204,6 +217,12 @@ final class AppState: ObservableObject {
 
         if raw == "pair" {
             widgetCommandResult = "请在「快捷指令」App 中搜索「小组件独立登录」，填手机号与控车码运行一次即可绑定；绑定后主屏与锁屏小组件都会恢复。"
+            return
+        }
+        // 1.10.0：冷启动 / 会话恢复阶段先暂存，phase 落定后自动补处理，
+        // 不再因为 `.loading` 直接丢弃这次点按。
+        if phase == .loading {
+            deferredWidgetURL = url
             return
         }
         guard phase == .ready, credentials != nil else {

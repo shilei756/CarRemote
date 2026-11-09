@@ -27,9 +27,20 @@ enum WidgetSlotRunner {
     /// 结果落盘并刷新时间线：小组件界面显示绿✓/红✗横幅作为点击反馈
     @MainActor
     static func perform(command: CarCommand?) async -> String {
+        // 1.10.0 A 方案防误触：开关打开时，高危指令第一次点按只登记「待确认」，
+        // 8 秒内第二次点按同一按钮才真正下发。拦截放在执行入口而非 SwiftUI 状态，
+        // 因此不依赖 WidgetKit 重绘，连点两次也不会丢指令。
+        if let hint = WidgetGuard.registerTap(command: command) {
+            WidgetCenter.shared.reloadAllTimelines()
+            return hint
+        }
+
         let text: String
         let ok: Bool
-        if let credentials = SharedStore.loadCredentials(), let command {
+        // 凭据双通道：共享通道（App Group / Keychain）读不到时，退回小组件
+        // 自己沙盒里「小组件独立登录」绑定的账号（免签 / 巨魔环境）。
+        let credentials = SharedStore.loadCredentials() ?? WidgetLocalStore.loadCredentials()
+        if let credentials, let command {
             do {
                 let result = try await CarService.execute(command: command, credentials: credentials)
                 ok = result.ok
@@ -40,8 +51,8 @@ enum WidgetSlotRunner {
             }
             // 执行成功后本地同步翻转状态：锁屏按钮图标立即反映最新锁态/发动机态
             if ok { syncSnapshotState(command: command) }
-        } else if SharedStore.loadCredentials() == nil {
-            text = "请先在「长安控车」App 中登录"
+        } else if credentials == nil {
+            text = "请先在「长安控车」App 登录，或用「快捷指令」运行「小组件独立登录」绑定"
             ok = false
         } else {
             text = "请在 App「设置 → 小组件按钮」中配置该按钮"
@@ -54,7 +65,7 @@ enum WidgetSlotRunner {
 
     /// 指令执行成功后更新本地快照的车况状态位（下次时间线渲染即生效）
     private static func syncSnapshotState(command: CarCommand) {
-        guard var snapshot = SharedStore.loadStatusSnapshot() else { return }
+        guard var snapshot = SharedStore.loadStatusSnapshot() ?? WidgetLocalStore.loadSnapshot() else { return }
         switch command {
         case .unlockDoor: snapshot.doorUnlocked = true
         case .lockDoor, .oneKeyLock: snapshot.doorUnlocked = false
@@ -63,7 +74,9 @@ enum WidgetSlotRunner {
         default: return
         }
         snapshot.updatedAt = Date()
+        // 双写：免签环境共享通道失效时，小组件自己的沙盒才是唯一有效通道
         SharedStore.saveStatusSnapshot(snapshot)
+        WidgetLocalStore.saveSnapshot(snapshot)
     }
 
     // MARK: 执行结果反馈（小组件进程本地存储，时间线渲染时读取）
@@ -152,7 +165,10 @@ public struct LockToggleIntent: AppIntent {
     public static var openAppWhenRun: Bool = false
     public init() {}
     public func perform() async throws -> some IntentResult & ProvidesDialog {
-        let command: CarCommand = SharedStore.loadStatusSnapshot()?.doorUnlocked == true ? .lockDoor : .unlockDoor
+        // 双通道读快照：免签 / 巨魔环境共享快照读不到时，用「小组件独立登录」
+        // 存在本地沙盒的那份，避免反向判断退化成永远开锁 / 永远点火。
+        let snapshot = SharedStore.loadStatusSnapshot() ?? WidgetLocalStore.loadSnapshot()
+        let command: CarCommand = snapshot?.doorUnlocked == true ? .lockDoor : .unlockDoor
         return .result(dialog: IntentDialog(stringLiteral: await WidgetSlotRunner.perform(command: command)))
     }
 }
@@ -164,7 +180,8 @@ public struct EngineToggleIntent: AppIntent {
     public static var openAppWhenRun: Bool = false
     public init() {}
     public func perform() async throws -> some IntentResult & ProvidesDialog {
-        let command: CarCommand = SharedStore.loadStatusSnapshot()?.engineRunning == true ? .closeEngine : .openEngine
+        let snapshot = SharedStore.loadStatusSnapshot() ?? WidgetLocalStore.loadSnapshot()
+        let command: CarCommand = snapshot?.engineRunning == true ? .closeEngine : .openEngine
         return .result(dialog: IntentDialog(stringLiteral: await WidgetSlotRunner.perform(command: command)))
     }
 }

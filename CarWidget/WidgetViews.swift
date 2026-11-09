@@ -68,10 +68,24 @@ private struct LockBadge: View {
     }
 }
 
-/// 按钮执行结果横幅（点击反馈）：绿✓ / 红✗ + 指令文案，90 秒内显示
+/// 点击反馈横幅：优先展示 1.10.0 防误触的「再点一次确认」（橙色），
+/// 其次展示执行结果（绿✓ / 红✗）。两者都直接读小组件沙盒，不依赖时间线条目。
 private struct ActionFeedbackBanner: View {
     var body: some View {
-        if let action = WidgetSlotRunner.lastAction() {
+        if let text = WidgetGuard.pendingText() {
+            HStack(spacing: 4) {
+                Image(systemName: "hand.tap.fill")
+                    .font(.system(size: 9, weight: .bold))
+                Text(text)
+                    .font(.system(size: 9, weight: .semibold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(Color.orange)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 4)
+            .background(Color.orange.opacity(0.14))
+            .clipShape(Capsule())
+        } else if let action = WidgetSlotRunner.lastAction() {
             HStack(spacing: 4) {
                 Image(systemName: action.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
                     .font(.system(size: 9, weight: .bold))
@@ -115,19 +129,26 @@ private struct QuickControlButtons: View {
     }
 
     private func slotButtonBody<I: AppIntent>(_ command: CarCommand?, intent: I, cmd: String) -> some View {
-        widgetActionButton(intent: intent, command: cmd) {
+        // 1.10.0：待确认中的按钮变橙并加描边，明确告诉用户「再点的是这个按钮」。
+        // 即使 WidgetKit 没来得及重绘，第二次点按仍会在执行入口被正确识别。
+        let isPending = WidgetGuard.pendingCommand() == command
+        return widgetActionButton(intent: intent, command: cmd) {
             VStack(spacing: 3) {
                 Image(systemName: command?.sfSymbol ?? "questionmark")
                     .font(.system(size: 13, weight: .semibold))
-                Text(command?.displayName ?? "未设")
+                Text(isPending ? "再点一次" : (command?.displayName ?? "未设"))
                     .font(.system(size: 8.5, weight: .semibold))
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 6)
-            .background(buttonTint(command).opacity(0.16))
-            .foregroundStyle(buttonTint(command))
+            .background((isPending ? Color.orange : buttonTint(command)).opacity(isPending ? 0.22 : 0.16))
+            .foregroundStyle(isPending ? Color.orange : buttonTint(command))
             .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .strokeBorder(Color.orange, lineWidth: isPending ? 1.5 : 0)
+            )
         }
     }
 
@@ -460,6 +481,9 @@ struct QuickControlEntryView: View {
                 QuickCircularView(entry: entry)
             }
         }
+        // 1.10.0：iOS 16 锁屏 accessory 上 Link 有可能被整块点击吞掉，
+        // 给已绑定状态也补上 widgetURL 兜底，点任意位置至少能回 App 控车。
+        .widgetURL(URL(string: APIConfig.urlScheme + "://dashboard"))
         if hasData {
             content
         } else {
@@ -499,19 +523,20 @@ struct QuickCircularView: View {
 
     var body: some View {
         let unlocked = entry.snapshot?.doorUnlocked ?? false
+        let pending = WidgetGuard.pendingCommand() != nil
         ZStack {
             AccessoryWidgetBackground()
             widgetActionButton(intent: LockToggleIntent(), command: "toggleLock") {
                 VStack(spacing: 1) {
-                    Image(systemName: unlocked ? "lock.open.fill" : "lock.fill")
+                    Image(systemName: pending ? "hand.tap.fill" : (unlocked ? "lock.open.fill" : "lock.fill"))
                         .font(.system(size: 20, weight: .bold))
-                    Text(unlocked ? "闭锁" : "开锁")
+                    Text(pending ? "再点一次" : (unlocked ? "闭锁" : "开锁"))
                         .font(.system(size: 9, weight: .semibold))
                 }
-                .foregroundStyle(unlocked ? Color.orange : Color.green)
+                .foregroundStyle(pending ? Color.orange : (unlocked ? Color.orange : Color.green))
             }
         }
-        .accessibilityLabel(unlocked ? "当前已开锁，点按闭锁" : "当前已锁止，点按开锁")
+        .accessibilityLabel(pending ? "待确认，再点一次执行" : (unlocked ? "当前已开锁，点按闭锁" : "当前已锁止，点按开锁"))
     }
 }
 
@@ -522,14 +547,20 @@ struct QuickRectangularView: View {
     var body: some View {
         let unlocked = entry.snapshot?.doorUnlocked ?? false
         let engineOn = entry.snapshot?.engineRunning ?? false
+        let pending = WidgetGuard.pendingCommand() != nil
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 4) {
-                Text(entry.snapshot?.carName ?? "长安控车")
-                    .font(.headline)
+                // 1.10.0：待确认期间用提示文案替掉车名，锁屏也能看清「再点一次确认」
+                Text(WidgetGuard.pendingText() ?? entry.snapshot?.carName ?? "长安控车")
+                    .font(pending ? .caption : .headline)
                     .widgetAccentable()
                     .lineLimit(1)
                 Spacer()
-                if let action = WidgetSlotRunner.lastAction() {
+                if WidgetGuard.pendingCommand() != nil {
+                    Image(systemName: "hand.tap.fill")
+                        .font(.caption2)
+                        .foregroundStyle(Color.orange)
+                } else if let action = WidgetSlotRunner.lastAction() {
                     Image(systemName: action.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
                         .font(.caption2)
                         .foregroundStyle(action.ok ? Color.green : Color.red)
@@ -596,9 +627,15 @@ struct AccessoryRectangularView: View {
                         .buttonStyle(.plain)
                         .accessibilityLabel(snapshot.doorUnlocked ? "已开锁，点按闭锁" : "已锁止，点按开锁")
                     } else {
-                        Image(systemName: snapshot.doorUnlocked ? "lock.open.fill" : "lock.fill")
-                            .font(.caption)
-                            .widgetAccentable()
+                        // 1.10.0：iOS 16 没有交互式小组件，锁图标原来只是静态 Image，
+                        // 点了完全没反应。改成 Link 深链回 App → 弹确认 → 执行开关锁，
+                        // 与 iOS 17 的 Button(intent:) 链路等价，不丢功能。
+                        Link(destination: widgetActionURL("toggleLock")) {
+                            Image(systemName: snapshot.doorUnlocked ? "lock.open.fill" : "lock.fill")
+                                .font(.caption)
+                                .widgetAccentable()
+                        }
+                        .accessibilityLabel(snapshot.doorUnlocked ? "已开锁，点按闭锁" : "已锁止，点按开锁")
                     }
                 }
                 HStack(alignment: .firstTextBaseline, spacing: 3) {
@@ -617,10 +654,14 @@ struct AccessoryRectangularView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
+            // iOS 16 锁屏 accessory 的 Link 可能被系统整块点击吞掉，
+            // 兜底 widgetURL 保证点任意位置都能回到 App 继续控车，不会「点了没反应」。
+            .widgetURL(URL(string: APIConfig.urlScheme + "://dashboard"))
         } else {
             Label(entry.isLoggedIn ? "打开 App 查看车况" : "打开 App 登录", systemImage: "car.circle")
                 .font(.caption)
                 .widgetAccentable()
+                .widgetURL(URL(string: APIConfig.urlScheme + "://dashboard"))
         }
     }
 }

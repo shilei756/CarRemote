@@ -85,8 +85,8 @@ public enum CarCommand: String, CaseIterable, Sendable {
         }
     }
 
-    /// 主控区四个大按钮
-    public static let primaryCommands: [CarCommand] = [.flashLight, .unlockDoor, .lockDoor, .whistle]
+    /// 主控区快捷按钮（1.10.0：一键闭锁并入「开锁 / 闭锁」之间，取消单独选择页）
+    public static let primaryCommands: [CarCommand] = [.flashLight, .unlockDoor, .oneKeyLock, .lockDoor, .whistle]
 
     /// 「更多控车」中的指令
     public static let extraCommands: [CarCommand] = [

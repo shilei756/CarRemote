@@ -9,8 +9,6 @@ final class DashboardViewModel: ObservableObject {
 
     @Published var executingCommand: CarCommand?
     @Published var pendingConfirm: CarCommand?
-    /// 1.7.0 闭锁方式选择层（网页版 openLockSheet：普通锁车 / 一键锁车）
-    @Published var showLockSheet = false
     @Published var toast: String?
     @Published var showMoreControls = false
 
@@ -51,15 +49,12 @@ final class DashboardViewModel: ObservableObject {
     // MARK: - 指令执行
 
     /// 点击控车按钮：新版链路开空调先弹调温窗（网页版 openAcTempModal），
-    /// 点「闭锁」先弹锁车方式选择层（网页版 openLockSheet），高危操作先弹防误触确认
+    /// 高危操作先弹防误触确认。
+    /// 1.10.0：取消闭锁方式选择层——「闭锁」直接下发普通锁车，
+    ///「一键闭锁」作为快捷栏独立按钮直接下发组合指令（LockDoor → 4.5s → CloseWindow）。
     func execute(_ command: CarCommand) {
         if command == .openAir, acMode == .new {
             showACTempModal = true
-            return
-        }
-        // 1.7.0：闭锁不再直接下发，先让用户选「普通锁车」或「一键锁车」
-        if command == .lockDoor {
-            showLockSheet = true
             return
         }
         if settings.needsConfirm(command: command) {
@@ -67,26 +62,6 @@ final class DashboardViewModel: ObservableObject {
             return
         }
         run(command)
-    }
-
-    /// 选择层 →「普通锁车」：与原闭锁行为一致（仅 LockDoor）
-    func lockNormal() {
-        showLockSheet = false
-        if settings.needsConfirm(command: .lockDoor) {
-            pendingConfirm = .lockDoor
-            return
-        }
-        run(.lockDoor)
-    }
-
-    /// 选择层 →「一键锁车」：LockDoor → 4.5s → CloseWindow
-    func lockAll() {
-        showLockSheet = false
-        if settings.needsConfirm(command: .oneKeyLock) {
-            pendingConfirm = .oneKeyLock
-            return
-        }
-        run(.oneKeyLock)
     }
 
     func confirmPending() {

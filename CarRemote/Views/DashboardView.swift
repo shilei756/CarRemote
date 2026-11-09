@@ -266,12 +266,6 @@ struct DashboardView: View {
                 ACTempSheet(viewModel: viewModel)
                     .environmentObject(appState)
             }
-            .sheet(isPresented: $viewModel.showLockSheet) {
-                LockMethodSheet(
-                    onNormal: { viewModel.lockNormal() },
-                    onOneKey: { viewModel.lockAll() }
-                )
-            }
             .alert("确认执行", isPresented: confirmBinding) {
                 Button("取消", role: .cancel) { viewModel.cancelPending() }
                 Button("确认执行", role: .destructive) { viewModel.confirmPending() }
@@ -603,7 +597,9 @@ struct DashboardView: View {
                     ForEach(Array(commands.enumerated()), id: \.element) { _, command in
                         ControlButtonView(
                             command: command,
-                            isPrimary: command == .unlockDoor || command == .lockDoor,
+                            isPrimary: command == .unlockDoor
+                                || command == .oneKeyLock
+                                || command == .lockDoor,
                             isExecuting: viewModel.executingCommand == command
                         ) {
                             viewModel.execute(command)
@@ -1109,124 +1105,6 @@ struct DashboardView: View {
     private var confirmMessage: String {
         guard let command = viewModel.pendingConfirm else { return "" }
         return "「\(command.displayName)」属于高危操作，确认要通过远程指令执行吗？"
-    }
-}
-
-// MARK: - 闭锁方式选择层（1.7.0，对齐网页版 lockSheetModal）
-
-/// 点「闭锁」不再直接下发，先让用户选「普通锁车 / 一键锁车」。
-/// 一键锁车 = 先锁车门，间隔约 4.5 秒再关全部车窗（网页版 doLockAll）。
-struct LockMethodSheet: View {
-    let onNormal: () -> Void
-    let onOneKey: () -> Void
-
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        ZStack {
-            WebTheme.bg0.ignoresSafeArea()
-            // 轻压暗遮罩：把视线收拢到中间的卡片上，避免整屏空白
-            Color.black.opacity(WebTheme.isDark ? 0.32 : 0.10)
-                .ignoresSafeArea()
-                .contentShape(Rectangle())
-                .onTapGesture { dismiss() }
-                .accessibilityHidden(true)
-
-            // 居中紧凑卡片：一键锁车置于视觉中心，普通锁车降为次要项
-            VStack(spacing: 16) {
-                VStack(spacing: 6) {
-                    Text("选择锁车方式")
-                        .font(.system(size: 19, weight: .bold))
-                        .foregroundStyle(WebTheme.txt)
-                    Text("一键锁车会先锁车门，再自动关闭全部车窗")
-                        .font(.system(size: 12))
-                        .foregroundStyle(WebTheme.muted)
-                        .multilineTextAlignment(.center)
-                }
-                .padding(.bottom, 4)
-
-                // 主操作：一键锁车（整宽居中主按钮）
-                Button(action: onOneKey) {
-                    HStack(spacing: 14) {
-                        ZStack {
-                            Circle()
-                                .fill(WebTheme.green.opacity(0.18))
-                                .frame(width: 44, height: 44)
-                            Image(systemName: "lock.circle.fill")
-                                .font(.system(size: 22, weight: .semibold))
-                                .foregroundStyle(WebTheme.green)
-                        }
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("一键锁车")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundStyle(WebTheme.txt)
-                            Text("先锁车门，约 4.5 秒后自动关闭全部车窗")
-                                .font(.system(size: 11))
-                                .foregroundStyle(WebTheme.muted)
-                        }
-                        Spacer(minLength: 0)
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(WebTheme.green)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 14)
-                    .background(WebTheme.green.opacity(0.10))
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(WebTheme.green.opacity(0.45), lineWidth: 1)
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("一键锁车，先锁车门再自动关闭全部车窗")
-
-                // 次操作：普通锁车（弱化，仅一行）
-                Button(action: onNormal) {
-                    HStack(spacing: 10) {
-                        Image(systemName: "lock.fill")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(WebTheme.blue)
-                        Text("普通锁车")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(WebTheme.txt)
-                        Spacer(minLength: 0)
-                        Text("仅锁车门")
-                            .font(.system(size: 11))
-                            .foregroundStyle(WebTheme.muted)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(WebTheme.card2)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(WebTheme.border, lineWidth: 1)
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("普通锁车，仅锁车门")
-
-                Button { dismiss() } label: {
-                    Text("取消")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(WebTheme.muted)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("取消，不执行锁车")
-            }
-            .padding(20)
-            .background(WebTheme.card)
-            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(WebTheme.border, lineWidth: 1)
-            )
-            .shadow(color: Color.black.opacity(0.12), radius: 20, x: 0, y: 8)
-            .padding(.horizontal, 24)
-        }
     }
 }
 

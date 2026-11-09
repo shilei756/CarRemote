@@ -38,14 +38,27 @@ struct CarWidgetProvider: TimelineProvider {
 
     /// 构建时间线：立即用本地快照渲染，随后异步刷新
     private func buildTimeline() -> Timeline<CarStatusEntry> {
+        // 1.10.0：把主 App 写下的防误触开关值同步缓存到小组件沙盒，
+        // 免签 / 巨魔环境共享通道时通时断时仍能保持开关状态。
+        WidgetGuard.syncFromShared()
         let entry = makeEntry()
+        var entries: [CarStatusEntry] = [entry]
+
+        // 待确认横幅：9 秒后再渲染一条，此时 pending 已过期，橙色提示自动消失。
+        // （WidgetKit 最小重绘粒度是分钟级，不能靠 @State 计时。）
+        if WidgetGuard.pendingCommand() != nil {
+            var pendingClear = makeEntry()
+            pendingClear.date = Date().addingTimeInterval(WidgetGuard.window + 1)
+            entries.append(pendingClear)
+        }
         // 第二个条目：横幅过期后重绘一次，自动清掉执行反馈横幅
         // （WidgetKit 无法 2 秒重绘，横幅实际显示时长≈下一条目的到达时间）
-        let bannerClearDate = Calendar.current.date(byAdding: .second, value: 40, to: Date()) ?? Date()
-        var clearEntry = entry
+        let bannerClearDate = Date().addingTimeInterval(40)
+        var clearEntry = makeEntry()
         clearEntry.date = bannerClearDate
+        entries.append(clearEntry)
         let nextUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: Date()) ?? Date()
-        let timeline = Timeline(entries: [entry, clearEntry], policy: .after(nextUpdate))
+        let timeline = Timeline(entries: entries, policy: .after(nextUpdate))
 
         // 立即渲染后异步刷新车况；内容有变化才 reload，
         // 避免「刷新→reload→再刷新」的死循环（updatedAt 每次都不同，必须比内容）

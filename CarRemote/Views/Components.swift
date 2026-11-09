@@ -169,20 +169,27 @@ struct ControlButtonView: View {
         .disabled(isExecuting)
     }
 
-    /// 大钮描边色：开锁绿 / 闭锁灰（网页版 .cbig.unlock/.cbig.lock）
+    /// 大钮描边色：开锁绿 / 一键闭锁蓝 / 闭锁灰（三个锁按钮颜色区分，避免混淆）
     private var borderColor: Color {
-        command == .unlockDoor ? WebTheme.green : WebTheme.lockBorder
+        switch command {
+        case .unlockDoor: return WebTheme.green
+        case .oneKeyLock: return WebTheme.blue
+        default: return WebTheme.lockBorder
+        }
     }
 
     private var shadowColor: Color {
-        command == .unlockDoor
-            ? WebTheme.green.opacity(0.22)
-            : Color(red: 15/255, green: 23/255, blue: 42/255).opacity(0.08)
+        switch command {
+        case .unlockDoor: return WebTheme.green.opacity(0.22)
+        case .oneKeyLock: return WebTheme.blue.opacity(0.22)
+        default: return Color(red: 15/255, green: 23/255, blue: 42/255).opacity(0.08)
+        }
     }
 
     private var iconColor: Color {
         switch command {
         case .unlockDoor: return WebTheme.green
+        case .oneKeyLock: return WebTheme.blue
         case .lockDoor: return WebTheme.muted
         default: return Color(hex: 0x475569)
         }

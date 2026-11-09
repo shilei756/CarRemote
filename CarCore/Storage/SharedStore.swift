@@ -293,13 +293,18 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var uiScale: Double
     /// 车辆异常持续提醒（门未锁/窗未关等持续 10 分钟后本地通知）。默认关闭，用户主动开启
     public var vehicleAlertEnabled: Bool
+    /// 1.10.0 桌面小组件防误触总开关（默认关，关闭时小组件仍是一键直接执行）。
+    /// 开启后，小组件上的高危指令（开锁/闭锁/一键闭锁/点火/熄火）需在 8 秒内
+    /// 再点一次同一按钮才真正下发；第一次点按只写待确认状态并提示「再点一次确认」。
+    public var widgetGuardEnabled: Bool
 
     private enum CodingKeys: String, CodingKey {
         case confirmGateCommands, siriEnabledCommands, siriMasterEnabled,
              carModelStyle, clubNick, clubAvatar, widgetCommands,
              quickCommands, moreCommands, moreTools,
              hiddenQuickCommands, hiddenMoreCommands, hiddenTools,
-             tankCapacityL, car3DEnabled, uiScale, vehicleAlertEnabled
+             tankCapacityL, car3DEnabled, uiScale, vehicleAlertEnabled,
+             widgetGuardEnabled
     }
 
     public init(confirmGateCommands: Set<String>,
@@ -318,7 +323,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
                 tankCapacityL: Double = 50,
                 car3DEnabled: Bool = true,
                 uiScale: Double = 1.0,
-                vehicleAlertEnabled: Bool = false) {
+                vehicleAlertEnabled: Bool = false,
+                widgetGuardEnabled: Bool = false) {
         self.confirmGateCommands = confirmGateCommands
         self.siriEnabledCommands = siriEnabledCommands
         self.siriMasterEnabled = siriMasterEnabled
@@ -336,6 +342,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.car3DEnabled = car3DEnabled
         self.uiScale = uiScale
         self.vehicleAlertEnabled = vehicleAlertEnabled
+        self.widgetGuardEnabled = widgetGuardEnabled
     }
 
     /// 旧数据兼容解码：新增字段缺省时给默认值，避免老用户设置丢失
@@ -368,17 +375,26 @@ public struct AppSettings: Codable, Equatable, Sendable {
         car3DEnabled = try container.decodeIfPresent(Bool.self, forKey: .car3DEnabled) ?? true
         uiScale = try container.decodeIfPresent(Double.self, forKey: .uiScale) ?? 1.0
         vehicleAlertEnabled = try container.decodeIfPresent(Bool.self, forKey: .vehicleAlertEnabled) ?? false
+        widgetGuardEnabled = try container.decodeIfPresent(Bool.self, forKey: .widgetGuardEnabled) ?? false
     }
 
     // MARK: 自定义顺序的解析（含补齐/过滤非法值，保证渲染永远有内容）
 
     /// 快捷控车按钮（按自定义顺序，缺省/非法回收为默认集合）
+    /// 1.10.0 迁移：老版本持久化的快捷栏只有 4 个命令，升级后自动把
+    ///「一键闭锁」插到「开锁 / 闭锁」之间；用户主动隐藏过则不强行加回。
     public var orderedQuickCommands: [CarCommand] {
         let parsed = quickCommands.compactMap { CarCommand(rawValue: $0) }
-        let unique = parsed.reduce(into: [CarCommand]()) { result, cmd in
+        var unique = parsed.reduce(into: [CarCommand]()) { result, cmd in
             if !result.contains(cmd) { result.append(cmd) }
         }
-        return unique.isEmpty ? CarCommand.primaryCommands : unique
+        if unique.isEmpty { return CarCommand.primaryCommands }
+        if !unique.contains(.oneKeyLock),
+           !hiddenQuickCommands.contains(CarCommand.oneKeyLock.rawValue) {
+            let insertAt = unique.firstIndex(of: .lockDoor) ?? unique.count
+            unique.insert(.oneKeyLock, at: insertAt)
+        }
+        return unique
     }
 
     /// 更多控车指令（按自定义顺序）
@@ -593,6 +609,8 @@ public enum SharedStore {
         static let customWallpaper = "carremote.customWallpaper"
         static let vehicleAlertSince = "carremote.vehicleAlertSince"
         static let vehicleAlertReasons = "carremote.vehicleAlertReasons"
+        /// 1.10.0 小组件防误触开关（独立轻量键，供小组件在免签环境也能读到）
+        static let widgetGuard = "carremote.widgetGuardEnabled"
     }
 
     private static var defaults: UserDefaults? {
@@ -935,29 +953,38 @@ public enum SharedStore {
         allDefaults.forEach { $0.set(theme.rawValue, forKey: Key.appTheme) }
     }
 
-    // MARK: 系统深色模式（1.9.0：夜间模式跟随手机）
+    // MARK: 小组件防误触开关（1.10.0：跨进程共享 + 免签环境兜底）
 
-    private static let systemDarkKey = "carremote.systemIsDark"
+    /// 独立轻量键：主 App 写、小组件读，返回 nil 表示「从未写入」（老版本用户按默认关处理）。
+    ///
+    /// 不只读 `AppSettings` 的原因：免签 / 巨魔等无共享权限环境下，整套设置数据
+    /// 可能读不到，而这是一个安全开关，必须尽量可达。这里与 `saveSettings` 一样
+    /// 走多通道（App Group UserDefaults + 共享容器文件 + Keychain），
+    /// 再补一份主 App 本进程的 `UserDefaults.standard`。
+    /// 小组件侧在共享通道全断时，还会退回自己沙盒里缓存的上一次开关值。
+    public static func loadWidgetGuardEnabledRaw() -> Bool? {
+        for d in allDefaults where d.object(forKey: Key.widgetGuard) != nil {
+            return d.bool(forKey: Key.widgetGuard)
+        }
+        if let data = containerFileData(Key.widgetGuard),
+           let raw = String(data: data, encoding: .utf8) {
+            return raw == "1"
+        }
+        if let raw = KeychainStore.get(Key.widgetGuard) {
+            return raw == "1"
+        }
+        if UserDefaults.standard.object(forKey: Key.widgetGuard) != nil {
+            return UserDefaults.standard.bool(forKey: Key.widgetGuard)
+        }
+        return nil
+    }
 
-    /// 手机当前是否处于深色模式。主 App 在 `colorScheme` 变化时写入；
-    /// 夜间模式只有在「App 内已开启 + 手机也为深色」时才真正生效，
-    /// 手机切回浅色后即便 App 内开关仍为「已开启」，界面也同步变浅色。
-    /// 首次启动尚未写入时用当前 trait 回退，避免首屏闪一下浅色。
-    public static var systemIsDark: Bool {
-        get {
-            let defaults = UserDefaults.standard
-            if defaults.object(forKey: systemDarkKey) == nil {
-                #if canImport(UIKit)
-                return UITraitCollection.current.userInterfaceStyle == .dark
-                #else
-                return false
-                #endif
-            }
-            return defaults.bool(forKey: systemDarkKey)
-        }
-        set {
-            UserDefaults.standard.set(newValue, forKey: systemDarkKey)
-        }
+    public static func saveWidgetGuardEnabled(_ enabled: Bool) {
+        let raw = enabled ? "1" : "0"
+        allDefaults.forEach { $0.set(enabled, forKey: Key.widgetGuard) }
+        writeContainerFile(raw.data(using: .utf8), forKey: Key.widgetGuard)
+        KeychainStore.set(raw, forKey: Key.widgetGuard)
+        UserDefaults.standard.set(enabled, forKey: Key.widgetGuard)
     }
 
     /// 樱花飘落背景开关（默认开，兼容旧行为）
