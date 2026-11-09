@@ -148,7 +148,7 @@ final class VehicleAlertNotificationDelegate: NSObject, UNUserNotificationCenter
                                 didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
         // 点击通知直接回到控车页，方便用户一键查看/处理
-        clearAppBadge()
+        VehicleAlertService.clearAppBadge()
         NotificationCenter.default.post(name: .vehicleAlertTapped, object: nil)
         completionHandler()
     }
