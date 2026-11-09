@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#endif
 
 // MARK: - 本地设置
 
@@ -930,6 +933,31 @@ public enum SharedStore {
 
     public static func saveAppTheme(_ theme: AppTheme) {
         allDefaults.forEach { $0.set(theme.rawValue, forKey: Key.appTheme) }
+    }
+
+    // MARK: 系统深色模式（1.9.0：夜间模式跟随手机）
+
+    private static let systemDarkKey = "carremote.systemIsDark"
+
+    /// 手机当前是否处于深色模式。主 App 在 `colorScheme` 变化时写入；
+    /// 夜间模式只有在「App 内已开启 + 手机也为深色」时才真正生效，
+    /// 手机切回浅色后即便 App 内开关仍为「已开启」，界面也同步变浅色。
+    /// 首次启动尚未写入时用当前 trait 回退，避免首屏闪一下浅色。
+    public static var systemIsDark: Bool {
+        get {
+            let defaults = UserDefaults.standard
+            if defaults.object(forKey: systemDarkKey) == nil {
+                #if canImport(UIKit)
+                return UITraitCollection.current.userInterfaceStyle == .dark
+                #else
+                return false
+                #endif
+            }
+            return defaults.bool(forKey: systemDarkKey)
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: systemDarkKey)
+        }
     }
 
     /// 樱花飘落背景开关（默认开，兼容旧行为）

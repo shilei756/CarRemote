@@ -1,5 +1,6 @@
 import Foundation
 import UserNotifications
+import UIKit
 import CarCore
 
 // MARK: - 车辆异常持续提醒（本地通知）
@@ -64,7 +65,8 @@ enum VehicleAlertService {
             case .denied:
                 DispatchQueue.main.async { completion(false) }
             case .notDetermined:
-                center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+                // 1.9.0：不再申请 .badge——本 App 不需要角标，避免桌面图标常驻小红点
+                center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
                     DispatchQueue.main.async { completion(granted) }
                 }
             @unknown default:
@@ -78,7 +80,10 @@ enum VehicleAlertService {
         content.title = "车辆状态异常提醒"
         content.body = "\(reasons.joined(separator: "、"))，已持续 10 分钟，请及时检查车辆。"
         content.sound = .default
-        content.badge = 1
+        // 1.9.0 #4：不设置 content.badge。以前设成 1 会在送达时给桌面图标
+        // 打上红点，用户在通知中心「划掉」通知后角标不会自动清零，只能手动清。
+        // 现在只弹横幅/列表，不留任何角标。
+        content.badge = nil
         content.userInfo = ["type": "vehicle_abnormal", "reasons": reasons]
 
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: delay, repeats: false)
@@ -92,9 +97,25 @@ enum VehicleAlertService {
         SharedStore.saveVehicleAlertSince(nil)
         SharedStore.saveVehicleAlertReasons([])
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [notificationID])
-        // 同时清掉可能已送达但用户未处理的角标
+        // 同时清掉可能已送达但用户未处理的通知
         UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [notificationID])
+        clearAppBadge()
         print("[VehicleAlert] 取消提醒: \(reason)")
+    }
+
+    /// 1.9.0 #4：清除桌面图标角标。
+    /// 通知在通知中心被划掉后，系统不会自动把 applicationIconBadgeNumber 归零，
+    /// 红点就会一直挂着。这里在「回前台 / 激活 / 点通知 / 异常解除」时显式清零，
+    /// 同时兼容 iOS 16+ 的 setBadgeCount（通知中心与桌面角标一起清）。
+    static func clearAppBadge() {
+        if Thread.isMainThread {
+            UIApplication.shared.applicationIconBadgeNumber = 0
+        } else {
+            DispatchQueue.main.async { UIApplication.shared.applicationIconBadgeNumber = 0 }
+        }
+        if #available(iOS 16.0, *) {
+            UNUserNotificationCenter.current().setBadgeCount(0) { _ in }
+        }
     }
 
     /// 当前异常项（与车况徽章 / 3D 车模门窗联动同源）
@@ -115,10 +136,11 @@ final class VehicleAlertNotificationDelegate: NSObject, UNUserNotificationCenter
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        // 1.9.0：前台展示不含 .badge，避免产生抹不掉的小红点
         if #available(iOS 14.0, *) {
-            completionHandler([.banner, .list, .sound, .badge])
+            completionHandler([.banner, .list, .sound])
         } else {
-            completionHandler([.alert, .sound, .badge])
+            completionHandler([.alert, .sound])
         }
     }
 
@@ -126,6 +148,7 @@ final class VehicleAlertNotificationDelegate: NSObject, UNUserNotificationCenter
                                 didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
         // 点击通知直接回到控车页，方便用户一键查看/处理
+        clearAppBadge()
         NotificationCenter.default.post(name: .vehicleAlertTapped, object: nil)
         completionHandler()
     }

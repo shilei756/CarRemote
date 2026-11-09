@@ -5,6 +5,8 @@ import UIKit
 /// 我的（网页版 my 页样式：个人卡 + 切换车型横滑卡 + 设置列表行逐项进入子页 + 开发者信息 + 退出登录）
 struct SettingsView: View {
     @EnvironmentObject private var appState: AppState
+    // 1.9.0：夜间模式跟随系统，手机切浅色时本页状态文案也要即时刷新
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var settings: AppSettings = SharedStore.loadSettings()
     @State private var showLogoutConfirm = false
@@ -17,6 +19,15 @@ struct SettingsView: View {
     @State private var showACQR = false
     // 车辆异常提醒：通知权限被拒时给一次明确提示
     @State private var alertPermissionDenied = false
+
+    /// 1.9.0：显示「实际生效」状态。App 内开了夜间但手机是浅色时，
+    /// 明确告诉用户为什么界面还是浅色，避免以为开关坏了。
+    private var themeStatusText: String {
+        if appTheme == .dark {
+            return colorScheme == .dark ? "已开启" : "手机为浅色，暂未生效"
+        }
+        return "已关闭"
+    }
 
     var body: some View {
         NavStack {
@@ -207,9 +218,9 @@ struct SettingsView: View {
             rowDivider
             // 夜间模式（行内切换，不进入子页）
             actionRow(symbol: "moon.fill", tint: Color.indigo,
-                      title: "夜间模式", subtitle: "夜间自动切换深色界面",
+                      title: "夜间模式", subtitle: "跟随手机深色模式，手机切浅色时自动同步",
                       trailing: {
-                Text(appTheme == .dark ? "已开启" : "已关闭")
+                Text(themeStatusText)
                     .font(.system(size: 12))
                     .foregroundStyle(WebTheme.muted)
             }) {
@@ -257,7 +268,7 @@ struct SettingsView: View {
             rowDivider
             // Siri 语音控制
             linkRow(symbol: "waveform", tint: WebTheme.blue,
-                    title: "Siri 语音控制", subtitle: "对 Siri 说短语即可控车",
+                    title: "Siri 与快捷指令", subtitle: "唤醒方式、车辆位置 / 状态查询",
                     trailing: {
                 Text(settings.siriMasterEnabled ? "已开启" : "已关闭")
                     .font(.system(size: 12))
@@ -793,21 +804,66 @@ struct SiriSettingsPage: View {
                     }
                 }
             }
+
+            // 1.9.0 #2：把「怎么唤醒」写成可照做的步骤，不再只列短语
+            Section {
+                howToRow("1", title: "Siri 语音", detail: "按住侧边键（或说「嘿 Siri」）→ 直接说下方短语。例：「用长安控车查询车辆位置」。执行结果 Siri 会念给你听。")
+                howToRow("2", title: "快捷指令 App", detail: "打开系统「快捷指令」→ 右上角搜索框输入「长安控车」或动作名（如「车辆状态」）→ 点动作右侧 ▶ 运行。长按动作可「添加到主屏幕」「添加到小组件」，之后点一下就执行。")
+                howToRow("3", title: "主屏下拉搜索", detail: "在主屏幕向下滑动调出搜索 → 输入「长安控车」或「车辆位置」→ 点搜索结果里的动作，无需先打开 App。")
+                howToRow("4", title: "桌面 / 锁屏小组件", detail: "添加「长安控车」小组件后，点组件上的按钮直接执行。iOS 17 及以上锁屏可不解锁直接控车；iOS 16 点按会打开 App 并弹确认框，确认后执行。")
+                howToRow("5", title: "自动化 / 轻点背面", detail: "「快捷指令」→「自动化」→ 创建「到达某地 / 连接车载蓝牙 / 特定时间」等触发条件 → 添加本 App 的动作。也可在「设置 → 辅助功能 → 触控 → 轻点背面」绑定某条快捷指令。")
+            } header: {
+                Text("怎么唤醒（5 种方式）")
+            } footer: {
+                Text("iPhone 需 iOS 16 及以上。首次使用请先在「快捷指令」App 里随便运行一次本 App 的动作，让系统完成注册；之后 Siri 和搜索才能识别短语。")
+            }
+
             Section {
                 siriPhraseRow("解锁车辆", phrase: "用长安控车解锁车辆")
                 siriPhraseRow("锁定车辆", phrase: "用长安控车锁上车")
-                siriPhraseRow("查看车况", phrase: "长安控车车况怎么样")
+                siriPhraseRow("车辆状态", phrase: "用长安控车查看车辆状态")
+                siriPhraseRow("车辆位置", phrase: "用长安控车查询车辆位置")
                 siriPhraseRow("寻车", phrase: "用长安控车找车")
                 siriPhraseRow("空调", phrase: "用长安控车打开 / 关闭空调")
                 siriPhraseRow("任意指令", phrase: "用长安控车控制车辆")
             } header: {
                 Text("常用直达短语")
             } footer: {
-                Text("对 Siri 说下表短语即可控车。点火、熄火等高危操作会先向你确认；「控制车辆」可触发任意指令，Siri 会追问要做什么。指令执行后会播报成功或失败。")
+                Text("点火、熄火等高危操作会先向你确认；「控制车辆」可触发任意指令，Siri 会追问要做什么。Apple 限制每个 App 最多 10 条语音短语，单独的「闪灯 / 鸣笛」已并入「寻车」，仍可在快捷指令 App 里搜索动作手动运行。")
+            }
+
+            Section {
+                siriPhraseRow("车辆状态", phrase: "四门是否锁好、四窗与天窗是否关好、发动机有没有熄火、四轮胎压、续航油量里程电压")
+                siriPhraseRow("车辆位置", phrase: "具体地址、城市、定位时间、经纬度、车速")
+                siriPhraseRow("小组件独立登录", phrase: "免签 / 巨魔安装时在快捷指令里运行，填手机号与控车码绑定")
+            } header: {
+                Text("两条查询类指令读什么")
+            } footer: {
+                Text("两条查询都会顺带刷新车况快照，桌面小组件同步更新。查询车辆位置与 App 内「车辆位置」卡片走同一个官方接口。")
             }
         }
         .hideScrollBackground()
-        .inlineTitle("Siri 语音控制")
+        .inlineTitle("Siri 与快捷指令")
+    }
+
+    private func howToRow(_ step: String, title: String, detail: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(step)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 20, height: 20)
+                .background(WebTheme.blue)
+                .clipShape(Circle())
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                Text(detail)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.vertical, 3)
     }
 
     private func siriPhraseRow(_ name: String, phrase: String) -> some View {
@@ -817,6 +873,7 @@ struct SiriSettingsPage: View {
             Text("“\(phrase)”")
                 .font(.system(size: 11.5))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.vertical, 2)
     }

@@ -43,24 +43,9 @@ struct CarAppShortcuts: AppShortcutsProvider {
             shortTitle: "锁定车辆",
             systemImageName: "lock"
         )
-        AppShortcut(
-            intent: FlashLightsIntent(),
-            phrases: [
-                "用\(.applicationName)闪灯",
-                "让\(.applicationName)闪一下灯"
-            ],
-            shortTitle: "闪灯寻车",
-            systemImageName: "light.beacon.max"
-        )
-        AppShortcut(
-            intent: HonkHornIntent(),
-            phrases: [
-                "用\(.applicationName)鸣笛",
-                "让\(.applicationName)响一下"
-            ],
-            shortTitle: "鸣笛寻车",
-            systemImageName: "speaker.wave.2"
-        )
+        // 1.9.0：删掉单独的「闪灯 / 鸣笛」两条直达短语（「寻车」本身就是闪灯+鸣笛），
+        // 腾出 Apple 规定的 10 个名额给「查询车辆位置」与「车辆状态」。
+        // 单独的闪灯 / 鸣笛仍可在「快捷指令」App 里搜索到对应动作手动运行。
         AppShortcut(
             intent: FindCarIntent(),
             phrases: [
@@ -73,11 +58,22 @@ struct CarAppShortcuts: AppShortcutsProvider {
         AppShortcut(
             intent: CarStatusIntent(),
             phrases: [
-                "用\(.applicationName)查看车况",
-                "\(.applicationName)车况怎么样"
+                "用\(.applicationName)查看车辆状态",
+                "\(.applicationName)车况怎么样",
+                "用\(.applicationName)看看车门锁了没"
             ],
-            shortTitle: "查看车况",
+            shortTitle: "车辆状态",
             systemImageName: "gauge"
+        )
+        AppShortcut(
+            intent: CarLocationIntent(),
+            phrases: [
+                "用\(.applicationName)查询车辆位置",
+                "\(.applicationName)我的车在哪",
+                "用\(.applicationName)找一下车停在哪"
+            ],
+            shortTitle: "车辆位置",
+            systemImageName: "mappin.and.ellipse"
         )
         AppShortcut(
             intent: CloseWindowsIntent(),

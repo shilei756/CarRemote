@@ -27,6 +27,35 @@ struct CarWidgetEntryView: View {
     }
 }
 
+// MARK: - iOS 16 兼容：交互式按钮（1.9.0）
+
+/// iOS 17+ 的小组件按钮用 AppIntent 在扩展进程内直接执行（锁屏不解锁也能控车）。
+/// iOS 16 没有交互式小组件，改用 Link 深链回主 App，由主 App 弹确认后执行
+/// 同一条指令——按钮照样能点、功能不缺失，只是多一步确认。
+@ViewBuilder
+private func widgetActionButton<I: AppIntent, Label: View>(
+    intent: I,
+    command: String,
+    @ViewBuilder label: () -> Label
+) -> some View {
+    if #available(iOSApplicationExtension 17.0, *) {
+        Button(intent: intent) { label() }
+            .buttonStyle(.plain)
+    } else {
+        Link(destination: widgetActionURL(command)) { label() }
+    }
+}
+
+/// 小组件 → 主 App 的深链：carremote://widget?cmd=<指令或开关名>
+/// cmd 取值：CarCommand.rawValue / "toggleLock" / "toggleEngine" / "pair"
+private func widgetActionURL(_ command: String) -> URL {
+    var components = URLComponents()
+    components.scheme = APIConfig.urlScheme
+    components.host = "widget"
+    components.queryItems = [URLQueryItem(name: "cmd", value: command)]
+    return components.url ?? URL(string: "\(APIConfig.urlScheme)://widget")!
+}
+
 // MARK: - 公共元素
 
 private struct LockBadge: View {
@@ -74,17 +103,19 @@ private struct QuickControlButtons: View {
 
     @ViewBuilder
     private func slotButton(_ index: Int, command: CarCommand?) -> some View {
+        // iOS 16 深链直接带指令 rawValue，主 App 无需再读槽位配置
+        let cmd = command?.rawValue ?? CarCommand.lockDoor.rawValue
         switch index {
-        case 0: slotButtonBody(command, intent: WidgetSlot1Intent())
-        case 1: slotButtonBody(command, intent: WidgetSlot2Intent())
-        case 2: slotButtonBody(command, intent: WidgetSlot3Intent())
-        case 3: slotButtonBody(command, intent: WidgetSlot4Intent())
-        default: slotButtonBody(command, intent: WidgetSlot5Intent())
+        case 0: slotButtonBody(command, intent: WidgetSlot1Intent(), cmd: cmd)
+        case 1: slotButtonBody(command, intent: WidgetSlot2Intent(), cmd: cmd)
+        case 2: slotButtonBody(command, intent: WidgetSlot3Intent(), cmd: cmd)
+        case 3: slotButtonBody(command, intent: WidgetSlot4Intent(), cmd: cmd)
+        default: slotButtonBody(command, intent: WidgetSlot5Intent(), cmd: cmd)
         }
     }
 
-    private func slotButtonBody<I: AppIntent>(_ command: CarCommand?, intent: I) -> some View {
-        Button(intent: intent) {
+    private func slotButtonBody<I: AppIntent>(_ command: CarCommand?, intent: I, cmd: String) -> some View {
+        widgetActionButton(intent: intent, command: cmd) {
             VStack(spacing: 3) {
                 Image(systemName: command?.sfSymbol ?? "questionmark")
                     .font(.system(size: 13, weight: .semibold))
@@ -98,7 +129,6 @@ private struct QuickControlButtons: View {
             .foregroundStyle(buttonTint(command))
             .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
         }
-        .buttonStyle(.plain)
     }
 
     private func buttonTint(_ command: CarCommand?) -> Color {
@@ -437,7 +467,7 @@ struct QuickControlEntryView: View {
             // iOS 17 点按弹出绑定 Intent；iOS 16 点按唤起 App 看指引
             Group {
                 if family == .accessoryRectangular {
-                    Button(intent: WidgetPairIntent()) {
+                    widgetActionButton(intent: WidgetPairIntent(), command: "pair") {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("快捷控车 · 未绑定")
                                 .font(.headline)
@@ -447,9 +477,8 @@ struct QuickControlEntryView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    .buttonStyle(.plain)
                 } else {
-                    Button(intent: WidgetPairIntent()) {
+                    widgetActionButton(intent: WidgetPairIntent(), command: "pair") {
                         VStack(spacing: 2) {
                             Image(systemName: "link.circle.fill")
                                 .font(.system(size: 20))
@@ -457,7 +486,6 @@ struct QuickControlEntryView: View {
                                 .font(.system(size: 9, weight: .semibold))
                         }
                     }
-                    .buttonStyle(.plain)
                 }
             }
             .widgetURL(URL(string: APIConfig.urlScheme + "://dashboard"))
@@ -473,16 +501,15 @@ struct QuickCircularView: View {
         let unlocked = entry.snapshot?.doorUnlocked ?? false
         ZStack {
             AccessoryWidgetBackground()
-            Button(intent: LockToggleIntent()) {
+            widgetActionButton(intent: LockToggleIntent(), command: "toggleLock") {
                 VStack(spacing: 1) {
                     Image(systemName: unlocked ? "lock.open.fill" : "lock.fill")
                         .font(.system(size: 20, weight: .bold))
                     Text(unlocked ? "闭锁" : "开锁")
                         .font(.system(size: 9, weight: .semibold))
                 }
+                .foregroundStyle(unlocked ? Color.orange : Color.green)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(unlocked ? Color.orange : Color.green)
         }
         .accessibilityLabel(unlocked ? "当前已开锁，点按闭锁" : "当前已锁止，点按开锁")
     }
@@ -512,21 +539,23 @@ struct QuickRectangularView: View {
                 quickButton(icon: unlocked ? "lock.fill" : "lock.open.fill",
                             text: unlocked ? "闭锁" : "开锁",
                             tint: unlocked ? .green : .orange,
-                            intent: LockToggleIntent())
+                            intent: LockToggleIntent(), command: "toggleLock")
                 quickButton(icon: engineOn ? "engine.combustion.fill" : "engine.combustion",
                             text: engineOn ? "熄火" : "点火",
                             tint: engineOn ? .gray : .red,
-                            intent: EngineToggleIntent())
+                            intent: EngineToggleIntent(), command: "toggleEngine")
                 quickButton(icon: "light.beacon.max",
                             text: "寻车",
                             tint: .cyan,
-                            intent: WhistleFindIntent())
+                            intent: WhistleFindIntent(),
+                            command: CarCommand.remoteSearchCar.rawValue)
             }
         }
     }
 
-    private func quickButton<I: AppIntent>(icon: String, text: String, tint: Color, intent: I) -> some View {
-        Button(intent: intent) {
+    private func quickButton<I: AppIntent>(icon: String, text: String, tint: Color,
+                                           intent: I, command: String) -> some View {
+        widgetActionButton(intent: intent, command: command) {
             VStack(spacing: 2) {
                 Image(systemName: icon)
                     .font(.system(size: 13, weight: .semibold))
@@ -539,7 +568,6 @@ struct QuickRectangularView: View {
             .foregroundStyle(tint)
             .clipShape(Capsule())
         }
-        .buttonStyle(.plain)
         .accessibilityLabel(text)
     }
 }

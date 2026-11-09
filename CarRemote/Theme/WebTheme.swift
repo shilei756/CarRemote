@@ -8,8 +8,12 @@ import CarCore
 /// 神兽主题激活时整套配色切换为神兽调色板（网页版 html.glass.myth-* 规则块）
 enum WebTheme {
     /// 当前主题：读持久化键（ThemeManager.set 时同步写入，与 @Published theme 同源）
-    /// 直接读 UserDefaults 而非 ThemeManager.shared，避免 @MainActor 隔离传播到全部静态色值
-    static var isDark: Bool { SharedStore.loadAppTheme() == .dark && myth == nil }
+    /// 直接读 UserDefaults 而非 ThemeManager.shared，避免 @MainActor 隔离传播到全部静态色值。
+    /// 1.9.0：追加「手机系统必须也是深色」这一条件——手机关掉深色模式时，
+    /// 即便 App 内夜间模式开关仍为开启，界面也立即同步回浅色。
+    static var isDark: Bool {
+        SharedStore.loadAppTheme() == .dark && SharedStore.systemIsDark && myth == nil
+    }
 
     /// 当前神兽主题（nil = 经典默认）
     static var myth: MythTheme? { SharedStore.loadMythTheme() }

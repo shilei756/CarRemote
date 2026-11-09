@@ -38,6 +38,12 @@ final class AppState: ObservableObject {
         didSet { SharedStore.saveMythTheme(mythTheme) }
     }
 
+    // MARK: - iOS 16 小组件深链控车（1.9.0）
+    /// iOS 16 没有交互式小组件，点按钮会深链回 App，这里先弹确认再执行
+    @Published var pendingWidgetCommand: CarCommand?
+    /// 执行结果 / 绑定指引（一次性提示）
+    @Published var widgetCommandResult: String?
+
     private var foregroundBeated = false
 
     init() {
@@ -187,6 +193,59 @@ final class AppState: ObservableObject {
             forceLogout(message: "账号已无法继续使用：当前账号的授权已被撤销，请重新登录或联系站主。")
         }
     }
+    // MARK: - iOS 16 小组件深链控车
+
+    /// 解析 carremote://widget?cmd=xxx。cmd 为 CarCommand.rawValue，
+    /// 或 "toggleLock" / "toggleEngine"（智能反向）/ "pair"（绑定指引）。
+    func handleWidgetURL(_ url: URL) {
+        guard url.scheme == APIConfig.urlScheme, url.host == "widget",
+              let raw = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems?.first(where: { $0.name == "cmd" })?.value else { return }
+
+        if raw == "pair" {
+            widgetCommandResult = "请在「快捷指令」App 中搜索「小组件独立登录」，填手机号与控车码运行一次即可绑定；绑定后主屏与锁屏小组件都会恢复。"
+            return
+        }
+        guard phase == .ready, credentials != nil else {
+            widgetCommandResult = "请先打开「长安控车」App 登录，之后就能用小组件控车。"
+            return
+        }
+
+        let command: CarCommand?
+        switch raw {
+        case "toggleLock":
+            command = SharedStore.loadStatusSnapshot()?.doorUnlocked == true ? .lockDoor : .unlockDoor
+        case "toggleEngine":
+            command = SharedStore.loadStatusSnapshot()?.engineRunning == true ? .closeEngine : .openEngine
+        default:
+            command = CarCommand(rawValue: raw)
+        }
+        guard let command else { return }
+        pendingWidgetCommand = command
+    }
+
+    func cancelWidgetCommand() {
+        pendingWidgetCommand = nil
+    }
+
+    func confirmWidgetCommand() async {
+        guard let command = pendingWidgetCommand, let credentials else {
+            pendingWidgetCommand = nil
+            return
+        }
+        pendingWidgetCommand = nil
+        do {
+            let result = try await CarService.execute(command: command, credentials: credentials)
+            widgetCommandResult = result.ok
+                ? "「\(command.displayName)」已执行"
+                : "「\(command.displayName)」失败：\(CarIntentRunner.cleanReason(result.message))"
+            WidgetCenter.shared.reloadAllTimelines()
+            await refreshStatus()
+        } catch {
+            widgetCommandResult = "「\(command.displayName)」失败：\(CarIntentRunner.cleanReason(error.localizedDescription))"
+        }
+    }
+
     // MARK: - 前台 / 用量上报
 
     func handleForeground() async {
