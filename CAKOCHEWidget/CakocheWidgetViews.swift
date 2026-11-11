@@ -1,5 +1,6 @@
 import WidgetKit
 import SwiftUI
+import AppIntents
 import CarCore
 
 // MARK: - 小组件入口（按家族分发）
