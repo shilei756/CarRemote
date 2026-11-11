@@ -24,9 +24,9 @@ struct CakocheLoginView: View {
                     Hairline(color: Mono.nightHair).padding(.top, 28)
 
                     VStack(alignment: .leading, spacing: 24) {
-                        field(title: "PHONE", placeholder: "11 位手机号",
+                        field(title: "手机号", placeholder: "11 位手机号",
                               text: $phone, keyboard: .numberPad)
-                        field(title: "PIN", placeholder: "控车码",
+                        field(title: "控车码", placeholder: "控车码",
                               text: $pin, secure: true)
                     }
                     .padding(.top, 32)
@@ -46,8 +46,9 @@ struct CakocheLoginView: View {
                         Task { await submit() }
                     } label: {
                         HStack(spacing: 10) {
-                            DotMatrixText(text: busy ? "CHECKING" : "SIGN IN",
-                                          size: 13, color: Mono.night)
+                            Text(busy ? "校验中" : "登录")
+                                .font(.system(size: 16, weight: .semibold))
+                                .tracking(6)
                             Spacer()
                             Image(systemName: "arrow.right")
                                 .font(.system(size: 15, weight: .semibold))
@@ -89,7 +90,10 @@ struct CakocheLoginView: View {
     private func field(title: String, placeholder: String, text: Binding<String>,
                        keyboard: UIKeyboardType = .default, secure: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 9) {
-            DotMatrixText(text: title, size: 9, color: Mono.nightDim)
+            Text(title)
+                .font(.system(size: 10, weight: .medium))
+                .tracking(3)
+                .foregroundStyle(Mono.nightDim)
             Group {
                 if secure {
                     SecureField(placeholder, text: text)
@@ -105,7 +109,7 @@ struct CakocheLoginView: View {
             .textInputAutocapitalization(.never)
             Hairline(color: Mono.nightHair)
         }
-        .accessibilityLabel(title == "PHONE" ? "手机号" : "控车码")
+        .accessibilityLabel(title == "手机号" ? "手机号" : "控车码")
     }
 
     @MainActor

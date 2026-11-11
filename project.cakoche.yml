@@ -10,7 +10,8 @@
 # 两个 IPA 可同时安装互不干扰。
 #
 # 未签名：CAKOCHE 走 CODE_SIGNING_ALLOWED=NO 的巨魔 / 全能签路径，
-# 不需要新增 App ID 描述文件（首版也不嵌入小组件扩展）。
+# 不需要新增 App ID 描述文件。1.1.0 起内嵌 CAKOCHEWidget 点阵小组件，
+# 同样未签名，由全能签随主 App 一起重签。
 # =============================================================
 targets:
   CAKOCHE:
@@ -28,6 +29,9 @@ targets:
     dependencies:
       - target: CarCore
         embed: true
+      # 1.1.0：点阵风格小组件，随主 App 嵌入
+      - target: CAKOCHEWidget
+        embed: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.copper1249.cakoche
@@ -35,8 +39,8 @@ targets:
         INFOPLIST_FILE: CAKOCHE/Info.plist
         CODE_SIGN_ENTITLEMENTS: CAKOCHE/CAKOCHE.entitlements
         # CAKOCHE 版本号单独从 1.0.0 起算，不接正式版 1.10.0
-        MARKETING_VERSION: "1.0.0"
-        CURRENT_PROJECT_VERSION: "1"
+        MARKETING_VERSION: "1.1.0"
+        CURRENT_PROJECT_VERSION: "2"
         # 唯一开关：所有 #if CAKOCHE 分支由此生效
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: CAKOCHE
         CODE_SIGN_IDENTITY: "iPhone Distribution: Akbahri Naquibullah (7NSH43RT4Z)"
@@ -50,12 +54,44 @@ targets:
           - "$(inherited)"
           - "@executable_path/Frameworks"
 
+  # ================= CAKOCHE 点阵小组件扩展 =================
+  CAKOCHEWidget:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: CAKOCHEWidget
+        excludes:
+          - "Info.plist"
+    dependencies:
+      - target: CarCore
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.copper1249.cakoche.widget
+        PRODUCT_NAME: CAKOCHEWidget
+        INFOPLIST_FILE: CAKOCHEWidget/Info.plist
+        CODE_SIGN_ENTITLEMENTS: CAKOCHEWidget/CakocheWidget.entitlements
+        MARKETING_VERSION: "1.1.0"
+        CURRENT_PROJECT_VERSION: "2"
+        CODE_SIGN_IDENTITY: "iPhone Distribution: Akbahri Naquibullah (7NSH43RT4Z)"
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/Frameworks"
+          - "@executable_path/../Frameworks"
+
 schemes:
   CAKOCHE:
     build:
       targets:
         CAKOCHE: all
         CarCore: all
+        CAKOCHEWidget: all
     run:
       config: Debug
     archive:

@@ -13,7 +13,10 @@ struct CakocheSettingsPage: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 VStack(alignment: .leading, spacing: 8) {
-                    DotMatrixText(text: "MY", size: 20, color: Mono.paperInk)
+                    Text("我的")
+                        .font(.system(size: 20, weight: .semibold))
+                        .tracking(6)
+                        .foregroundStyle(Mono.paperInk)
                     Text("车辆 / 车型 / 授权")
                         .font(.system(size: 11))
                         .foregroundStyle(Mono.paperDim)
@@ -22,7 +25,7 @@ struct CakocheSettingsPage: View {
                 .padding(.top, 20)
                 .padding(.bottom, 10)
 
-                section("MODEL", "3D 车模 · 全系 12 款（含真实座舱）")
+                section("3D 车模", "全系 12 款（含真实座舱），点按切换")
                 ForEach(CakocheModels.all) { model in
                     Button {
                         selectedID = model.id
@@ -52,16 +55,16 @@ struct CakocheSettingsPage: View {
                     Hairline(color: Mono.paperHair).padding(.leading, 22)
                 }
 
-                section("ACCOUNT", "网站授权")
+                section("账号授权", "手机号与控车码由站主网站校验")
                 VStack(alignment: .leading, spacing: 11) {
-                    keyRow("PHONE", maskedPhone)
-                    keyRow("AUTH", "已授权 · 白名单")
-                    keyRow("SERVER", hostText)
+                    keyRow("手机号", maskedPhone)
+                    keyRow("授权状态", "已授权 · 白名单")
+                    keyRow("授权站点", hostText)
                 }
                 .padding(.horizontal, 22)
                 .padding(.top, 6)
 
-                section("VEHICLE", "车辆")
+                section("车辆", "位置与退出")
                 Button { openMap() } label: {
                     HStack {
                         Text("在地图中查看车辆位置")
@@ -81,7 +84,10 @@ struct CakocheSettingsPage: View {
 
                 Button { appState.logout() } label: {
                     HStack {
-                        DotMatrixText(text: "SIGN OUT", size: 10, color: Mono.red)
+                        Text("退出登录")
+                            .font(.system(size: 13, weight: .semibold))
+                            .tracking(3)
+                            .foregroundStyle(Mono.red)
                         Spacer()
                     }
                     .padding(.horizontal, 22)
@@ -90,7 +96,7 @@ struct CakocheSettingsPage: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("退出登录")
 
-                Text("CAKOCHE 1.0.0 · 与网站同一套白名单授权体系")
+                Text("CAKOCHE 1.1.0 · 与网站同一套白名单授权体系")
                     .font(.system(size: 10))
                     .foregroundStyle(Mono.paperDim)
                     .padding(.horizontal, 22)
@@ -100,10 +106,13 @@ struct CakocheSettingsPage: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func section(_ en: String, _ cn: String) -> some View {
+    private func section(_ title: String, _ subtitle: String) -> some View {
         VStack(alignment: .leading, spacing: 5) {
-            DotMatrixText(text: en, size: 9, color: Mono.paperDim)
-            Text(cn).font(.system(size: 10)).foregroundStyle(Mono.paperDim)
+            Text(title)
+                .font(.system(size: 11, weight: .medium))
+                .tracking(3)
+                .foregroundStyle(Mono.paperInk)
+            Text(subtitle).font(.system(size: 10)).foregroundStyle(Mono.paperDim)
         }
         .padding(.horizontal, 22)
         .padding(.top, 22)
@@ -112,7 +121,10 @@ struct CakocheSettingsPage: View {
 
     private func keyRow(_ key: String, _ value: String) -> some View {
         HStack(alignment: .top) {
-            DotMatrixText(text: key, size: 8, color: Mono.paperDim)
+            Text(key)
+                .font(.system(size: 10, weight: .medium))
+                .tracking(1.5)
+                .foregroundStyle(Mono.paperDim)
                 .frame(width: 66, alignment: .leading)
             Text(value)
                 .font(.system(size: 12).monospacedDigit())

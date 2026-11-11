@@ -9,20 +9,26 @@ struct CakocheClimatePage: View {
     @State private var mode = 1          // 0 COOL / 1 STOP / 2 HEAT
     @State private var pulse = false
 
-    private let modeNames = ["COOL", "STOP", "HEAT"]
+    // 1.1.0：模式名中文化（点阵不支持中文，模式标签统一用宽字距黑体）
+    private let modeNames = ["制冷", "关闭", "制热"]
 
     private var tempText: String { String(format: "%.1f", temp) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 8) {
-                DotMatrixText(text: "CLIMATE", size: 20, color: Mono.paperInk)
-                Text("座舱空调 · 指令直接下发至车辆")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Mono.paperDim)
-            }
-            .padding(.horizontal, 22)
-            .padding(.top, 20)
+        // 1.1.0：整页包 ScrollView，小屏（iPhone SE）上底部说明不再被裁掉
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("空调")
+                        .font(.system(size: 20, weight: .semibold))
+                        .tracking(6)
+                        .foregroundStyle(Mono.paperInk)
+                    Text("座舱空调 · 指令直接下发至车辆")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Mono.paperDim)
+                }
+                .padding(.horizontal, 22)
+                .padding(.top, 20)
 
             // 座舱俯视 + 气流波纹（STOP 时静止，COOL/HEAT 时缓慢呼吸）
             ZStack {
@@ -50,7 +56,10 @@ struct CakocheClimatePage: View {
                     Image(systemName: mode == 2 ? "flame" : (mode == 0 ? "snowflake" : "power"))
                         .font(.system(size: 26, weight: .light))
                         .foregroundStyle(mode == 1 ? Mono.paperDim : Mono.paperInk)
-                    DotMatrixText(text: modeNames[mode], size: 10, color: Mono.paperDim)
+                    Text(modeNames[mode])
+                        .font(.system(size: 11, weight: .medium))
+                        .tracking(3)
+                        .foregroundStyle(Mono.paperDim)
                 }
             }
             .frame(maxWidth: .infinity)
@@ -59,8 +68,12 @@ struct CakocheClimatePage: View {
 
             HStack(alignment: .bottom, spacing: 14) {
                 DotMatrixText(text: tempText, size: 46, color: Mono.paperInk)
+                    .fixedSize()
                 VStack(alignment: .leading, spacing: 4) {
-                    DotMatrixText(text: "DEG C", size: 9, color: Mono.paperDim)
+                    Text("摄氏度")
+                        .font(.system(size: 10, weight: .medium))
+                        .tracking(2)
+                        .foregroundStyle(Mono.paperDim)
                     Text("0.5℃ 步进").font(.system(size: 10)).foregroundStyle(Mono.paperDim)
                 }
                 .padding(.bottom, 6)
@@ -79,8 +92,10 @@ struct CakocheClimatePage: View {
                         Task { await applyMode(i) }
                     } label: {
                         VStack(spacing: 7) {
-                            DotMatrixText(text: modeNames[i], size: 9,
-                                          color: mode == i ? Mono.paper : Mono.paperDim)
+                            Text(modeNames[i])
+                                .font(.system(size: 12, weight: .medium))
+                                .tracking(3)
+                                .foregroundStyle(mode == i ? Mono.paper : Mono.paperDim)
                             Rectangle()
                                 .fill(mode == i ? Mono.red : Color.clear)
                                 .frame(width: 16, height: 2)
@@ -117,10 +132,10 @@ struct CakocheClimatePage: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 22)
                 .padding(.top, 16)
-
-            Spacer(minLength: 0)
+                .padding(.bottom, 24)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity)
+        } // ScrollView
     }
 
     private func stepButton(_ symbol: String, _ action: @escaping () -> Void) -> some View {
