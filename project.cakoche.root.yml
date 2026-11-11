@@ -1,0 +1,13 @@
+# =============================================================
+# CAKOCHE 构建专用 root spec（只被 build-cakoche.yml 使用）
+#
+# 关键：正式版 project.yml 完全不动 —— 这里用 XcodeGen 的 include 机制
+# 把正式版 spec 与 CAKOCHE 目标合并成一份临时工程，
+# `xcodegen -s project.cakoche.root.yml` 只在 CAKOCHE 流水线里执行。
+# 正式版 build-ipa.yml 仍用 project.yml，产物与行为零变化。
+# =============================================================
+name: CarRemote
+
+include:
+  - path: project.yml
+  - path: project.cakoche.yml

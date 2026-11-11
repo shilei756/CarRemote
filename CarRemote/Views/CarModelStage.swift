@@ -444,6 +444,16 @@ struct CarVisual3DStage: View {
     /// 独立车模库页不传（默认 true）。
     var car3DEnabled: Bool = true
 
+    // MARK: CAKOCHE 专用可选参数（正式版不传，默认值保证行为零变化）
+    /// 直接指定 GLB 文件名（12 款全系切换），绕过 CarModelStyle 映射
+    var modelOverride: String? = nil
+    /// 隐藏舞台自带的 WebTheme 胶囊控件（极简 UI 自己提供控制入口）
+    var minimalChrome = false
+    /// 车模视口高度（首页铺满用），nil 沿用正式版 200 / 288
+    var stageHeight: CGFloat? = nil
+    /// 强制进入车内第一视角（借用 c211 完整分件座舱）
+    var cockpitOverride = false
+
     /// 展示模式：3D 车模 / 2D 车图（1.1.4 起右上角胶囊滑块切换）
     private enum StageMode { case threeD, twoD }
 
@@ -466,13 +476,24 @@ struct CarVisual3DStage: View {
     /// 无 3D 车模的车型（如 UNI-K）更是完全没有车内几何。
     /// 这三类统一改用白逸动 c211 的完整座舱，车外仍显示各车型自己的车模/车图。
     private var activeModelName: String? {
+        #if CAKOCHE
+        if cockpitOverride || cockpitInterior {
+            // 除 c211 / s311 外，其余车型 Int_P 只有贴图面片，统一借白逸动完整座舱
+            if modelOverride != nil { return "c211.glb" }
+            return style.cockpitModelName
+        }
+        if let modelOverride { return modelOverride }
+        #endif
         if cockpitInterior { return style.cockpitModelName }
         return style.model3DName
     }
 
     /// 座舱态强制进 3D：即使当前停在 2D 档、用户关了 3D 开关、或车型没有
     /// 3D 车模，点「座舱」都会直接切到 3D 车内第一视角。
-    private var show3D: Bool { cockpitInterior || (car3DEnabled && mode == .threeD) }
+    private var show3D: Bool {
+        if minimalChrome { return true }
+        return cockpitInterior || (car3DEnabled && mode == .threeD)
+    }
 
     /// 是否为「我的爱车」GLB 官方模（拖拽参考该 App：横+纵向均可旋转）
     private var isGLBModel: Bool { activeModelName?.hasSuffix(".glb") == true }
@@ -502,8 +523,8 @@ struct CarVisual3DStage: View {
                     if show3D && !model.loadFailed, let name = activeModelName {
                         ZStack {
                             CarModel3DRepresentable(state: model, modelName: name,
-                                                    verticalPanRotates: isGLBModel && !cockpitInterior,
-                                                    cockpitLocked: cockpitInterior)
+                                                    verticalPanRotates: isGLBModel && !(cockpitInterior || cockpitOverride),
+                                                    cockpitLocked: cockpitInterior || cockpitOverride)
                                 // 1.8.0：父层已按「外/内」把换模型车型拆成独立
                                 // 舞台实例，本实例生命周期内 name 恒定，此 id 不再
                                 // 变化 → 绝不会在同一个 ARView 中途换 GLB。
@@ -535,7 +556,7 @@ struct CarVisual3DStage: View {
                 // 1.5.0：切到座舱第一视角时把视口加高到 288pt —— 画面放大靠
                 // 「相机坐进车内 + 72° 广角 + 更大的渲染视口」实现，
                 // 不再用 scaleEffect 把整张 ARView 撑大后硬裁成矩形贴片。
-                .frame(height: cockpitInterior ? 288 : 200)
+                .frame(height: stageHeight ?? (cockpitInterior || cockpitOverride ? 288 : 200))
 
                 HStack(alignment: .top) {
                     // 重置视角 + 俯视图：放在「我的爱车」标题正下方（1.1.4 用户反馈）
@@ -591,8 +612,8 @@ struct CarVisual3DStage: View {
                 .padding(.horizontal, 2)
                 .padding(.top, 2)
                 // 切入车内视角后隐藏舞台悬浮控件，放大的画面更干净
-                .opacity(cockpitInterior ? 0 : 1)
-                .allowsHitTesting(!cockpitInterior)
+                .opacity(minimalChrome ? 0 : (cockpitInterior ? 0 : 1))
+                .allowsHitTesting(!minimalChrome && !cockpitInterior)
             }
 
             // 1.5.1 用户反馈：3D 车模下方保持与 2D 车图一样纯净，
@@ -613,11 +634,18 @@ struct CarVisual3DStage: View {
             guard cockpitManaged else { return }
             model.setViewMode(interior ? .interior : .exterior)
         }
+        .compatOnChange(of: cockpitOverride) { interior in
+            guard minimalChrome else { return }
+            model.setViewMode(interior ? .interior : .exterior)
+        }
         .onAppear {
             syncStatus()
             syncVehicleState()
             // 视图重建（如切换标签返回）时若仍处于座舱态，重放一次车内视角
             if cockpitManaged && cockpitInterior {
+                model.setViewMode(.interior)
+            }
+            if minimalChrome && cockpitOverride {
                 model.setViewMode(.interior)
             }
         }

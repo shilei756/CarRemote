@@ -1,0 +1,66 @@
+# =============================================================
+# CAKOCHE 独立 App spec（被 project.yml 条件 include）
+#
+# 加载方式：由 project.cakoche.root.yml include，仅 build-cakoche.yml 使用。
+# 正式版 project.yml 不引用本文件 → 正式版工程与产物零改动。
+#
+# 设计：与正式版 CarRemote 共用整套 CarRemote/ 源码（含 3D 车模、
+# AppState、Services），仅靠编译宏 CAKOCHE 在入口切换到全新极简 UI，
+# 并把授权改为网站白名单严格模式。独立 bundle id / 显示名 / URL scheme，
+# 两个 IPA 可同时安装互不干扰。
+#
+# 未签名：CAKOCHE 走 CODE_SIGNING_ALLOWED=NO 的巨魔 / 全能签路径，
+# 不需要新增 App ID 描述文件（首版也不嵌入小组件扩展）。
+# =============================================================
+targets:
+  CAKOCHE:
+    type: application
+    platform: iOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: CarRemote
+        excludes:
+          - "Info.plist"
+      - path: CAKOCHE
+        excludes:
+          - "Info.plist"
+          - "CAKOCHE.entitlements"
+    dependencies:
+      - target: CarCore
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.copper1249.cakoche
+        PRODUCT_NAME: CAKOCHE
+        INFOPLIST_FILE: CAKOCHE/Info.plist
+        CODE_SIGN_ENTITLEMENTS: CAKOCHE/CAKOCHE.entitlements
+        # CAKOCHE 版本号单独从 1.0.0 起算，不接正式版 1.10.0
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        # 唯一开关：所有 #if CAKOCHE 分支由此生效
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: CAKOCHE
+        CODE_SIGN_IDENTITY: "iPhone Distribution: Akbahri Naquibullah (7NSH43RT4Z)"
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: NO
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/Frameworks"
+
+schemes:
+  CAKOCHE:
+    build:
+      targets:
+        CAKOCHE: all
+        CarCore: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+    profile:
+      config: Release
+    analyze:
+      config: Debug

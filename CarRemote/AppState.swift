@@ -92,6 +92,16 @@ final class AppState: ObservableObject {
 
         // 秒开：已有车况快照时，先用上次数据把控车页渲染出来，
         // 授权校验与车况刷新全部在后台异步跑，不再阻塞首屏。
+#if CAKOCHE
+        // CAKOCHE「非白名单禁止登录」：绝不允许凭旧快照绕过网站授权校验。
+        // 快照只作为校验通过后的首屏数据，phase 必须等 verifyAccess 落定。
+        if let snapshot = SharedStore.loadStatusSnapshot() {
+            self.status = CarStatus(snapshot: snapshot)
+            self.statusUpdatedAt = snapshot.updatedAt
+            applyCarName()
+        }
+        Task { await verifyAccess(credentials, restoredSession: true) }
+#else
         if let snapshot = SharedStore.loadStatusSnapshot() {
             self.status = CarStatus(snapshot: snapshot)
             self.statusUpdatedAt = snapshot.updatedAt
@@ -104,6 +114,7 @@ final class AppState: ObservableObject {
             // 无快照（极少见，如快照被清）：走原有「先校验再进」流程，避免空壳闪烁
             Task { await verifyAccess(credentials, restoredSession: true) }
         }
+#endif
     }
 
     /// 登录后 / 恢复会话后校验授权（白名单 + 卡密）。
@@ -116,14 +127,29 @@ final class AppState: ObservableObject {
         do {
             let status = try await CardService.status(phone: credentials.phone)
             cardStatus = status
+#if CAKOCHE
+            // 严格白名单：只认网站 regular 正式用户。卡密体验 / 今日兑换 /
+            // 授权已撤销一律清凭据回登录页，绝不进入主界面或卡密网关。
+            guard status.isRegular else {
+                forceLogout(message: "该账号未在网站白名单内。CAKOCHE 仅限授权用户使用，请联系站主开通。")
+                return
+            }
+            phase = .ready
+#else
             if !status.authorized, restoredSession {
                 forceLogout(message: "登录已失效：体验权限已到期或授权已被撤销，请重新登录。")
                 return
             }
             phase = status.authorized ? .ready : .needsCard
+#endif
         } catch {
+#if CAKOCHE
+            // 校验不到就不放行，避免断网 / 接口异常绕过白名单
+            forceLogout(message: "无法验证网站授权，请联网后重试。CAKOCHE 仅限白名单用户使用。")
+#else
             // 权限接口异常不阻塞正常用户（服务端仍会二次校验关键操作）
             phase = .ready
+#endif
         }
         if phase == .ready {
             await reportUsage()
@@ -196,6 +222,16 @@ final class AppState: ObservableObject {
     /// 清凭据回登录页，并在登录页横幅展示原因（对齐网页版 revokedMask 的严格程度）。
     func recheckAccess() async {
         guard phase == .ready, let credentials else { return }
+#if CAKOCHE
+        // CAKOCHE：运行中每 60 秒 / 回前台复查，一旦不再属于白名单立即踢出。
+        if let status = try? await CardService.status(phone: credentials.phone), !status.isRegular {
+            forceLogout(message: "该账号已不在网站白名单内，已退出登录。")
+            return
+        }
+        if let ok = await CardService.authStatus(phone: credentials.phone, pin: credentials.pin), ok == false {
+            forceLogout(message: "账号授权已被撤销，请联系站主。")
+        }
+#else
         // 卡密到期（体验用户 24 小时）
         if let status = try? await CardService.status(phone: credentials.phone), !status.authorized {
             forceLogout(message: "体验权限已到期：\(status.message ?? "体验卡自激活起 24 小时有效，请重新输入卡密或联系站主开通。")")
@@ -205,6 +241,7 @@ final class AppState: ObservableObject {
         if let ok = await CardService.authStatus(phone: credentials.phone, pin: credentials.pin), ok == false {
             forceLogout(message: "账号已无法继续使用：当前账号的授权已被撤销，请重新登录或联系站主。")
         }
+#endif
     }
     // MARK: - iOS 16 小组件深链控车
 

@@ -17,6 +17,13 @@ struct CarRemoteApp: App {
 
     var body: some Scene {
         WindowGroup {
+#if CAKOCHE
+            // CAKOCHE：全新极简 UI + 强制网站白名单门禁，配色由 Mono 自行定义。
+            // 强制浅色，避免系统语义色在手机深色模式下擅自变暗造成割裂。
+            CakocheRootView()
+                .environmentObject(appState)
+                .preferredColorScheme(.light)
+#else
             AppearanceRoot()
                 .environmentObject(appState)
                 .environmentObject(themeManager)
@@ -51,6 +58,7 @@ struct CarRemoteApp: App {
                 } message: {
                     Text(appState.widgetCommandResult ?? "")
                 }
+#endif
         }
     }
 }
