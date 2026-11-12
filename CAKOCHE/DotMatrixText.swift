@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import CoreText
 
 /// 5×7 点阵字模。CAKOCHE 的识别符号：品牌字、数值、状态标签全部点阵化，
 /// 中文仍用系统黑体（点阵中文字模体积过大，且可读性差）。
@@ -139,11 +140,36 @@ struct BlockBar: View {
 
 // MARK: - 中文点阵（1.2.0）
 
-/// 把任意文字（中文/英文/数字）离屏渲染成位图，按 16×16 网格采样生成点阵。
-/// 无需手写字模，所有界面中文标签都能点阵化；结果按文本缓存。
+/// 把任意文字（中文/英文/数字）离屏渲染成位图，按 12×12 网格采样生成点阵。
+/// 1.2.1：改用「透明底 + 只读 alpha」——此前填不透明黑底再读 alpha，
+/// 黑底 alpha 也是 255，导致所有格子被判成点亮，中文糊成马赛克。
+/// 结果按文本缓存。
 enum DotCnGlyphCache {
-    static let rowsPerChar = 16
-    static let colsPerChar = 16
+    static let rowsPerChar = 12
+    static let colsPerChar = 12
+    private static let px = 144
+
+    /// 自探测位图内存行序：在用户坐标 y=0 画一个标记，
+    /// 看它落在内存第 0 行还是最后一行，从而确定字形行序是否需要翻转。
+    /// 避免依赖 CGBitmapContext 坐标系约定的记忆，真机上自行校准。
+    private static let needsRowFlip: Bool = {
+        let p = 8
+        guard let c = CGContext(
+            data: nil, width: p, height: p,
+            bitsPerComponent: 8, bytesPerRow: p * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ), let raw = c.data else { return true }
+        c.clear(CGRect(x: 0, y: 0, width: p, height: p))
+        c.setFillColor(UIColor.white.cgColor)
+        c.fill(CGRect(x: 0, y: 0, width: 2, height: 2))
+        let bytes = raw.assumingMemoryBound(to: UInt8.self)
+        let bpr = c.bytesPerRow
+        let first = bytes[0 * bpr + 3]
+        let last = bytes[(p - 1) * bpr + 3]
+        // 用户 y=0 落在内存第 0 行 → 字形顶部（y 大）在内存行大 → grid 需翻转
+        return first > 100 || last <= 100
+    }()
 
     private static let lock = NSLock()
     private static var cache: [String: [[[Bool]]]] = [:]
@@ -164,56 +190,70 @@ enum DotCnGlyphCache {
         return built
     }
 
-    /// 单字采样：渲染到 128×128 RGBA 位图，每格中心取 2×2 子样本多数表决
+    /// 单字采样：透明底绘制文字，只按 alpha 判断笔画是否被覆盖。
+    /// 文字颜色无关（透明底 alpha=0，笔画 alpha=255），不依赖颜色空间/翻转约定。
     private static func sampleCharacter(_ ch: Character) -> [[Bool]] {
-        let px = 128
-        guard let context = CGContext(
-            data: nil,
-            width: px, height: px,
+        let n = rowsPerChar
+        let blank = Array(repeating: Array(repeating: false, count: n), count: n)
+        guard let ctx = CGContext(
+            data: nil, width: px, height: px,
             bitsPerComponent: 8, bytesPerRow: px * 4,
             space: CGColorSpaceCreateDeviceRGB(),
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else {
-            return Array(repeating: Array(repeating: false, count: colsPerChar), count: rowsPerChar)
-        }
-        // 黑底白字，取 alpha 通道
-        context.setFillColor(UIColor.black.cgColor)
-        context.fill(CGRect(x: 0, y: 0, width: px, height: px))
-        UIGraphicsPushContext(context)
-        let font = UIFont.systemFont(ofSize: 108, weight: .medium)
-        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.white]
-        let s = String(ch) as NSString
-        let sz = s.size(withAttributes: attrs)
-        s.draw(at: CGPoint(x: (CGFloat(px) - sz.width) / 2,
-                           y: (CGFloat(px) - sz.height) / 2), withAttributes: attrs)
-        UIGraphicsPopContext()
+        ) else { return blank }
 
-        guard let data = context.makeImage()?.dataProvider?.data,
-              let bytes = CFDataGetBytePtr(data) else {
-            return Array(repeating: Array(repeating: false, count: colsPerChar), count: rowsPerChar)
-        }
-        // 注意：CoreGraphics 位图坐标 y 轴朝下渲染出的文字是倒的，
-        // 这里按行读取时翻转 y（grid 第 0 行 = 位图最后一行）
-        var grid = Array(repeating: Array(repeating: false, count: colsPerChar), count: rowsPerChar)
-        let cellW = CGFloat(px) / CGFloat(colsPerChar)
-        let cellH = CGFloat(px) / CGFloat(rowsPerChar)
-        for r in 0..<rowsPerChar {
-            for c in 0..<colsPerChar {
-                var onCount = 0
-                for sy in 0..<2 {
-                    for sx in 0..<2 {
-                        let x = Int(cellW * (CGFloat(c) + 0.25 + 0.5 * CGFloat(sx)))
-                        let ySrc = Int(cellH * (CGFloat(r) + 0.25 + 0.5 * CGFloat(sy)))
-                        // 翻转 y：UIKit 文字绘制在 CGContext 中 y 向下，
-                        // 我们的行 0 应对应位图顶部行 → 直接用 ySrc 即可（文字自身经 draw(at:) 已正向绘制）
-                        let idx = (ySrc * px + x) * 4 + 3
-                        guard idx >= 0, idx < CFDataGetLength(data) else { continue }
-                        if bytes[idx] > 100 { onCount += 1 }
+        // 关键：整张位图清成全透明，未绘制处 alpha = 0
+        ctx.clear(CGRect(x: 0, y: 0, width: px, height: px))
+
+        let font = UIFont.systemFont(ofSize: 112, weight: .medium)
+        let attr = NSAttributedString(
+            string: String(ch),
+            attributes: [.font: font, .foregroundColor: UIColor.white]
+        )
+        let line = CTLineCreateWithAttributedString(attr as CFAttributedString)
+        var ascent: CGFloat = 0, descent: CGFloat = 0, leading: CGFloat = 0
+        let advance = CTLineGetTypographicBounds(line, &ascent, &descent, &leading)
+        let glyphH = ascent + descent
+        let scale = min(CGFloat(px) * 0.88 / max(1, advance),
+                        CGFloat(px) * 0.88 / max(1, glyphH))
+        ctx.saveGState()
+        ctx.translateBy(x: (CGFloat(px) - advance * scale) / 2,
+                        y: (CGFloat(px) - glyphH * scale) / 2 + descent * scale)
+        ctx.scaleBy(x: scale, y: scale)
+        CTLineDraw(line, ctx)   // CoreText 字形 y 向上，方向确定
+        ctx.restoreGState()
+
+        guard let raw = ctx.data else { return blank }
+        let bytes = raw.assumingMemoryBound(to: UInt8.self)
+        let bpr = ctx.bytesPerRow
+        let totalBytes = px * bpr
+        let cell = CGFloat(px) / CGFloat(n)
+
+        // CGBitmapContext 内存第 0 行 = y=0 = 字形底部；
+        // grid 第 0 行是视觉顶部，故行序翻转。
+        var grid = Array(repeating: Array(repeating: false, count: n), count: n)
+        for r in 0..<n {
+            for c in 0..<n {
+                var on = 0
+                for sy in 0..<3 {
+                    for sx in 0..<3 {
+                        let fx = cell * (CGFloat(c) + 0.2 + 0.3 * CGFloat(sx))
+                        let fyTop = cell * (CGFloat(r) + 0.2 + 0.3 * CGFloat(sy))
+                        let ySrc = needsRowFlip ? (px - 1 - Int(fyTop)) : Int(fyTop)
+                        let x = Int(fx)
+                        guard ySrc >= 0, ySrc < px, x >= 0, x < px else { continue }
+                        let idx = ySrc * bpr + x * 4 + 3   // alpha 通道
+                        guard idx >= 0, idx + 3 < totalBytes else { continue }
+                        if bytes[idx] > 100 { on += 1 }
                     }
                 }
-                grid[r][c] = onCount >= 2
+                grid[r][c] = on >= 4
             }
         }
+
+        // 兜底：若几乎全亮，判定采样异常，宁可留空也不再糊成实心块
+        let lit = grid.reduce(0) { $0 + $1.filter { $0 }.count }
+        if lit > n * n * 7 / 10 { return blank }
         return grid
     }
 }
@@ -228,8 +268,8 @@ struct DotCnText: View {
     var gapRatio: CGFloat = 0.22
     /// 提供时按此宽度折行（多行绘制）
     var wrapWidth: CGFloat? = nil
-    /// 折行时的水平对齐
-    var wrapAlignment: HorizontalAlignment = .center
+    /// 折行时的水平对齐（自动折行的长说明句默认左对齐）
+    var wrapAlignment: HorizontalAlignment = .leading
 
     private var unit: CGFloat { size / CGFloat(DotCnGlyphCache.rowsPerChar) }
     private var step: CGFloat { unit * (1 + gapRatio) }
@@ -244,19 +284,26 @@ struct DotCnText: View {
         CGFloat(chars.count) * charWidth + CGFloat(max(0, chars.count - 1)) * charGap
     }
     private var lineH: CGFloat { CGFloat(DotCnGlyphCache.rowsPerChar) * step }
+    private var lineAdvance: CGFloat { lineH + step * 0.5 }
+
+    /// 1.2.1：未显式指定 wrapWidth 时，超过安全宽度（小屏可用区）自动折行，
+    /// 避免长句单行绘制被屏幕右缘裁掉。
+    private var effectiveWrap: CGFloat? {
+        if let wrapWidth { return wrapWidth }
+        return singleLineWidth > 330 ? 330 : nil
+    }
 
     /// 折行布局：返回每行 [字符下标]
     private var lines: [[Int]] {
-        guard let wrapWidth, wrapWidth > charWidth else { return [Array(0..<chars.count)] }
+        guard let wrap = effectiveWrap, wrap > charWidth else { return [Array(0..<chars.count)] }
         var result: [[Int]] = []
         var current: [Int] = []
         var x: CGFloat = 0
         for i in 0..<chars.count {
             let w = charWidth + (current.isEmpty ? 0 : charGap)
-            if x + w > wrapWidth, !current.isEmpty {
+            if x + w > wrap, !current.isEmpty {
                 result.append(current)
                 current = []
-                x = 0
                 x = charWidth
             } else {
                 x += w
@@ -267,21 +314,23 @@ struct DotCnText: View {
         return result
     }
 
-    private var totalWidth: CGFloat { wrapWidth ?? singleLineWidth }
-    private var totalHeight: CGFloat { CGFloat(lines.count) * lineH }
+    private var totalWidth: CGFloat { effectiveWrap ?? singleLineWidth }
+    /// 行距大于行高，末行底部也要算进去，否则多行最后一行被裁
+    private var totalHeight: CGFloat {
+        CGFloat(max(0, lines.count - 1)) * lineAdvance + lineH
+    }
 
     var body: some View {
         Canvas { context, _ in
             let layout = lines
-            let lineAdvance = lineH + step * 0.5
             for (li, line) in layout.enumerated() {
                 let lineWidth = CGFloat(line.count) * charWidth + CGFloat(max(0, line.count - 1)) * charGap
                 let originX: CGFloat = {
-                    if let wrapWidth {
+                    if let wrap = effectiveWrap {
                         switch wrapAlignment {
                         case .leading: return 0
-                        case .trailing: return wrapWidth - lineWidth
-                        default: return (wrapWidth - lineWidth) / 2
+                        case .trailing: return wrap - lineWidth
+                        default: return (wrap - lineWidth) / 2
                         }
                     }
                     return 0

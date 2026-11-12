@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import CoreText
 
 /// CAKOCHE 小组件专用配色：与 App 内 Mono 完全一致（低饱和黑白 + 唯一红）。
 /// 小组件进程不编译 CAKOCHE/ 目录，这里独立定义一份，值保持同步。
@@ -91,10 +92,30 @@ struct WidgetDotText: View {
 }
 
 // MARK: - 中文点阵（与 App 内 DotCnText 同实现，小组件进程独立编译）
-
+// 1.2.1：透明底 + 只读 alpha，修复不透明黑底导致的全亮马赛克；16×16 → 12×12。
 enum WidgetDotCnCache {
-    static let rowsPerChar = 16
-    static let colsPerChar = 16
+    static let rowsPerChar = 12
+    static let colsPerChar = 12
+    private static let px = 144
+
+    /// 自探测位图内存行序，避免中文上下颠倒（真机自行校准）
+    private static let needsRowFlip: Bool = {
+        let p = 8
+        guard let c = CGContext(
+            data: nil, width: p, height: p,
+            bitsPerComponent: 8, bytesPerRow: p * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ), let raw = c.data else { return true }
+        c.clear(CGRect(x: 0, y: 0, width: p, height: p))
+        c.setFillColor(UIColor.white.cgColor)
+        c.fill(CGRect(x: 0, y: 0, width: 2, height: 2))
+        let bytes = raw.assumingMemoryBound(to: UInt8.self)
+        let bpr = c.bytesPerRow
+        let first = bytes[0 * bpr + 3]
+        let last = bytes[(p - 1) * bpr + 3]
+        return first > 100 || last <= 100
+    }()
 
     private static let lock = NSLock()
     private static var cache: [String: [[[Bool]]]] = [:]
@@ -115,48 +136,68 @@ enum WidgetDotCnCache {
     }
 
     private static func sampleCharacter(_ ch: Character) -> [[Bool]] {
-        let px = 128
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1
-        format.opaque = true
-        let img = UIGraphicsImageRenderer(size: CGSize(width: px, height: px), format: format).image { ctx in
-            UIColor.black.setFill()
-            ctx.fill(CGRect(x: 0, y: 0, width: px, height: px))
-            UIColor.white.setFill()
-            let font = UIFont.systemFont(ofSize: 108, weight: .medium)
-            let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.white]
-            let s = String(ch) as NSString
-            let sz = s.size(withAttributes: attrs)
-            s.draw(at: CGPoint(x: (CGFloat(px) - sz.width) / 2,
-                               y: (CGFloat(px) - sz.height) / 2), withAttributes: attrs)
-        }
-        guard let data = img.cgImage?.dataProvider?.data,
-              let bytes = CFDataGetBytePtr(data) else {
-            return Array(repeating: Array(repeating: false, count: colsPerChar), count: rowsPerChar)
-        }
-        var grid = Array(repeating: Array(repeating: false, count: colsPerChar), count: rowsPerChar)
-        let cellW = CGFloat(px) / CGFloat(colsPerChar)
-        let cellH = CGFloat(px) / CGFloat(rowsPerChar)
-        for r in 0..<rowsPerChar {
-            for c in 0..<colsPerChar {
-                var onCount = 0
-                for sy in 0..<2 {
-                    for sx in 0..<2 {
-                        let x = Int(cellW * (CGFloat(c) + 0.25 + 0.5 * CGFloat(sx)))
-                        let y = Int(cellH * (CGFloat(r) + 0.25 + 0.5 * CGFloat(sy)))
-                        let idx = (y * px + x) * 4 + 3
-                        guard idx >= 0, idx < CFDataGetLength(data) else { continue }
-                        if bytes[idx] > 100 { onCount += 1 }
+        let n = rowsPerChar
+        let blank = Array(repeating: Array(repeating: false, count: n), count: n)
+        guard let ctx = CGContext(
+            data: nil, width: px, height: px,
+            bitsPerComponent: 8, bytesPerRow: px * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return blank }
+
+        ctx.clear(CGRect(x: 0, y: 0, width: px, height: px))
+
+        let font = UIFont.systemFont(ofSize: 112, weight: .medium)
+        let attr = NSAttributedString(
+            string: String(ch),
+            attributes: [.font: font, .foregroundColor: UIColor.white]
+        )
+        let line = CTLineCreateWithAttributedString(attr as CFAttributedString)
+        var ascent: CGFloat = 0, descent: CGFloat = 0, leading: CGFloat = 0
+        let advance = CTLineGetTypographicBounds(line, &ascent, &descent, &leading)
+        let glyphH = ascent + descent
+        let scale = min(CGFloat(px) * 0.88 / max(1, advance),
+                        CGFloat(px) * 0.88 / max(1, glyphH))
+        ctx.saveGState()
+        ctx.translateBy(x: (CGFloat(px) - advance * scale) / 2,
+                        y: (CGFloat(px) - glyphH * scale) / 2 + descent * scale)
+        ctx.scaleBy(x: scale, y: scale)
+        CTLineDraw(line, ctx)
+        ctx.restoreGState()
+
+        guard let raw = ctx.data else { return blank }
+        let bytes = raw.assumingMemoryBound(to: UInt8.self)
+        let bpr = ctx.bytesPerRow
+        let totalBytes = px * bpr
+        let cell = CGFloat(px) / CGFloat(n)
+
+        var grid = Array(repeating: Array(repeating: false, count: n), count: n)
+        for r in 0..<n {
+            for c in 0..<n {
+                var on = 0
+                for sy in 0..<3 {
+                    for sx in 0..<3 {
+                        let fx = cell * (CGFloat(c) + 0.2 + 0.3 * CGFloat(sx))
+                        let fyTop = cell * (CGFloat(r) + 0.2 + 0.3 * CGFloat(sy))
+                        let ySrc = needsRowFlip ? (px - 1 - Int(fyTop)) : Int(fyTop)
+                        let x = Int(fx)
+                        guard ySrc >= 0, ySrc < px, x >= 0, x < px else { continue }
+                        let idx = ySrc * bpr + x * 4 + 3
+                        guard idx >= 0, idx + 3 < totalBytes else { continue }
+                        if bytes[idx] > 100 { on += 1 }
                     }
                 }
-                grid[r][c] = onCount >= 2
+                grid[r][c] = on >= 4
             }
         }
+
+        let lit = grid.reduce(0) { $0 + $1.filter { $0 }.count }
+        if lit > n * n * 7 / 10 { return blank }
         return grid
     }
 }
 
-/// 中文点阵文本（小组件版）：任意文字可用
+/// 中文点阵文本（小组件版）：任意文字可用；超过小号组件安全宽度自动折行
 struct WidgetDotCnText: View {
     let text: String
     var size: CGFloat = 9
@@ -172,27 +213,60 @@ struct WidgetDotCnText: View {
     private var chars: [Character] { Array(text) }
     private var grids: [[[Bool]]] { WidgetDotCnCache.grids(for: text) }
 
-    private var totalWidth: CGFloat {
+    private var singleLineWidth: CGFloat {
         CGFloat(chars.count) * charWidth + CGFloat(max(0, chars.count - 1)) * charGap
     }
-    private var totalHeight: CGFloat { CGFloat(WidgetDotCnCache.rowsPerChar) * step }
+    private var lineH: CGFloat { CGFloat(WidgetDotCnCache.rowsPerChar) * step }
+    private var lineAdvance: CGFloat { lineH + step * 0.5 }
+    /// 小号小组件可用宽约 132pt，超出即折行，避免被裁
+    private var effectiveWrap: CGFloat? { singleLineWidth > 132 ? 132 : nil }
+
+    private var lines: [[Int]] {
+        guard let wrap = effectiveWrap, wrap > charWidth else { return [Array(0..<chars.count)] }
+        var result: [[Int]] = []
+        var current: [Int] = []
+        var x: CGFloat = 0
+        for i in 0..<chars.count {
+            let w = charWidth + (current.isEmpty ? 0 : charGap)
+            if x + w > wrap, !current.isEmpty {
+                result.append(current)
+                current = []
+                x = charWidth
+            } else {
+                x += w
+            }
+            current.append(i)
+        }
+        if !current.isEmpty { result.append(current) }
+        return result
+    }
+
+    private var totalWidth: CGFloat { effectiveWrap ?? singleLineWidth }
+    private var totalHeight: CGFloat {
+        CGFloat(max(0, lines.count - 1)) * lineAdvance + lineH
+    }
 
     var body: some View {
         Canvas { context, _ in
-            for (idx, grid) in grids.enumerated() {
-                let baseX = CGFloat(idx) * (charWidth + charGap)
-                for (row, rowBits) in grid.enumerated() {
-                    for (col, on) in rowBits.enumerated() where on {
-                        let rect = CGRect(
-                            x: baseX + CGFloat(col) * step,
-                            y: CGFloat(row) * step,
-                            width: dot,
-                            height: dot
-                        )
-                        context.fill(
-                            Path(roundedRect: rect, cornerRadius: dot * 0.16),
-                            with: .color(color)
-                        )
+            let layout = lines
+            for (li, line) in layout.enumerated() {
+                for (pos, charIdx) in line.enumerated() where charIdx < grids.count {
+                    let grid = grids[charIdx]
+                    let baseX = CGFloat(pos) * (charWidth + charGap)
+                    let baseY = CGFloat(li) * lineAdvance
+                    for (row, rowBits) in grid.enumerated() {
+                        for (col, on) in rowBits.enumerated() where on {
+                            let rect = CGRect(
+                                x: baseX + CGFloat(col) * step,
+                                y: baseY + CGFloat(row) * step,
+                                width: dot,
+                                height: dot
+                            )
+                            context.fill(
+                                Path(roundedRect: rect, cornerRadius: dot * 0.16),
+                                with: .color(color)
+                            )
+                        }
                     }
                 }
             }

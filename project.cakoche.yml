@@ -39,8 +39,8 @@ targets:
         INFOPLIST_FILE: CAKOCHE/Info.plist
         CODE_SIGN_ENTITLEMENTS: CAKOCHE/CAKOCHE.entitlements
         # CAKOCHE 版本号单独从 1.0.0 起算，不接正式版 1.10.0
-        MARKETING_VERSION: "1.2.0"
-        CURRENT_PROJECT_VERSION: "3"
+        MARKETING_VERSION: "1.2.1"
+        CURRENT_PROJECT_VERSION: "4"
         # 唯一开关：所有 #if CAKOCHE 分支由此生效
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: CAKOCHE
         CODE_SIGN_IDENTITY: "iPhone Distribution: Akbahri Naquibullah (7NSH43RT4Z)"
@@ -72,8 +72,8 @@ targets:
         PRODUCT_NAME: CAKOCHEWidget
         INFOPLIST_FILE: CAKOCHEWidget/Info.plist
         CODE_SIGN_ENTITLEMENTS: CAKOCHEWidget/CakocheWidget.entitlements
-        MARKETING_VERSION: "1.2.0"
-        CURRENT_PROJECT_VERSION: "3"
+        MARKETING_VERSION: "1.2.1"
+        CURRENT_PROJECT_VERSION: "4"
         CODE_SIGN_IDENTITY: "iPhone Distribution: Akbahri Naquibullah (7NSH43RT4Z)"
         CODE_SIGNING_ALLOWED: NO
         CODE_SIGNING_REQUIRED: NO
