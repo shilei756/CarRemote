@@ -123,15 +123,14 @@ enum CakocheWidgetRunner {
         CakocheWidgetLocalStore.saveCredentials(credentials)
     }
 
-    // MARK: 防误触（与正式版 WidgetGuard 同思路：高危指令 8 秒内点两次才真正下发）
+    // MARK: 防误触（1.2.0：所有指令都需 8 秒内点两次才真正下发）
 
     private static let pendingKey = "cakoche.widget.pendingCommand"
     private static let pendingAtKey = "cakoche.widget.pendingAt"
     private static let window: TimeInterval = 8
 
-    /// 返回提示文案 = 本次点按被拦截（第一次点按），nil = 放行（第二次点按或非高危指令）
+    /// 返回提示文案 = 本次点按被拦截（第一次点按），nil = 放行（第二次点按）
     static func registerTap(command: CarCommand) -> String? {
-        guard command.isDangerous else { return nil }
         let defaults = UserDefaults.standard
         let pending = defaults.string(forKey: pendingKey)
         let at = defaults.double(forKey: pendingAtKey)
@@ -143,7 +142,7 @@ enum CakocheWidgetRunner {
         }
         defaults.set(command.rawValue, forKey: pendingKey)
         defaults.set(Date().timeIntervalSince1970, forKey: pendingAtKey)
-        return "高危指令，请再点一次确认"
+        return "请再点一次确认"
     }
 
     static func pendingCommand() -> CarCommand? {
@@ -175,6 +174,28 @@ enum CakocheWidgetRunner {
               let action = try? JSONDecoder().decode(LastAction.self, from: data),
               Date().timeIntervalSince(action.at) < 35 else { return nil }
         return action
+    }
+
+    // MARK: 5 槽自定义按钮配置（App「我的 → 小组件按钮」里配置）
+
+    /// 槽位指令兜底链：设置通道 → 快照携带 → 默认
+    static func resolvedCommands() -> [CarCommand?] {
+        var raws = SharedStore.loadSettings().widgetCommands
+        if raws.count != 5 {
+            raws = SharedStore.loadStatusSnapshot()?.widgetCommands ?? []
+        }
+        if raws.count != 5 {
+            raws = Array(CarModelStyle.defaultWidgetCommands.prefix(5))
+            while raws.count < 5 { raws.append(CarCommand.remoteSearchCar.rawValue) }
+        }
+        return raws.prefix(5).map { CarCommand(rawValue: $0) }
+    }
+
+    @MainActor
+    static func perform(slot: Int) async -> String {
+        let commands = resolvedCommands()
+        let command = slot >= 1 && slot <= commands.count ? commands[slot - 1] ?? CarCommand.remoteSearchCar : nil
+        return await perform(command: command)
     }
 
     // MARK: 执行入口

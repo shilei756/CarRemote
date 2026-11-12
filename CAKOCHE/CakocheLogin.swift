@@ -18,8 +18,7 @@ struct CakocheLoginView: View {
                     Spacer(minLength: 74)
 
                     DotMatrixText(text: "CAKOCHE", size: 30, color: Mono.nightInk)
-                    Text("长安 · 远程控车").font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Mono.nightDim)
+                    DotCnText(text: "长安 · 远程控车", size: 9, color: Mono.nightDim)
                         .padding(.top, 10)
                     Hairline(color: Mono.nightHair).padding(.top, 28)
 
@@ -33,11 +32,10 @@ struct CakocheLoginView: View {
 
                     if let message = appState.errorMessage, !message.isEmpty {
                         HStack(alignment: .top, spacing: 9) {
-                            Rectangle().fill(Mono.red).frame(width: 2, height: 32)
-                            Text(message)
-                                .font(.system(size: 12))
-                                .foregroundStyle(Mono.nightInk)
-                                .fixedSize(horizontal: false, vertical: true)
+                            Rectangle().fill(Mono.red).frame(width: 2)
+                            DotCnText(text: message, size: 9, color: Mono.nightInk,
+                                      wrapWidth: 290, wrapAlignment: .leading)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .padding(.top, 22)
                     }
@@ -46,9 +44,7 @@ struct CakocheLoginView: View {
                         Task { await submit() }
                     } label: {
                         HStack(spacing: 10) {
-                            Text(busy ? "校验中" : "登录")
-                                .font(.system(size: 16, weight: .semibold))
-                                .tracking(6)
+                            DotCnText(text: busy ? "校 验 中" : "登 录", size: 13, color: Mono.night)
                             Spacer()
                             Image(systemName: "arrow.right")
                                 .font(.system(size: 15, weight: .semibold))
@@ -66,16 +62,14 @@ struct CakocheLoginView: View {
 
                     HStack(spacing: 7) {
                         Circle().fill(Mono.red).frame(width: 5, height: 5)
-                        Text("仅限网站白名单用户 · 非授权账号禁止登录")
-                            .font(.system(size: 11))
-                            .foregroundStyle(Mono.nightDim)
+                        DotCnText(text: "仅限网站白名单用户 · 非授权账号禁止登录",
+                                  size: 8, color: Mono.nightDim)
                     }
                     .padding(.top, 20)
 
-                    Text("账号、控车码与车辆授权均由站主网站统一校验，本 App 不提供注册入口。")
-                        .font(.system(size: 10))
-                        .foregroundStyle(Mono.nightDim)
-                        .fixedSize(horizontal: false, vertical: true)
+                    DotCnText(text: "账号、控车码与车辆授权均由站主网站统一校验，本 App 不提供注册入口。",
+                              size: 8, color: Mono.nightDim, wrapAlignment: .leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.top, 9)
 
                     Spacer(minLength: 48)
@@ -90,10 +84,7 @@ struct CakocheLoginView: View {
     private func field(title: String, placeholder: String, text: Binding<String>,
                        keyboard: UIKeyboardType = .default, secure: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 9) {
-            Text(title)
-                .font(.system(size: 10, weight: .medium))
-                .tracking(3)
-                .foregroundStyle(Mono.nightDim)
+            DotCnText(text: title, size: 8, color: Mono.nightDim)
             Group {
                 if secure {
                     SecureField(placeholder, text: text)

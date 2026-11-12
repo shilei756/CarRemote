@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// 5×7 点阵字模。CAKOCHE 的识别符号：品牌字、数值、状态标签全部点阵化，
 /// 中文仍用系统黑体（点阵中文字模体积过大，且可读性差）。
@@ -82,6 +83,11 @@ struct DotMatrixText: View {
     private var totalWidth: CGFloat {
         CGFloat(chars.count) * charWidth + CGFloat(max(0, chars.count - 1)) * charGap
     }
+    /// 1.2.0：绘制实际高度是 7 行 × step（约 1.22 倍 size），
+    /// 之前 frame 只给 size 导致最后一行点被裁掉（续航/温度数字上下缺点）。
+    private var totalHeight: CGFloat {
+        CGFloat(DotGlyph.rows) * step
+    }
 
     var body: some View {
         Canvas { context, _ in
@@ -104,7 +110,7 @@ struct DotMatrixText: View {
                 }
             }
         }
-        .frame(width: max(1, totalWidth), height: size)
+        .frame(width: max(1, totalWidth), height: totalHeight)
         .accessibilityLabel(Text(text))
     }
 }
@@ -128,5 +134,239 @@ struct BlockBar: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - 中文点阵（1.2.0）
+
+/// 把任意文字（中文/英文/数字）离屏渲染成位图，按 16×16 网格采样生成点阵。
+/// 无需手写字模，所有界面中文标签都能点阵化；结果按文本缓存。
+enum DotCnGlyphCache {
+    static let rowsPerChar = 16
+    static let colsPerChar = 16
+
+    private static let lock = NSLock()
+    private static var cache: [String: [[[Bool]]]] = [:]
+
+    /// 返回整串每个字的点阵（ [[[Bool]]] = [字][行][列] ）
+    static func grids(for text: String) -> [[[Bool]]] {
+        lock.lock()
+        if let hit = cache[text] {
+            lock.unlock()
+            return hit
+        }
+        lock.unlock()
+        let built = text.map { sampleCharacter($0) }
+        lock.lock()
+        if cache.count > 400 { cache.removeAll(keepingCapacity: true) }
+        cache[text] = built
+        lock.unlock()
+        return built
+    }
+
+    /// 单字采样：渲染到 128×128 RGBA 位图，每格中心取 2×2 子样本多数表决
+    private static func sampleCharacter(_ ch: Character) -> [[Bool]] {
+        let px = 128
+        guard let context = CGContext(
+            data: nil,
+            width: px, height: px,
+            bitsPerComponent: 8, bytesPerRow: px * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return Array(repeating: Array(repeating: false, count: colsPerChar), count: rowsPerChar)
+        }
+        // 黑底白字，取 alpha 通道
+        context.setFillColor(UIColor.black.cgColor)
+        context.fill(CGRect(x: 0, y: 0, width: px, height: px))
+        UIGraphicsPushContext(context)
+        let font = UIFont.systemFont(ofSize: 108, weight: .medium)
+        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.white]
+        let s = String(ch) as NSString
+        let sz = s.size(withAttributes: attrs)
+        s.draw(at: CGPoint(x: (CGFloat(px) - sz.width) / 2,
+                           y: (CGFloat(px) - sz.height) / 2), withAttributes: attrs)
+        UIGraphicsPopContext()
+
+        guard let data = context.makeImage()?.dataProvider?.data,
+              let bytes = CFDataGetBytePtr(data) else {
+            return Array(repeating: Array(repeating: false, count: colsPerChar), count: rowsPerChar)
+        }
+        // 注意：CoreGraphics 位图坐标 y 轴朝下渲染出的文字是倒的，
+        // 这里按行读取时翻转 y（grid 第 0 行 = 位图最后一行）
+        var grid = Array(repeating: Array(repeating: false, count: colsPerChar), count: rowsPerChar)
+        let cellW = CGFloat(px) / CGFloat(colsPerChar)
+        let cellH = CGFloat(px) / CGFloat(rowsPerChar)
+        for r in 0..<rowsPerChar {
+            for c in 0..<colsPerChar {
+                var onCount = 0
+                for sy in 0..<2 {
+                    for sx in 0..<2 {
+                        let x = Int(cellW * (CGFloat(c) + 0.25 + 0.5 * CGFloat(sx)))
+                        let ySrc = Int(cellH * (CGFloat(r) + 0.25 + 0.5 * CGFloat(sy)))
+                        // 翻转 y：UIKit 文字绘制在 CGContext 中 y 向下，
+                        // 我们的行 0 应对应位图顶部行 → 直接用 ySrc 即可（文字自身经 draw(at:) 已正向绘制）
+                        let idx = (ySrc * px + x) * 4 + 3
+                        guard idx >= 0, idx < CFDataGetLength(data) else { continue }
+                        if bytes[idx] > 100 { onCount += 1 }
+                    }
+                }
+                grid[r][c] = onCount >= 2
+            }
+        }
+        return grid
+    }
+}
+
+/// 中文点阵文本视图：视觉与 DotMatrixText 完全同风格（同 gapRatio / 圆角点）。
+/// `size` 为字高（pt）；任意文字可用，标签、按钮、长句都走这里。
+/// 传 `wrapWidth` 时按该宽度自动折行（所有字符等宽，折行计算精确）。
+struct DotCnText: View {
+    let text: String
+    var size: CGFloat = 12
+    var color: Color = Mono.paperInk
+    var gapRatio: CGFloat = 0.22
+    /// 提供时按此宽度折行（多行绘制）
+    var wrapWidth: CGFloat? = nil
+    /// 折行时的水平对齐
+    var wrapAlignment: HorizontalAlignment = .center
+
+    private var unit: CGFloat { size / CGFloat(DotCnGlyphCache.rowsPerChar) }
+    private var step: CGFloat { unit * (1 + gapRatio) }
+    private var dot: CGFloat { unit * (1 - gapRatio * 0.45) }
+    private var charWidth: CGFloat { CGFloat(DotCnGlyphCache.colsPerChar) * step }
+    private var charGap: CGFloat { step * 0.55 }
+
+    private var chars: [Character] { Array(text) }
+    private var grids: [[[Bool]]] { DotCnGlyphCache.grids(for: text) }
+
+    private var singleLineWidth: CGFloat {
+        CGFloat(chars.count) * charWidth + CGFloat(max(0, chars.count - 1)) * charGap
+    }
+    private var lineH: CGFloat { CGFloat(DotCnGlyphCache.rowsPerChar) * step }
+
+    /// 折行布局：返回每行 [字符下标]
+    private var lines: [[Int]] {
+        guard let wrapWidth, wrapWidth > charWidth else { return [Array(0..<chars.count)] }
+        var result: [[Int]] = []
+        var current: [Int] = []
+        var x: CGFloat = 0
+        for i in 0..<chars.count {
+            let w = charWidth + (current.isEmpty ? 0 : charGap)
+            if x + w > wrapWidth, !current.isEmpty {
+                result.append(current)
+                current = []
+                x = 0
+                x = charWidth
+            } else {
+                x += w
+            }
+            current.append(i)
+        }
+        if !current.isEmpty { result.append(current) }
+        return result
+    }
+
+    private var totalWidth: CGFloat { wrapWidth ?? singleLineWidth }
+    private var totalHeight: CGFloat { CGFloat(lines.count) * lineH }
+
+    var body: some View {
+        Canvas { context, _ in
+            let layout = lines
+            let lineAdvance = lineH + step * 0.5
+            for (li, line) in layout.enumerated() {
+                let lineWidth = CGFloat(line.count) * charWidth + CGFloat(max(0, line.count - 1)) * charGap
+                let originX: CGFloat = {
+                    if let wrapWidth {
+                        switch wrapAlignment {
+                        case .leading: return 0
+                        case .trailing: return wrapWidth - lineWidth
+                        default: return (wrapWidth - lineWidth) / 2
+                        }
+                    }
+                    return 0
+                }()
+                for (pos, charIdx) in line.enumerated() where charIdx < grids.count {
+                    let grid = grids[charIdx]
+                    let baseX = originX + CGFloat(pos) * (charWidth + charGap)
+                    let baseY = CGFloat(li) * lineAdvance
+                    for (row, rowBits) in grid.enumerated() {
+                        for (col, on) in rowBits.enumerated() where on {
+                            let rect = CGRect(
+                                x: baseX + CGFloat(col) * step,
+                                y: baseY + CGFloat(row) * step,
+                                width: dot,
+                                height: dot
+                            )
+                            context.fill(
+                                Path(roundedRect: rect, cornerRadius: dot * 0.16),
+                                with: .color(color)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        .frame(width: max(1, totalWidth), height: totalHeight)
+        .accessibilityLabel(Text(text))
+    }
+}
+
+/// 跃动油量条（1.2.0）：密集小方块网格，点亮比例 = 油量，
+/// 点亮区每列高度随机波动、密度随机闪烁，呈现均衡器式的上下跃动效果。
+struct FuelDotBar: View {
+    var progress: Double
+    var rows: Int = 7
+    var color: Color = Mono.paperInk
+    var dim: Color = Mono.paperHair
+    /// 闪烁节奏（秒）
+    var tickInterval: Double = 0.14
+
+    private func hash(_ a: Int, _ b: Int, _ c: Int) -> Int {
+        var h = a &* 2654435761 &+ b &* 40503 &+ c &* 97
+        h ^= h >> 13; h = h &* 1274126177; h ^= h >> 16
+        return abs(h)
+    }
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: tickInterval)) { timeline in
+            Canvas { ctx, size in
+                let t = Int(timeline.date.timeIntervalSinceReferenceDate / tickInterval)
+                let cell = (size.height / CGFloat(rows)).rounded(.down)
+                guard cell >= 1 else { return }
+                let gap: CGFloat = 1
+                let advance = cell + gap
+                let cols = max(8, Int((size.width + gap) / advance))
+                let p = max(0, min(1, progress))
+                let litCols = Int(Double(cols) * p)
+                for c in 0..<cols {
+                    let lit = c < litCols
+                    // 点亮列高度：整体满高，随机 0~2 行波动 + 前沿 2 列多波动 → 上下跃动
+                    var jitter = 0
+                    if lit {
+                        let near = hash(c, 7, t / 3) % 100
+                        if near < 14 { jitter = 1 }
+                        if near < 4 { jitter = 2 }
+                        if litCols - c <= 2 { jitter += hash(c, 11, t) % 2 }
+                    }
+                    let litRows = max(0, rows - jitter)
+                    for r in 0..<rows {
+                        let on: Bool
+                        if !lit {
+                            on = false
+                        } else if r >= litRows {
+                            on = hash(c, r, t) % 100 < 22   // 波动掉的行里零星散点闪烁
+                        } else {
+                            on = hash(c, r, t) % 100 < 86   // 点亮区随机闪烁
+                        }
+                        let rect = CGRect(x: CGFloat(c) * advance, y: CGFloat(r) * advance,
+                                          width: cell, height: cell)
+                        ctx.fill(Path(roundedRect: rect, cornerRadius: cell * 0.22),
+                                 with: .color(on ? color : dim))
+                    }
+                }
+            }
+        }
+        .accessibilityLabel(Text("油量 \(Int(progress * 100))%"))
     }
 }

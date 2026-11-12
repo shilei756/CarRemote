@@ -28,7 +28,7 @@ struct CakocheSplash: View {
             VStack(spacing: 18) {
                 DotMatrixText(text: "CAKOCHE", size: 26, color: Mono.nightInk)
                 ProgressView().tint(Mono.nightInk)
-                Text("正在验证网站授权").font(.system(size: 10)).foregroundStyle(Mono.nightDim)
+                DotCnText(text: "正在验证网站授权", size: 9, color: Mono.nightDim)
             }
         }
         .preferredColorScheme(.dark)
@@ -68,7 +68,7 @@ struct CakocheHome: View {
 
                 VStack(spacing: 0) {
                     if let receipt = control.receipt {
-                        receiptView(receipt)
+                        receiptView(receipt, availableWidth: geo.size.width - 130)
                     }
                     Hairline(color: Mono.paperHair)
                     bottomBar
@@ -136,14 +136,12 @@ struct CakocheHome: View {
         .padding(.top, 16)
     }
 
-    /// 1.1.0：中文化视角切换。点阵不支持中文，改用宽字距黑体保持克制观感。
+    /// 1.2.0：视角切换点阵化
     private func viewButton(_ title: String, _ on: Bool, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(spacing: 5) {
-                Text(title)
-                    .font(.system(size: 11, weight: .medium))
-                    .tracking(2)
-                    .foregroundStyle(on ? Mono.paperInk : Mono.paperHair)
+                DotCnText(text: title, size: 10,
+                          color: on ? Mono.paperInk : Mono.paperHair)
                 Rectangle()
                     .fill(on ? Mono.red : Color.clear)
                     .frame(width: 18, height: 2)
@@ -182,32 +180,26 @@ struct CakocheHome: View {
             HStack(alignment: .bottom, spacing: 12) {
                 DotMatrixText(text: rangeText, size: 56, color: Mono.paperInk)
                     .fixedSize()
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 VStack(alignment: .leading, spacing: 3) {
                     DotMatrixText(text: "KM", size: 11, color: Mono.paperDim)
-                    Text("剩余续航").font(.system(size: 10)).foregroundStyle(Mono.paperDim)
+                    DotCnText(text: "剩余续航", size: 9, color: Mono.paperDim)
                 }
                 .padding(.bottom, 6)
                 Spacer()
                 VStack(alignment: .trailing, spacing: 5) {
-                    Text("总里程")
-                        .font(.system(size: 9, weight: .medium))
-                        .tracking(1.5)
-                        .foregroundStyle(Mono.paperDim)
+                    DotCnText(text: "总里程", size: 8, color: Mono.paperDim)
                     Text(odoText)
                         .font(.system(size: 14, weight: .semibold).monospacedDigit())
                         .foregroundStyle(Mono.paperInk)
                 }
                 .padding(.bottom, 6)
             }
-            BlockBar(progress: fuelProgress, blocks: 30,
-                     color: Mono.paperInk, dim: Mono.paperHair)
-                .frame(height: 5)
-            HStack {
-                Text("油量")
-                    .font(.system(size: 10, weight: .medium))
-                    .tracking(2)
-                    .foregroundStyle(Mono.paperDim)
+            // 1.2.0：跃动油量条（密集点阵网格，点亮区随机跃动闪烁）
+            FuelDotBar(progress: fuelProgress, rows: 7,
+                       color: Mono.paperInk, dim: Mono.paperHair)
+                .frame(height: 34)
+            HStack(alignment: .center) {
+                DotCnText(text: "油量", size: 8, color: Mono.paperDim)
                 Spacer()
                 Text(fuelText)
                     .font(.system(size: 10).monospacedDigit())
@@ -235,15 +227,9 @@ struct CakocheHome: View {
                       spacing: 16) {
                 ForEach(items.indices, id: \.self) { i in
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(items[i].key)
-                            .font(.system(size: 9, weight: .medium))
-                            .tracking(1.5)
-                            .foregroundStyle(Mono.paperDim)
-                        Text(items[i].value)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(items[i].alarm ? Mono.red : Mono.paperInk)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
+                        DotCnText(text: items[i].key, size: 8, color: Mono.paperDim)
+                        DotCnText(text: items[i].value, size: 11,
+                                  color: items[i].alarm ? Mono.red : Mono.paperInk)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -255,21 +241,15 @@ struct CakocheHome: View {
 
     // MARK: 底部回执 + 控车把手
 
-    private func receiptView(_ r: CakocheReceipt) -> some View {
+    private func receiptView(_ r: CakocheReceipt, availableWidth: CGFloat) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: r.ok ? "checkmark" : "xmark")
                 .font(.system(size: 10, weight: .bold))
                 .foregroundStyle(r.ok ? Mono.paperInk : Mono.red)
-                .padding(.top, 2)
-            Text("\(r.command) · \(r.detail)")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Mono.paperInk)
-                // 1.1.0：失败原因可能较长，允许换行两行并自动缩小，不再被截断
-                .fixedSize(horizontal: false, vertical: true)
-                .lineLimit(2)
-                .minimumScaleFactor(0.8)
-                .multilineTextAlignment(.leading)
-            Spacer(minLength: 8)
+                .padding(.top, 3)
+            DotCnText(text: "\(r.command) · \(r.detail)", size: 9, color: Mono.paperInk,
+                      wrapWidth: max(120, availableWidth), wrapAlignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
             Text(r.timeText)
                 .font(.system(size: 10).monospacedDigit())
                 .foregroundStyle(Mono.paperDim)
@@ -285,11 +265,9 @@ struct CakocheHome: View {
             } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "chevron.up").font(.system(size: 11, weight: .bold))
-                    Text("控车")
-                        .font(.system(size: 15, weight: .semibold))
-                        .tracking(4)
+                    DotCnText(text: "控 车", size: 12, color: Mono.paperInk)
                     Spacer()
-                    Text("点按或上滑").font(.system(size: 10)).foregroundStyle(Mono.paperDim)
+                    DotCnText(text: "点按或上滑", size: 8, color: Mono.paperDim)
                 }
                 .foregroundStyle(Mono.paperInk)
                 .padding(.horizontal, 22)
@@ -341,12 +319,26 @@ struct CakocheControlSheet: View {
     @ObservedObject var control: CakocheControl
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appState: AppState
+    /// 1.2.0：所有控车指令都需二次确认
+    @State private var confirmTarget: CarCommand?
 
     private let commands: [CarCommand] = [
         .unlockDoor, .lockDoor, .oneKeyLock, .closeWindow,
         .openWindow, .openEngine, .closeEngine, .closeDormer,
         .flashLight, .whistle, .remoteSearchCar
     ]
+
+    /// 车况状态条：一切正常白色，有异常红色逐项列出
+    private var abnormalItems: [String] {
+        let flags = appState.status?.stateFlags
+        var items: [String] = []
+        if flags?.doorUnlocked == true { items.append("车门已解锁") }
+        if flags?.windowOpen == true { items.append("车窗未关") }
+        if flags?.sunroofOpen == true { items.append("天窗未关") }
+        if flags?.engineRunning == true { items.append("发动机运行中") }
+        if appState.status?.tirePressures.contains(where: { $0.isLow }) == true { items.append("胎压偏低") }
+        return items
+    }
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -355,13 +347,8 @@ struct CakocheControlSheet: View {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(alignment: .top) {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("控车")
-                                .font(.system(size: 20, weight: .semibold))
-                                .tracking(6)
-                                .foregroundStyle(Mono.nightInk)
-                            Text("指令直接下发至车辆")
-                                .font(.system(size: 10))
-                                .foregroundStyle(Mono.nightDim)
+                            DotCnText(text: "控 车", size: 16, color: Mono.nightInk)
+                            DotCnText(text: "指令直接下发至车辆 · 点击后二次确认", size: 8, color: Mono.nightDim)
                         }
                         Spacer()
                         Button { dismiss() } label: {
@@ -377,28 +364,39 @@ struct CakocheControlSheet: View {
                     .padding(.horizontal, 22)
                     .padding(.top, 26)
 
-                    Hairline(color: Mono.nightHair).padding(.top, 20)
+                    // 1.2.0：车况状态条 —— 一切正常白色，有异常红色逐项列出
+                    Group {
+                        if abnormalItems.isEmpty {
+                            DotCnText(text: "一切正常", size: 10, color: Mono.nightInk)
+                        } else {
+                            DotCnText(text: abnormalItems.joined(separator: " · "), size: 10,
+                                      color: Mono.red, wrapAlignment: .leading)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 22)
+                    .padding(.top, 14)
+
+                    Hairline(color: Mono.nightHair).padding(.top, 16)
 
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 1), count: 2),
                               spacing: 1) {
                         ForEach(commands, id: \.self) { command in
                             Button {
-                                Task { await control.run(command) }
+                                confirmTarget = command
                             } label: {
                                 VStack(alignment: .leading, spacing: 12) {
                                     HStack {
+                                        // 1.2.0：图标统一白色，异常信息只由状态条用红色表达
                                         Image(systemName: command.sfSymbol)
                                             .font(.system(size: 20, weight: .light))
-                                            .foregroundStyle(command.isDangerous ? Mono.red : Mono.nightInk)
+                                            .foregroundStyle(Mono.nightInk)
                                         Spacer()
                                         if control.executing == command {
                                             ProgressView().tint(Mono.nightInk).scaleEffect(0.7)
                                         }
                                     }
-                                    // 1.1.0：去掉点阵英文指令名（过长会被裁切），只留中文名
-                                    Text(command.displayName)
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(Mono.nightInk)
+                                    DotCnText(text: command.displayName, size: 11, color: Mono.nightInk)
                                 }
                                 .padding(16)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -410,20 +408,16 @@ struct CakocheControlSheet: View {
                             .accessibilityLabel(command.displayName)
                         }
                     }
+                    .padding(.top, 1)
 
                     if let r = control.receipt {
                         VStack(alignment: .leading, spacing: 7) {
-                            Text(r.ok ? "执行成功" : "执行失败")
-                                .font(.system(size: 12, weight: .semibold))
-                                .tracking(3)
-                                .foregroundStyle(r.ok ? Mono.nightInk : Mono.red)
-                            Text("\(r.command) · \(r.detail) · \(r.timeText)")
-                                .font(.system(size: 11))
-                                .foregroundStyle(Mono.nightDim)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .lineLimit(2)
-                                .minimumScaleFactor(0.8)
+                            DotCnText(text: r.ok ? "执行成功" : "执行失败", size: 10,
+                                      color: r.ok ? Mono.nightInk : Mono.red)
+                            DotCnText(text: "\(r.command) · \(r.detail) · \(r.timeText)", size: 8,
+                                      color: Mono.nightDim, wrapAlignment: .leading)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 22)
                         .padding(.top, 22)
                     }
@@ -432,9 +426,7 @@ struct CakocheControlSheet: View {
                         Task { await appState.refreshStatus() }
                     } label: {
                         HStack {
-                            Text("刷新车况")
-                                .font(.system(size: 12, weight: .medium))
-                                .tracking(3)
+                            DotCnText(text: "刷 新 车 况", size: 10, color: Mono.nightDim)
                             Spacer()
                             Image(systemName: "arrow.clockwise").font(.system(size: 12))
                         }
@@ -444,14 +436,28 @@ struct CakocheControlSheet: View {
                     }
                     .buttonStyle(.plain)
 
-                    Text("首页车模可拖拽旋转，切换 INT 进入真实座舱；所有按钮是真指令，不是演示。")
-                        .font(.system(size: 10))
-                        .foregroundStyle(Mono.nightDim)
-                        .fixedSize(horizontal: false, vertical: true)
+                    DotCnText(text: "首页车模可拖拽旋转，切换「车内」进入真实座舱；所有按钮为真实指令，点击后需二次确认下发。",
+                              size: 8, color: Mono.nightDim, wrapAlignment: .leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 22)
                         .padding(.bottom, 34)
                 }
             }
+        }
+        // 1.2.0：所有控车功能二次确认
+        .alert("确认执行", isPresented: Binding(
+            get: { confirmTarget != nil },
+            set: { if !$0 { confirmTarget = nil } }
+        )) {
+            Button("取消", role: .cancel) { confirmTarget = nil }
+            Button("确认下发", role: .destructive) {
+                if let command = confirmTarget {
+                    Task { await control.run(command) }
+                }
+                confirmTarget = nil
+            }
+        } message: {
+            Text("确认要执行「\(confirmTarget?.displayName ?? "")」吗？该指令将直接下发至车辆。")
         }
         .preferredColorScheme(.dark)
     }

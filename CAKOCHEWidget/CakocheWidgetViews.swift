@@ -11,7 +11,7 @@ struct CakocheStatusWidget: Widget {
             CakocheWidgetEntryView(entry: entry)
         }
         .configurationDisplayName("CAKOCHE 控车")
-        .description("点阵车况 + 一键控车，与 CAKOCHE App 同一套白名单授权")
+        .description("点阵车况 + 自定义控车按钮，与 CAKOCHE App 同一套白名单授权")
         .supportedFamilies([
             .systemSmall, .systemMedium, .systemLarge,
             .accessoryCircular, .accessoryRectangular
@@ -58,89 +58,68 @@ private struct StateBadge: View {
     var body: some View {
         HStack(spacing: 4) {
             Circle().fill(alarm ? WMono.red : WMono.ink).frame(width: 4, height: 4)
-            Text(text)
-                .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(alarm ? WMono.red : WMono.dim)
+            WidgetDotCnText(text: text, size: 7.5, color: alarm ? WMono.red : WMono.dim)
         }
     }
 }
 
-/// 执行反馈横幅（优先「再点一次确认」，其次绿✓/红✗）
+/// 执行反馈横幅（优先「再点一次确认」，其次执行结果）
 private struct FeedbackBanner: View {
     var body: some View {
         if let pending = CakocheWidgetRunner.pendingCommand() {
-            banner(text: pending.displayName + " · 再点一次确认", color: WMono.red)
+            HStack(spacing: 4) {
+                Image(systemName: "hand.tap")
+                    .font(.system(size: 8, weight: .bold))
+                WidgetDotCnText(text: pending.displayName + " · 再点一次确认", size: 7.5, color: WMono.red)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         } else if let action = CakocheWidgetRunner.lastAction() {
             HStack(spacing: 4) {
                 Image(systemName: action.ok ? "checkmark" : "xmark")
                     .font(.system(size: 8, weight: .bold))
-                Text(action.text)
-                    .font(.system(size: 9, weight: .medium))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
+                WidgetDotCnText(text: action.text, size: 7.5,
+                                color: action.ok ? WMono.ink : WMono.red)
             }
-            .foregroundStyle(action.ok ? WMono.ink : WMono.red)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
-
-    private func banner(text: String, color: Color) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: "hand.tap")
-                .font(.system(size: 8, weight: .bold))
-            Text(text)
-                .font(.system(size: 9, weight: .medium))
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-        }
-        .foregroundStyle(color)
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
 }
 
-/// 快捷控车按钮排（黑底白图标红确认，点阵风格的克制表达）
+/// 5 个自定义控车按钮（App「我的 → 小组件按钮」配置）
 private struct ControlButtonRow: View {
-    let unlocked: Bool
-    let engineOn: Bool
-    var columns: Int
-
     var body: some View {
         HStack(spacing: 5) {
-            button(icon: unlocked ? "lock.open.fill" : "lock.fill",
-                   text: unlocked ? "闭锁" : "开锁",
-                   intent: CakocheLockToggleIntent(),
-                   pending: pendingText == (unlocked ? "闭锁" : "开锁"))
-            if columns >= 3 {
-                button(icon: engineOn ? "engine.combustion.fill" : "engine.combustion",
-                       text: engineOn ? "熄火" : "点火",
-                       intent: CakocheEngineToggleIntent(),
-                       pending: pendingText == (engineOn ? "熄火" : "点火"))
-            }
-            if columns >= 4 {
-                button(icon: "light.beacon.max", text: "寻车",
-                       intent: CakocheWhistleIntent(), pending: false)
-            }
-            if columns >= 5 {
-                button(icon: "hourglass", text: "闪灯",
-                       intent: CakocheFlashIntent(), pending: false)
+            ForEach(0..<5, id: \.self) { index in
+                slotButton(index)
             }
         }
     }
 
-    private var pendingText: String? {
-        CakocheWidgetRunner.pendingCommand()?.displayName
+    @ViewBuilder
+    private func slotButton(_ index: Int) -> some View {
+        let commands = CakocheWidgetRunner.resolvedCommands()
+        let command = commands.indices.contains(index) ? commands[index] : nil
+        let pending = CakocheWidgetRunner.pendingCommand()?.rawValue == command?.rawValue
+        let label = command?.displayName ?? "未设"
+        Group {
+            switch index {
+            case 0: buttonBody(command, intent: CakocheSlot1Intent(), pending: pending, label: label)
+            case 1: buttonBody(command, intent: CakocheSlot2Intent(), pending: pending, label: label)
+            case 2: buttonBody(command, intent: CakocheSlot3Intent(), pending: pending, label: label)
+            case 3: buttonBody(command, intent: CakocheSlot4Intent(), pending: pending, label: label)
+            default: buttonBody(command, intent: CakocheSlot5Intent(), pending: pending, label: label)
+            }
+        }
     }
 
-    private func button(icon: String, text: String,
-                        intent: some AppIntent, pending: Bool) -> some View {
+    private func buttonBody(_ command: CarCommand?, intent: some AppIntent,
+                            pending: Bool, label: String) -> some View {
         cakocheWidgetButton(intent: intent) {
             VStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.system(size: 14, weight: .semibold))
-                Text(pending ? "再点一次" : text)
-                    .font(.system(size: 8.5, weight: .medium))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
+                Image(systemName: command?.sfSymbol ?? "questionmark")
+                    .font(.system(size: 13, weight: .semibold))
+                WidgetDotCnText(text: pending ? "再点一次" : label, size: 6.5,
+                                color: pending ? WMono.red : WMono.ink)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 7)
@@ -152,7 +131,7 @@ private struct ControlButtonRow: View {
                     .strokeBorder(pending ? WMono.red : WMono.hair, lineWidth: pending ? 1.2 : 0.5)
             )
         }
-        .accessibilityLabel(pending ? "待确认，再点一次执行\(text)" : text)
+        .accessibilityLabel(pending ? "待确认，再点一次执行\(label)" : label)
     }
 }
 
@@ -164,12 +143,8 @@ private struct NoData: View {
             Image(systemName: "car")
                 .font(.system(size: 30, weight: .light))
                 .foregroundStyle(WMono.dim)
-            Text(isLoggedIn ? "暂无车况数据" : "未登录")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(WMono.ink)
-            Text("打开 CAKOCHE App 自动同步车况")
-                .font(.system(size: 9))
-                .foregroundStyle(WMono.dim)
+            WidgetDotCnText(text: isLoggedIn ? "暂无车况数据" : "未登录", size: 9, color: WMono.ink)
+            WidgetDotCnText(text: "打开 CAKOCHE App 自动同步车况", size: 7, color: WMono.dim)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -204,15 +179,9 @@ private struct SmallStatus: View {
                 }
                 Spacer(minLength: 0)
                 VStack(alignment: .leading, spacing: 4) {
-                    WidgetDotText(text: CarStatus.format(s.remainingRangeKm), size: 26, color: WMono.ink)
-                    HStack(spacing: 6) {
-                        Text("剩余续航")
-                            .font(.system(size: 8.5))
-                            .foregroundStyle(WMono.dim)
-                        Text("油 \(CarStatus.format(s.fuelLeftLiters)) L")
-                            .font(.system(size: 8.5))
-                            .foregroundStyle(WMono.dim)
-                    }
+                    WidgetDotText(text: CarStatus.format(s.remainingRangeKm), size: 24, color: WMono.ink)
+                    WidgetDotCnText(text: "剩余续航 · 油 \(CarStatus.format(s.fuelLeftLiters)) L",
+                                    size: 7, color: WMono.dim)
                 }
                 Spacer(minLength: 0)
                 Text(relativeTime(s.updatedAt))
@@ -227,14 +196,14 @@ private struct SmallStatus: View {
     }
 }
 
-// MARK: - 中号：状态 + 四按钮
+// MARK: - 中号：状态 + 点阵续航 + 5 按钮
 
 private struct MediumStatus: View {
     let entry: CakocheWidgetEntry
 
     var body: some View {
         if let s = entry.snapshot {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 8) {
                     Text(s.carName)
                         .font(.system(size: 11, weight: .semibold))
@@ -249,21 +218,16 @@ private struct MediumStatus: View {
                         .foregroundStyle(WMono.dim)
                 }
                 HStack(alignment: .center, spacing: 12) {
-                    WidgetDotText(text: CarStatus.format(s.remainingRangeKm), size: 30, color: WMono.ink)
+                    WidgetDotText(text: CarStatus.format(s.remainingRangeKm), size: 26, color: WMono.ink)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("剩余续航")
-                            .font(.system(size: 8.5))
-                            .foregroundStyle(WMono.dim)
-                        Text("油量 \(CarStatus.format(s.fuelLeftLiters)) L · 电压 \(CarStatus.format(s.batteryVoltage)) V")
-                            .font(.system(size: 8.5).monospacedDigit())
-                            .foregroundStyle(WMono.dim)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
+                        WidgetDotCnText(text: "剩余续航", size: 7, color: WMono.dim)
+                        WidgetDotCnText(text: "油 \(CarStatus.format(s.fuelLeftLiters)) L · \(CarStatus.format(s.batteryVoltage)) V",
+                                        size: 7, color: WMono.dim)
                     }
                     Spacer()
                 }
                 FeedbackBanner()
-                ControlButtonRow(unlocked: s.doorUnlocked, engineOn: s.engineRunning, columns: 4)
+                ControlButtonRow()
             }
             .padding(12)
             .widgetURL(URL(string: "cakoche://home"))
@@ -273,14 +237,14 @@ private struct MediumStatus: View {
     }
 }
 
-// MARK: - 大号：状态 + 胎压 + 四按钮
+// MARK: - 大号：状态 + 点阵续航 + 胎压 + 5 按钮
 
 private struct LargeStatus: View {
     let entry: CakocheWidgetEntry
 
     var body: some View {
         if let s = entry.snapshot {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 9) {
                 HStack(spacing: 8) {
                     Text(s.carName)
                         .font(.system(size: 13, weight: .semibold))
@@ -295,14 +259,11 @@ private struct LargeStatus: View {
                         .foregroundStyle(WMono.dim)
                 }
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    WidgetDotText(text: CarStatus.format(s.remainingRangeKm), size: 34, color: WMono.ink)
+                    WidgetDotText(text: CarStatus.format(s.remainingRangeKm), size: 30, color: WMono.ink)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("剩余续航 KM")
-                            .font(.system(size: 8.5))
-                            .foregroundStyle(WMono.dim)
-                        Text("油量 \(CarStatus.format(s.fuelLeftLiters)) L · 电压 \(CarStatus.format(s.batteryVoltage)) V")
-                            .font(.system(size: 8.5).monospacedDigit())
-                            .foregroundStyle(WMono.dim)
+                        WidgetDotCnText(text: "剩余续航 KM", size: 7, color: WMono.dim)
+                        WidgetDotCnText(text: "油 \(CarStatus.format(s.fuelLeftLiters)) L · \(CarStatus.format(s.batteryVoltage)) V",
+                                        size: 7, color: WMono.dim)
                     }
                     Spacer()
                 }
@@ -311,9 +272,8 @@ private struct LargeStatus: View {
                 HStack(spacing: 6) {
                     ForEach(Array(s.tirePressures.enumerated()), id: \.offset) { index, value in
                         VStack(spacing: 3) {
-                            Text(index < names.count ? names[index] : "轮胎")
-                                .font(.system(size: 8))
-                                .foregroundStyle(WMono.dim)
+                            WidgetDotCnText(text: index < names.count ? names[index] : "轮胎",
+                                            size: 6.5, color: WMono.dim)
                             Text(CarStatus.format(value))
                                 .font(.system(size: 12, weight: .semibold).monospacedDigit())
                                 .foregroundStyle(isLow(value) ? WMono.red : WMono.ink)
@@ -329,7 +289,7 @@ private struct LargeStatus: View {
                 }
                 FeedbackBanner()
                 Spacer(minLength: 0)
-                ControlButtonRow(unlocked: s.doorUnlocked, engineOn: s.engineRunning, columns: 4)
+                ControlButtonRow()
             }
             .padding(14)
             .widgetURL(URL(string: "cakoche://home"))
@@ -346,7 +306,7 @@ private struct LargeStatus: View {
 
 // MARK: - 锁屏配件
 
-/// 锁屏圆形：大锁钮，点按智能反向开关锁
+/// 锁屏圆形：大锁钮，点按智能反向开关锁（点按后需二次确认）
 private struct LockCircular: View {
     let entry: CakocheWidgetEntry
 
@@ -392,21 +352,18 @@ private struct LockRectangular: View {
                     .accessibilityLabel(s.doorUnlocked ? "已开锁，点按闭锁" : "已锁止，点按开锁")
                 }
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    WidgetDotText(text: CarStatus.format(s.remainingRangeKm), size: 15, color: WMono.ink)
+                    WidgetDotText(text: CarStatus.format(s.remainingRangeKm), size: 14, color: WMono.ink)
                         .widgetAccentable()
-                    Text("KM 续航")
+                    Text("KM 续航 · 油 \(CarStatus.format(s.fuelLeftLiters)) L")
                         .font(.system(size: 8))
                         .foregroundStyle(WMono.dim)
+                        .lineLimit(1)
                     Spacer()
-                    Text("油 \(CarStatus.format(s.fuelLeftLiters)) L")
-                        .font(.system(size: 8.5))
-                        .foregroundStyle(WMono.dim)
                 }
             }
             .widgetURL(URL(string: "cakoche://home"))
         } else {
-            Text("打开 CAKOCHE App 登录")
-                .font(.system(size: 11, weight: .medium))
+            WidgetDotCnText(text: "打开 CAKOCHE App 登录", size: 8, color: WMono.ink)
                 .widgetAccentable()
                 .widgetURL(URL(string: "cakoche://home"))
         }

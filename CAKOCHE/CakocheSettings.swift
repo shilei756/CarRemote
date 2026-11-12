@@ -1,60 +1,102 @@
 import SwiftUI
 import UIKit
+import WidgetKit
 import CarCore
 
-/// 我的页：只保留与控车直接相关的项 —— 12 款 3D 车模切换、网站授权信息、
-/// 车辆位置、退出登录。俱乐部 / 主题 / 壁纸 / 行程 / 公告等非控车功能全部舍弃。
+/// 我的页（1.2.0）：车模折叠选择、小组件 5 按钮自定义、网站授权信息、
+/// 车辆位置、退出登录。全界面中文点阵化。
 struct CakocheSettingsPage: View {
     @ObservedObject var control: CakocheControl
     @Binding var selectedID: String
     @EnvironmentObject private var appState: AppState
 
+    @State private var modelsExpanded = false
+    @State private var editingSlot: Int?
+    @State private var widgetCommands: [String] = SharedStore.loadSettings().widgetCommands
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("我的")
-                        .font(.system(size: 20, weight: .semibold))
-                        .tracking(6)
-                        .foregroundStyle(Mono.paperInk)
-                    Text("车辆 / 车型 / 授权")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Mono.paperDim)
+                    DotCnText(text: "我 的", size: 16, color: Mono.paperInk)
+                    DotCnText(text: "车辆 · 车型 · 小组件 · 授权", size: 8, color: Mono.paperDim)
                 }
                 .padding(.horizontal, 22)
                 .padding(.top, 20)
                 .padding(.bottom, 10)
 
-                section("3D 车模", "全系 12 款（含真实座舱），点按切换")
-                ForEach(CakocheModels.all) { model in
-                    Button {
-                        selectedID = model.id
-                    } label: {
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(model.name)
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(Mono.paperInk)
-                                Text(model.group + " · " + model.id.uppercased())
-                                    .font(.system(size: 10).monospacedDigit())
-                                    .foregroundStyle(Mono.paperDim)
-                            }
-                            Spacer()
-                            if selectedID == model.id {
-                                Circle().fill(Mono.red).frame(width: 7, height: 7)
-                            }
-                        }
-                        .padding(.horizontal, 22)
-                        .padding(.vertical, 11)
-                        .background(selectedID == model.id
-                                    ? Mono.paperHair.opacity(0.35) : Color.clear)
+                // MARK: 3D 车模（默认折叠）
+                Button { withAnimation(.easeInOut(duration: 0.22)) { modelsExpanded.toggle() } } label: {
+                    HStack(spacing: 8) {
+                        DotCnText(text: "3D 车模", size: 10, color: Mono.paperInk)
+                        DotCnText(text: "全系 12 款", size: 8, color: Mono.paperDim)
+                        Spacer()
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 11, weight: .semibold))
+                            .rotationEffect(.degrees(modelsExpanded ? 180 : 0))
+                            .foregroundStyle(Mono.paperDim)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(model.name)
-                    .accessibilityAddTraits(selectedID == model.id ? [.isSelected] : [])
-                    Hairline(color: Mono.paperHair).padding(.leading, 22)
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 12)
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("车模选择，已\(modelsExpanded ? "展开" : "折叠")")
+                if modelsExpanded {
+                    ForEach(CakocheModels.all) { model in
+                        Button {
+                            selectedID = model.id
+                        } label: {
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    DotCnText(text: model.name, size: 10, color: Mono.paperInk)
+                                    DotCnText(text: model.group + " · " + model.id.uppercased(),
+                                              size: 7, color: Mono.paperDim)
+                                }
+                                Spacer()
+                                if selectedID == model.id {
+                                    Circle().fill(Mono.red).frame(width: 7, height: 7)
+                                }
+                            }
+                            .padding(.horizontal, 22)
+                            .padding(.vertical, 11)
+                            .background(selectedID == model.id
+                                        ? Mono.paperHair.opacity(0.35) : Color.clear)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(model.name)
+                        .accessibilityAddTraits(selectedID == model.id ? [.isSelected] : [])
+                        Hairline(color: Mono.paperHair).padding(.leading, 22)
+                    }
+                }
+                Hairline(color: Mono.paperHair)
 
+                // MARK: 小组件按钮（1.2.0 新增：5 个槽位自定义）
+                section("小组件按钮", "桌面小组件的 5 个控车按钮，点按更换指令")
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(0..<5, id: \.self) { slot in
+                        Button { editingSlot = slot } label: {
+                            HStack(spacing: 10) {
+                                DotCnText(text: "按钮 \(slot + 1)", size: 8, color: Mono.paperDim)
+                                    .frame(width: 70, alignment: .leading)
+                                DotCnText(text: commandName(widgetCommands.indices.contains(slot)
+                                                             ? widgetCommands[slot] : nil),
+                                          size: 10, color: Mono.paperInk)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(Mono.paperHair)
+                            }
+                            .padding(.horizontal, 22)
+                            .padding(.vertical, 12)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("小组件按钮 \(slot + 1)，当前 \(commandName(widgetCommands.indices.contains(slot) ? widgetCommands[slot] : nil))")
+                        Hairline(color: Mono.paperHair).padding(.leading, 22)
+                    }
+                }
+                .padding(.top, 4)
+
+                // MARK: 账号授权
                 section("账号授权", "手机号与控车码由站主网站校验")
                 VStack(alignment: .leading, spacing: 11) {
                     keyRow("手机号", maskedPhone)
@@ -64,12 +106,11 @@ struct CakocheSettingsPage: View {
                 .padding(.horizontal, 22)
                 .padding(.top, 6)
 
+                // MARK: 车辆
                 section("车辆", "位置与退出")
                 Button { openMap() } label: {
                     HStack {
-                        Text("在地图中查看车辆位置")
-                            .font(.system(size: 13))
-                            .foregroundStyle(Mono.paperInk)
+                        DotCnText(text: "在地图中查看车辆位置", size: 10, color: Mono.paperInk)
                         Spacer()
                         Image(systemName: "arrow.up.right")
                             .font(.system(size: 12))
@@ -84,10 +125,7 @@ struct CakocheSettingsPage: View {
 
                 Button { appState.logout() } label: {
                     HStack {
-                        Text("退出登录")
-                            .font(.system(size: 13, weight: .semibold))
-                            .tracking(3)
-                            .foregroundStyle(Mono.red)
+                        DotCnText(text: "退 出 登 录", size: 10, color: Mono.red)
                         Spacer()
                     }
                     .padding(.horizontal, 22)
@@ -96,23 +134,49 @@ struct CakocheSettingsPage: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("退出登录")
 
-                Text("CAKOCHE 1.1.0 · 与网站同一套白名单授权体系")
-                    .font(.system(size: 10))
-                    .foregroundStyle(Mono.paperDim)
+                DotCnText(text: "CAKOCHE 1.2.0 · 与网站同一套白名单授权体系",
+                          size: 8, color: Mono.paperDim)
                     .padding(.horizontal, 22)
                     .padding(.bottom, 44)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .sheet(item: Binding(
+            get: { editingSlot.map { SlotRef(index: $0) } },
+            set: { editingSlot = $0?.index }
+        )) { ref in
+            CommandPicker(current: slotCommand(ref.index)) { picked in
+                saveSlot(ref.index, picked)
+            }
+        }
+    }
+
+    struct SlotRef: Identifiable { let index: Int; var id: Int { index } }
+
+    private func slotCommand(_ slot: Int) -> CarCommand? {
+        widgetCommands.indices.contains(slot) ? CarCommand(rawValue: widgetCommands[slot]) : nil
+    }
+
+    private func commandName(_ raw: String?) -> String {
+        raw.flatMap(CarCommand.init)?.displayName ?? "未设置"
+    }
+
+    private func saveSlot(_ slot: Int, _ command: CarCommand) {
+        var commands = widgetCommands
+        while commands.count < 5 { commands.append(CarModelStyle.defaultWidgetCommands[0]) }
+        commands[slot] = command.rawValue
+        widgetCommands = commands
+        var settings = SharedStore.loadSettings()
+        settings.widgetCommands = commands
+        SharedStore.saveSettings(settings)
+        // 小组件立即按新配置重绘
+        WidgetCenter.shared.reloadAllTimelines()
     }
 
     private func section(_ title: String, _ subtitle: String) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(title)
-                .font(.system(size: 11, weight: .medium))
-                .tracking(3)
-                .foregroundStyle(Mono.paperInk)
-            Text(subtitle).font(.system(size: 10)).foregroundStyle(Mono.paperDim)
+        VStack(alignment: .leading, spacing: 6) {
+            DotCnText(text: title, size: 10, color: Mono.paperInk)
+            DotCnText(text: subtitle, size: 8, color: Mono.paperDim)
         }
         .padding(.horizontal, 22)
         .padding(.top, 22)
@@ -121,16 +185,9 @@ struct CakocheSettingsPage: View {
 
     private func keyRow(_ key: String, _ value: String) -> some View {
         HStack(alignment: .top) {
-            Text(key)
-                .font(.system(size: 10, weight: .medium))
-                .tracking(1.5)
-                .foregroundStyle(Mono.paperDim)
-                .frame(width: 66, alignment: .leading)
-            Text(value)
-                .font(.system(size: 12).monospacedDigit())
-                .foregroundStyle(Mono.paperInk)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
+            DotCnText(text: key, size: 8, color: Mono.paperDim)
+                .frame(width: 78, alignment: .leading)
+            DotCnText(text: value, size: 9, color: Mono.paperInk)
             Spacer()
         }
     }
@@ -154,5 +211,58 @@ struct CakocheSettingsPage: View {
         } else if let web = URL(string: "https://uri.amap.com/marker?position=\(lon),\(lat)") {
             UIApplication.shared.open(web)
         }
+    }
+}
+
+// MARK: - 指令选择弹层
+
+/// 点按槽位后弹出：列出全部控车指令，点选即更新小组件按钮
+struct CommandPicker: View {
+    let current: CarCommand?
+    let onPick: (CarCommand) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    private let candidates: [CarCommand] = CarCommand.allCases
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(candidates, id: \.self) { command in
+                        Button {
+                            onPick(command)
+                            dismiss()
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: command.sfSymbol)
+                                    .font(.system(size: 16, weight: .light))
+                                    .foregroundStyle(Mono.paperInk)
+                                    .frame(width: 26)
+                                DotCnText(text: command.displayName, size: 10, color: Mono.paperInk)
+                                Spacer()
+                                if current == command {
+                                    Circle().fill(Mono.red).frame(width: 7, height: 7)
+                                }
+                            }
+                            .padding(.horizontal, 22)
+                            .padding(.vertical, 13)
+                            .background(current == command
+                                        ? Mono.paperHair.opacity(0.35) : Color.clear)
+                        }
+                        .buttonStyle(.plain)
+                        Hairline(color: Mono.paperHair).padding(.leading, 22)
+                    }
+                }
+            }
+            .background(Mono.paper)
+            .navigationTitle("选择指令")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+            }
+        }
+        .preferredColorScheme(.light)
     }
 }

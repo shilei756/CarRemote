@@ -53,6 +53,58 @@ struct CakocheFlashIntent: AppIntent {
     }
 }
 
+// MARK: - 5 个自定义槽位 Intent（App「我的 → 小组件按钮」配置的指令）
+
+struct CakocheSlot1Intent: AppIntent {
+    static var title: LocalizedStringResource = "小组件按钮 1"
+    static var description: IntentDescription = "执行小组件第 1 个按钮配置的指令"
+    static var openAppWhenRun: Bool = false
+    public init() {}
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        .result(dialog: IntentDialog(stringLiteral: await CakocheWidgetRunner.perform(slot: 1)))
+    }
+}
+
+struct CakocheSlot2Intent: AppIntent {
+    static var title: LocalizedStringResource = "小组件按钮 2"
+    static var description: IntentDescription = "执行小组件第 2 个按钮配置的指令"
+    static var openAppWhenRun: Bool = false
+    public init() {}
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        .result(dialog: IntentDialog(stringLiteral: await CakocheWidgetRunner.perform(slot: 2)))
+    }
+}
+
+struct CakocheSlot3Intent: AppIntent {
+    static var title: LocalizedStringResource = "小组件按钮 3"
+    static var description: IntentDescription = "执行小组件第 3 个按钮配置的指令"
+    static var openAppWhenRun: Bool = false
+    public init() {}
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        .result(dialog: IntentDialog(stringLiteral: await CakocheWidgetRunner.perform(slot: 3)))
+    }
+}
+
+struct CakocheSlot4Intent: AppIntent {
+    static var title: LocalizedStringResource = "小组件按钮 4"
+    static var description: IntentDescription = "执行小组件第 4 个按钮配置的指令"
+    static var openAppWhenRun: Bool = false
+    public init() {}
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        .result(dialog: IntentDialog(stringLiteral: await CakocheWidgetRunner.perform(slot: 4)))
+    }
+}
+
+struct CakocheSlot5Intent: AppIntent {
+    static var title: LocalizedStringResource = "小组件按钮 5"
+    static var description: IntentDescription = "执行小组件第 5 个按钮配置的指令"
+    static var openAppWhenRun: Bool = false
+    public init() {}
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        .result(dialog: IntentDialog(stringLiteral: await CakocheWidgetRunner.perform(slot: 5)))
+    }
+}
+
 // MARK: - 按钮视图（iOS 17 交互式 / iOS 16 深链回 App 兜底）
 
 /// iOS 17+ 用 AppIntent 直接执行；iOS 16 没有交互式小组件，Link 打开 App 控车。
