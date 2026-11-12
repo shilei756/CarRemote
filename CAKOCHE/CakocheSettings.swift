@@ -49,7 +49,8 @@ struct CakocheSettingsPage: View {
                             HStack(spacing: 12) {
                                 VStack(alignment: .leading, spacing: 4) {
                                     DotCnText(text: model.name, size: 10, color: Mono.paperInk)
-                                    DotCnText(text: model.group + " · " + model.id.uppercased(),
+                                    DotCnText(text: model.group + " · " + model.id.uppercased()
+                                              + " · " + String(format: "%.0fL", model.tankL),
                                               size: 7, color: Mono.paperDim)
                                 }
                                 Spacer()
@@ -134,7 +135,7 @@ struct CakocheSettingsPage: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("退出登录")
 
-                DotCnText(text: "CAKOCHE 1.2.1 · 与网站同一套白名单授权体系",
+                DotCnText(text: "CAKOCHE 1.2.2 · 与网站同一套白名单授权体系",
                           size: 8, color: Mono.paperDim)
                     .padding(.horizontal, 22)
                     .padding(.bottom, 44)

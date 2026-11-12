@@ -247,13 +247,14 @@ enum DotCnGlyphCache {
                         if bytes[idx] > 100 { on += 1 }
                     }
                 }
-                grid[r][c] = on >= 4
+                // 1.2.2：4 → 3，笔画更连贯（阈值过严会让汉字断笔、发虚）
+                grid[r][c] = on >= 3
             }
         }
 
-        // 兜底：若几乎全亮，判定采样异常，宁可留空也不再糊成实心块
+        // 兜底：仅当几乎全亮（马赛克）才判异常；85% 阈值避免密笔画汉字被误杀
         let lit = grid.reduce(0) { $0 + $1.filter { $0 }.count }
-        if lit > n * n * 7 / 10 { return blank }
+        if lit > n * n * 85 / 100 { return blank }
         return grid
     }
 }
@@ -265,15 +266,17 @@ struct DotCnText: View {
     let text: String
     var size: CGFloat = 12
     var color: Color = Mono.paperInk
-    var gapRatio: CGFloat = 0.22
+    /// 1.2.2：点间隙 0.22 → 0.10，点更实；配合下方 1.15× 放大，单字净宽仅约 +4%
+    var gapRatio: CGFloat = 0.10
     /// 提供时按此宽度折行（多行绘制）
     var wrapWidth: CGFloat? = nil
     /// 折行时的水平对齐（自动折行的长说明句默认左对齐）
     var wrapAlignment: HorizontalAlignment = .leading
 
-    private var unit: CGFloat { size / CGFloat(DotCnGlyphCache.rowsPerChar) }
+    /// 1.2.2：按用户要求「稍微加大一点点」，与收窄的点间隙相互抵消，布局几乎不变
+    private var unit: CGFloat { size * 1.15 / CGFloat(DotCnGlyphCache.rowsPerChar) }
     private var step: CGFloat { unit * (1 + gapRatio) }
-    private var dot: CGFloat { unit * (1 - gapRatio * 0.45) }
+    private var dot: CGFloat { unit * (1 - gapRatio * 0.15) }
     private var charWidth: CGFloat { CGFloat(DotCnGlyphCache.colsPerChar) * step }
     private var charGap: CGFloat { step * 0.55 }
 
@@ -348,7 +351,7 @@ struct DotCnText: View {
                                 height: dot
                             )
                             context.fill(
-                                Path(roundedRect: rect, cornerRadius: dot * 0.16),
+                                Path(roundedRect: rect, cornerRadius: 0),  // 1.2.2 实心方点
                                 with: .color(color)
                             )
                         }

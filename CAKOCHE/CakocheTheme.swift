@@ -6,13 +6,15 @@ enum Mono {
     /// 首页 / 空调页纸白底
     static let paper = Color(red: 0.957, green: 0.957, blue: 0.945)
     static let paperInk = Color(white: 0.07)
-    static let paperDim = Color(white: 0.48)
+    /// 1.2.2：0.48 → 0.30，次要中文标签对比度更高、更清晰
+    static let paperDim = Color(white: 0.30)
     static let paperHair = Color(white: 0.84)
 
     /// 控车抽屉反相黑底
     static let night = Color(white: 0.045)
     static let nightInk = Color(white: 0.965)
-    static let nightDim = Color(white: 0.42)
+    /// 1.2.2：黑底上提亮到 0.62
+    static let nightDim = Color(white: 0.62)
     static let nightHair = Color(white: 0.19)
 
     /// 唯一强调色

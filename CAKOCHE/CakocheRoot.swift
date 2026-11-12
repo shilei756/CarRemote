@@ -63,7 +63,7 @@ struct CakocheHome: View {
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 // 1.1.0：回执出现时动态抬高页面底部，不再压住状态格最后一行；
                 // 回执消失时同样动态回落。高度含上下内边距（9 + 9 + 两行余量）。
-                .padding(.bottom, 92 + (control.receipt != nil ? 40 : 0))
+                .padding(.bottom, 92 + (control.receipt != nil ? 48 : 0))
                 .animation(.easeInOut(duration: 0.22), value: control.receipt != nil)
 
                 VStack(spacing: 0) {
@@ -288,13 +288,17 @@ struct CakocheHome: View {
 
     // MARK: 派生数值
 
+    /// 1.2.2：油量按所选车型的油箱容积换算（网页版 CAR_MODELS.tank 机制），
+    /// 不再写死 55L；切车型后进度条与文案一起联动。
     private var fuelProgress: Double {
         guard let liters = status?.fuelLeftLiters else { return 0 }
-        return min(1, max(0, liters / 55.0))
+        return min(1, max(0, liters / model.tankL))
     }
     private var fuelText: String {
-        guard let liters = status?.fuelLeftLiters else { return "-- L" }
-        return String(format: "%.1f L", liters)
+        guard let liters = status?.fuelLeftLiters else {
+            return String(format: "-- / %.0f L", model.tankL)
+        }
+        return String(format: "%.1f / %.0f L", liters, model.tankL)
     }
     private var odoText: String {
         guard let odo = status?.totalOdometerKm else { return "--" }

@@ -6,7 +6,8 @@ import CoreText
 /// 小组件进程不编译 CAKOCHE/ 目录，这里独立定义一份，值保持同步。
 enum WMono {
     static let ink = Color(white: 0.965)
-    static let dim = Color(white: 0.42)
+    /// 1.2.2：黑底上提亮，中文点阵更清晰
+    static let dim = Color(white: 0.62)
     static let hair = Color(white: 0.19)
     static let red = Color(red: 0.88, green: 0.14, blue: 0.18)
 }
@@ -187,12 +188,13 @@ enum WidgetDotCnCache {
                         if bytes[idx] > 100 { on += 1 }
                     }
                 }
-                grid[r][c] = on >= 4
+                // 1.2.2：4 → 3，笔画更连贯
+                grid[r][c] = on >= 3
             }
         }
 
         let lit = grid.reduce(0) { $0 + $1.filter { $0 }.count }
-        if lit > n * n * 7 / 10 { return blank }
+        if lit > n * n * 85 / 100 { return blank }
         return grid
     }
 }
@@ -202,11 +204,12 @@ struct WidgetDotCnText: View {
     let text: String
     var size: CGFloat = 9
     var color: Color = WMono.dim
-    var gapRatio: CGFloat = 0.22
+    /// 1.2.2：点更实、字更紧凑（净宽约 -10%），小组件空间紧张故不放大字号
+    var gapRatio: CGFloat = 0.10
 
     private var unit: CGFloat { size / CGFloat(WidgetDotCnCache.rowsPerChar) }
     private var step: CGFloat { unit * (1 + gapRatio) }
-    private var dot: CGFloat { unit * (1 - gapRatio * 0.45) }
+    private var dot: CGFloat { unit * (1 - gapRatio * 0.15) }
     private var charWidth: CGFloat { CGFloat(WidgetDotCnCache.colsPerChar) * step }
     private var charGap: CGFloat { step * 0.55 }
 
@@ -263,7 +266,7 @@ struct WidgetDotCnText: View {
                                 height: dot
                             )
                             context.fill(
-                                Path(roundedRect: rect, cornerRadius: dot * 0.16),
+                                Path(roundedRect: rect, cornerRadius: 0),  // 1.2.2 实心方点
                                 with: .color(color)
                             )
                         }
