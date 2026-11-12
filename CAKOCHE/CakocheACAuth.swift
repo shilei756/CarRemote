@@ -307,6 +307,8 @@ struct CakocheACAuthSheet: View {
                     statusText = ACService.websiteAuthorizationText()
                     showQR = false
                     return
+                @unknown default:
+                    qrStatus = "网站返回未知状态，请刷新二维码重试"
                 }
             } catch {
                 if Task.isCancelled { return }
