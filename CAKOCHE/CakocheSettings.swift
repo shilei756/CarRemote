@@ -13,6 +13,9 @@ struct CakocheSettingsPage: View {
     @State private var modelsExpanded = false
     @State private var editingSlot: Int?
     @State private var widgetCommands: [String] = SharedStore.loadSettings().widgetCommands
+    /// 1.2.4：新版空调授权入口（网站统一授权）
+    @State private var showACAuth = false
+    @State private var acAuthText = ACService.websiteAuthorizationText()
 
     var body: some View {
         ScrollView {
@@ -107,6 +110,35 @@ struct CakocheSettingsPage: View {
                 .padding(.horizontal, 22)
                 .padding(.top, 6)
 
+                // MARK: 1.2.4 新版空调授权（空调通道恒定走网站 newAC，授权由网站统一判定）
+                Button { showACAuth = true } label: {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "snowflake")
+                            .font(.system(size: 13, weight: .light))
+                            .foregroundStyle(Mono.paperInk)
+                            .frame(width: 20)
+                        VStack(alignment: .leading, spacing: 5) {
+                            DotCnText(text: "新版空调授权", size: 10, color: Mono.paperInk)
+                            DotCnText(text: "空调走新版通道 · 授权由网站统一校验",
+                                      size: 8, color: Mono.paperDim, wrapAlignment: .leading)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            DotCnText(text: acAuthText,
+                                      size: 8, color: Mono.red, wrapAlignment: .leading)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Mono.paperHair)
+                            .padding(.top, 3)
+                    }
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 14)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("新版空调授权，点击开通或同步网站授权")
+                Hairline(color: Mono.paperHair)
+
                 // MARK: 车辆
                 section("车辆", "位置与退出")
                 Button { openMap() } label: {
@@ -135,7 +167,7 @@ struct CakocheSettingsPage: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("退出登录")
 
-                DotCnText(text: "CAKOCHE 1.2.3 · 与网站同一套白名单授权体系",
+                DotCnText(text: "CAKOCHE 1.2.4 · 空调新版通道 · 网站统一授权",
                           size: 8, color: Mono.paperDim)
                     .padding(.horizontal, 22)
                     .padding(.bottom, 44)
@@ -144,6 +176,13 @@ struct CakocheSettingsPage: View {
             // 长副标题把 ScrollView 内容撑宽后居中，整页左右被裁（「字体被遮挡」）。
             // 现中文为原生 Text 自动换行，配合本约束不会再溢出。
             .frame(maxWidth: .infinity, alignment: .leading)
+            // 1.2.4：网站授权入口（扫码开通 / 直接同步网站凭证）。
+            // 与外层槽位选择 sheet 分层挂载，避免 iOS 15 下同层多个 sheet 只有最后一个生效。
+            .sheet(isPresented: $showACAuth, onDismiss: {
+                acAuthText = ACService.websiteAuthorizationText()
+            }) {
+                CakocheACAuthSheet()
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .sheet(item: Binding(

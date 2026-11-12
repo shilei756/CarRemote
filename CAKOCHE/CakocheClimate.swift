@@ -2,7 +2,8 @@ import SwiftUI
 import CarCore
 
 /// 空调页：座舱气流示意 + 0.5℃ 步进 + 制冷 / 关闭 / 制热 三段。
-/// 指令是真下发（开放平台 newAC 通道）。1.2.0：全点阵化 + 所有下发二次确认。
+/// 指令是真下发：1.2.4 起恒定走网站「新版空调通道」（newAC / 开放平台），
+/// 授权由站主网站统一判定。1.2.0：全点阵化 + 所有下发二次确认。
 struct CakocheClimatePage: View {
     @ObservedObject var control: CakocheControl
     @State private var temp: Double = 22.0
@@ -10,6 +11,8 @@ struct CakocheClimatePage: View {
     @State private var pulse = false
     /// 1.2.0：二次确认（模式名 + 下发温度）
     @State private var confirmMode: Int?
+    /// 1.2.4：网站授权入口
+    @State private var showACAuth = false
 
     private let modeNames = ["制冷", "关闭", "制热"]
     private let modeSymbols = ["snowflake", "power", "flame"]
@@ -21,7 +24,7 @@ struct CakocheClimatePage: View {
             VStack(alignment: .leading, spacing: 0) {
                 VStack(alignment: .leading, spacing: 8) {
                     DotCnText(text: "空 调", size: 16, color: Mono.paperInk)
-                    DotCnText(text: "座舱空调 · 指令直接下发至车辆", size: 8, color: Mono.paperDim)
+                    DotCnText(text: "新版空调通道 · 授权由网站统一校验", size: 8, color: Mono.paperDim)
                 }
                 .padding(.horizontal, 22)
                 .padding(.top, 20)
@@ -120,9 +123,34 @@ struct CakocheClimatePage: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 22)
                     .padding(.top, 16)
-                    .padding(.bottom, 24)
+
+                // MARK: 1.2.4 授权入口（新版通道需网站先授权）
+                Button { showACAuth = true } label: {
+                    HStack(spacing: 9) {
+                        Image(systemName: "checkmark.seal")
+                            .font(.system(size: 12, weight: .light))
+                            .foregroundStyle(Mono.paperInk)
+                        DotCnText(text: "新版空调授权 · 扫码开通 / 同步网站凭证",
+                                  size: 9, color: Mono.paperInk, wrapAlignment: .leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Mono.paperHair)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 13)
+                    .overlay(Rectangle().stroke(Mono.paperHair, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 22)
+                .padding(.top, 18)
+                .accessibilityLabel("新版空调授权，点击开通或同步网站授权")
+                .padding(.bottom, 24)
             }
             .frame(maxWidth: .infinity)
+        }
+        .sheet(isPresented: $showACAuth) {
+            CakocheACAuthSheet()
         }
         // 1.2.0：二次确认弹窗
         .alert("确认下发空调指令", isPresented: Binding(

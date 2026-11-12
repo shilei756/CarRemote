@@ -211,7 +211,16 @@ enum CakocheWidgetRunner {
         let ok: Bool
         if let credentials = credentials {
             do {
-                let result = try await CarService.execute(command: command, credentials: credentials)
+                // 1.2.4：CAKOCHE 空调统一走网站「新版空调通道」（newAC / 长安开放平台），
+                // 授权由站主网站下发（/api/open/token + /api/ac/*）；其余指令仍走车联网直连。
+                // 判定与 App 内、Siri 共用 ACService.useNewChannel()，小组件 bundle id
+                // 同属 app.copper1249.cakoche* 前缀，因此恒定命中新版。
+                let result: CommandResult
+                if (command == .openAir || command == .closeAir), ACService.useNewChannel() {
+                    result = try await ACService.executeOfficial(command: command, credentials: credentials)
+                } else {
+                    result = try await CarService.execute(command: command, credentials: credentials)
+                }
                 ok = result.ok
                 text = result.ok ? "\(command.displayName)成功" : "\(command.displayName)失败：\(CarIntentRunner.cleanReason(result.message))"
             } catch {

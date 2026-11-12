@@ -27,9 +27,11 @@ public enum CarIntentRunner {
             return Outcome(ok: false, speech: "请先在「长安控车」App 中登录")
         }
         do {
-            // 空调与 App 内保持一致：新版模式走开放平台链路（Siri 无调温弹窗，按车机默认设定）
+            // 空调与 App 内保持一致：新版模式走开放平台链路（Siri 无调温弹窗，按车机默认设定）。
+            // 1.2.4：判定收敛到 ACService.useNewChannel() —— CAKOCHE 恒走新版且授权来自网站，
+            // 正式版仍按用户设置的 acMode，行为不变。
             let result: CommandResult
-            if (command == .openAir || command == .closeAir), SharedStore.loadACMode() == .new {
+            if (command == .openAir || command == .closeAir), ACService.useNewChannel() {
                 result = try await ACService.executeOfficial(command: command, credentials: credentials)
             } else {
                 result = try await CarService.execute(command: command, credentials: credentials)

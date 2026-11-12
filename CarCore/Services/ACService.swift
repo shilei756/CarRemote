@@ -51,6 +51,28 @@ public struct ACQRStatus: Sendable {
 /// 3. open.car-control/{cmd} 下发指令
 public enum ACService {
 
+    // MARK: - 通道判定（CAKOCHE 恒走新版，正式版沿用用户设置）
+
+    /// 空调指令是否走「新版空调通道」（网页版 newAC / 长安开放平台）。
+    ///
+    /// CAKOCHE 及其点阵小组件、快捷指令**恒定走新版通道**，授权一律来自站主网站
+    /// （`/api/open/token` 直接取网站凭证，`/api/ac/*` 走网站扫码开通），
+    /// 不读 `acMode` 开关，避免与正式版共用的 App Group 设置互相串扰。
+    ///
+    /// CarCore 是共享 framework，编译时没有 `CAKOCHE` 宏，因此用 bundle id 运行时判定：
+    /// 正式版为 `app.copper1249.chipmunk6639*`，不匹配前缀 → 回落原有
+    /// `SharedStore.loadACMode()`，正式版行为零变化。
+    public static func useNewChannel() -> Bool {
+        let bundleID = Bundle.main.bundleIdentifier ?? ""
+        if bundleID.hasPrefix("app.copper1249.cakoche") { return true }
+        return SharedStore.loadACMode() == .new
+    }
+
+    /// 是否 CAKOCHE 体系（主 App / 点阵小组件 / 快捷指令）。
+    public static var isCakoche: Bool {
+        (Bundle.main.bundleIdentifier ?? "").hasPrefix("app.copper1249.cakoche")
+    }
+
     // MARK: - 扫码开通
 
     /// 申请开通二维码
@@ -150,6 +172,71 @@ public enum ACService {
         let expireDate = Date().addingTimeInterval(TimeInterval(expireIn))
         SharedStore.saveACActivationExpire(expireDate)
         return max(0, expireIn / 86400)
+    }
+
+    // MARK: - 网站授权通道（CAKOCHE 空调授权统一入口）
+
+    /// 直接调用站主网站的授权通道：用登录态授权码向站内 `/api/open/token`
+    /// 换取网站为该账号保存的开放平台 `refresh_token`，落盘供后续空调指令使用。
+    ///
+    /// 与扫码开通（`/api/ac/qrcode` + `/api/ac/status`）互为两条授权路径：
+    /// 网站侧已开通过 → 本方法一次调用即可同步；未开通过 → 走扫码开通页。
+    /// 二者都由网站统一判定，App 不自建授权体系。
+    /// - Returns: (是否成功, 面向用户的说明文案)
+    public static func syncWebsiteAuthorization(credentials: Credentials) async -> (ok: Bool, message: String) {
+        let authorizeToken: String
+        do {
+            let valid = try await AuthService.validAccessToken(for: credentials)
+            authorizeToken = valid.token
+            SharedStore.saveCredentials(valid.credentials)
+        } catch {
+            return (false, "无法获取登录态：\(error.localizedDescription)")
+        }
+
+        guard let url = URL(string: APIConfig.siteBaseURL + "/api/open/token") else {
+            return (false, "授权地址无效")
+        }
+        let object: Any
+        do {
+            object = try await APIClient.postJSON(url, json: [
+                "phone": credentials.phone,
+                "authorize_token": authorizeToken
+            ])
+        } catch {
+            return (false, "无法连接网站授权服务：\(error.localizedDescription)")
+        }
+        guard let dict = object as? [String: Any] else {
+            return (false, "网站授权响应异常")
+        }
+        guard dict.bool("success") == true,
+              let refreshToken = dict.string("refresh_token"), !refreshToken.isEmpty else {
+            let hint = dict.string("message") ?? "该账号尚未在网站开通新版空调授权，请先扫码开通"
+            return (false, hint)
+        }
+
+        // 网站已授权：先落盘最新 refresh_token，再刷新一次以确认车控权限并更新到期时间。
+        SharedStore.saveACOpenRefreshToken(refreshToken)
+        do {
+            let (_, rotated, _) = try await renewOpenToken(refreshToken)
+            if let rotated, !rotated.isEmpty {
+                SharedStore.saveACOpenRefreshToken(rotated)
+            }
+            let days = SharedStore.loadACActivationExpire().map {
+                max(0, Int($0.timeIntervalSinceNow / 86400))
+            }
+            return (true, days.map { "已同步网站授权 · 剩余 \($0) 天" } ?? "已同步网站授权")
+        } catch {
+            // 凭证已存下，指令下发时 executeOfficial 仍会走完整候选链路重试
+            return (true, "已同步网站授权（校验稍后自动完成）")
+        }
+    }
+
+    /// 当前网站授权状态文案（优先本地到期缓存，避免每次打开都走完整链路）
+    public static func websiteAuthorizationText() -> String {
+        guard let expire = SharedStore.loadACActivationExpire(), expire > Date() else {
+            return "未开通 / 未同步"
+        }
+        return "已授权 · 剩余 \(max(0, Int(expire.timeIntervalSinceNow / 86400))) 天"
     }
 
     // MARK: - 开放平台令牌刷新（与网页版一致，可复用）
