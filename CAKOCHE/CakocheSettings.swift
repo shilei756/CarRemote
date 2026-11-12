@@ -225,7 +225,8 @@ struct CommandPicker: View {
     private let candidates: [CarCommand] = CarCommand.allCases
 
     var body: some View {
-        NavigationStack {
+        // iOS 15 兼容：NavigationStack 需 iOS 16，这里用 NavigationView
+        NavigationView {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(candidates, id: \.self) { command in

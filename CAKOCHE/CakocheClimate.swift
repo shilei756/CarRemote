@@ -131,7 +131,9 @@ struct CakocheClimatePage: View {
         )) {
             Button("取消", role: .cancel) { confirmMode = nil }
             Button("确认下发", role: .destructive) {
-                if let selected = confirmMode { applyMode(selected) }
+                if let selected = confirmMode {
+                    Task { await applyMode(selected) }
+                }
                 confirmMode = nil
             }
         } message: {
