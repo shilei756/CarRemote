@@ -135,11 +135,15 @@ struct CakocheSettingsPage: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("退出登录")
 
-                DotCnText(text: "CAKOCHE 1.2.2 · 与网站同一套白名单授权体系",
+                DotCnText(text: "CAKOCHE 1.2.3 · 与网站同一套白名单授权体系",
                           size: 8, color: Mono.paperDim)
                     .padding(.horizontal, 22)
                     .padding(.bottom, 44)
             }
+            // 1.2.3：明确内容横向占满且左对齐。旧版中文用 Canvas 固定 frame，
+            // 长副标题把 ScrollView 内容撑宽后居中，整页左右被裁（「字体被遮挡」）。
+            // 现中文为原生 Text 自动换行，配合本约束不会再溢出。
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .sheet(item: Binding(

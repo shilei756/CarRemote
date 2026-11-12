@@ -10,8 +10,9 @@
 //  解析产物：与 Car3DView 现有 .rk 管线同一结构（RKCarModel），且**带完整联动**：
 //  官方 *_P 铰链枢轴（Door_FL_P 四门 / LuggageDoor_P 尾门 / Window_T_P 天窗 /
 //  Window_*_P 车窗 / Handle_*_P 把手 / Wheel_*_P 车轮）原样保留为部件实体，
-//  长按点选、车况联动、车轮滚动全部可用；车灯已在离线预处理阶段关闭
-//  （移除 LOn 自发光网格并清零 emissive），完整复用轨道相机与挂载系统。
+//  长按点选、车况联动、车轮滚动全部可用；完整复用轨道相机与挂载系统。
+//  车灯：部分车型 GLB 仍残留 LOn 自发光灯网格，CAKOCHE 编译下在解析时
+//  统一跳过（见 #if CAKOCHE），车模只保留车身本体、灯呈熄灭质感。
 //
 //  glTF 规范要点（本文件按此实现）：
 //    - 右手坐标系、+Y 向上；RealityKit 同为右手 +Y 向上，无需轴变换
@@ -337,6 +338,17 @@ enum GLBCarModelLoader {
             var deferredFit: [(verts: [SIMD3<Float>], frame: SIMD3<Float>)] = []
             for (ni, node) in nodesJSON.enumerated() {
                 guard let meshIdx = node["mesh"] as? Int, meshIdx < meshes.count else { continue }
+                #if CAKOCHE
+                // 1.2.3：CAKOCHE 车模统一熄灯，只留车身本体。
+                // 官方 GLB 里 `LOn` 网格是「点亮状态」的发光灯面（大灯 HL /
+                // 日行灯 DRL / 左右示宽灯 / 尾灯 TL / 刹车灯 BL / 门迎宾灯），
+                // 12 款中有 7 款残留未清理，常驻渲染会让车灯和示廓灯一直亮着。
+                // 这里按节点名 / 网格名跳过；车灯玻璃罩（LightGlass_*）保留，
+                // 呈熄灭质感。仅 CAKOCHE 编译生效，正式版行为零变化。
+                let ckNodeName = node["name"] as? String ?? ""
+                let ckMeshName = meshes[meshIdx]["name"] as? String ?? ""
+                if ckNodeName.contains("LOn") || ckMeshName.contains("LOn") { continue }
+                #endif
                 let isSteeringNode = (node["name"] as? String) == "Tex_Trumpet_Int"
                 let world = worldMatrices[ni]
                 // 归属枢轴的世界平移（根空间）：顶点局部 = 世界位 − 铰链平移
@@ -455,6 +467,11 @@ enum GLBCarModelLoader {
                     // 材质（含贴图缓存）
                     let matIdx = prim["material"] as? Int ?? 0
                     let params = matIdx < materials.count ? materials[matIdx] : MatParams()
+                    #if CAKOCHE
+                    // 1.2.3：材质层的第二道保险 —— 名字含 LOn 的自发光灯材质
+                    // 一律不渲染（大灯/日行灯/示宽灯/尾灯/刹车灯/门迎宾灯）。
+                    if params.name.contains("LOn") { continue }
+                    #endif
                     // 官方模自带的假地面阴影面片与本 App 纯净卡片背景不搭，直接跳过
                     if params.name.lowercased().contains("shadow") { continue }
                     let mat: PhysicallyBasedMaterial

@@ -138,228 +138,81 @@ struct BlockBar: View {
     }
 }
 
-// MARK: - 中文点阵（1.2.0）
+// MARK: - 中文点阵字体（1.2.3 彻底重写）
+//
+// 【为什么要推翻重做】1.2.0~1.2.2 的中文是「把系统黑体离屏渲染到 144px，
+// 再降采样成 12×12 二值点阵，用 Canvas 画点」。复杂汉字十几笔画塞进 144 格，
+// 必然断笔、粘连、发虚；反复调采样阈值 / 点间隙 / 字号都只是治标。
+// 且 Canvas + 手工 .frame(width:) 让长句在 HStack / 分页容器里被裁切
+// （用户反馈「信息显示不全、字被遮挡」）。
+//
+// 【1.2.3 方案】改用专业像素点阵字体 Zpix（SIL OFL，为 12px 低分辨率逐像素设计）：
+//   · 字形本身就是点阵，笔画根根分明，不存在「矢量降采样糊化」；
+//   · 用 SwiftUI 原生 Text 布局，自动换行、自适应宽度，遮挡从根上消失；
+//   · 字体子集覆盖 GB2312 全汉字 + ASCII + 常用符号，动态文案不缺字；
+//   · 两个 bundle 各自打包 Zpix.ttf，Info.plist 的 UIAppFonts 注册。
+// 数字 / 品牌字仍走 DotMatrixText（5×7 手工字模），与中文像素字同属点阵家族。
 
-/// 把任意文字（中文/英文/数字）离屏渲染成位图，按 12×12 网格采样生成点阵。
-/// 1.2.1：改用「透明底 + 只读 alpha」——此前填不透明黑底再读 alpha，
-/// 黑底 alpha 也是 255，导致所有格子被判成点亮，中文糊成马赛克。
-/// 结果按文本缓存。
-enum DotCnGlyphCache {
-    static let rowsPerChar = 12
-    static let colsPerChar = 12
-    private static let px = 144
+enum CakocheFont {
+    static let name = "Zpix"
 
-    /// 自探测位图内存行序：在用户坐标 y=0 画一个标记，
-    /// 看它落在内存第 0 行还是最后一行，从而确定字形行序是否需要翻转。
-    /// 避免依赖 CGBitmapContext 坐标系约定的记忆，真机上自行校准。
-    private static let needsRowFlip: Bool = {
-        let p = 8
-        guard let c = CGContext(
-            data: nil, width: p, height: p,
-            bitsPerComponent: 8, bytesPerRow: p * 4,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ), let raw = c.data else { return true }
-        c.clear(CGRect(x: 0, y: 0, width: p, height: p))
-        c.setFillColor(UIColor.white.cgColor)
-        c.fill(CGRect(x: 0, y: 0, width: 2, height: 2))
-        let bytes = raw.assumingMemoryBound(to: UInt8.self)
-        let bpr = c.bytesPerRow
-        let first = bytes[0 * bpr + 3]
-        let last = bytes[(p - 1) * bpr + 3]
-        // 用户 y=0 落在内存第 0 行 → 字形顶部（y 大）在内存行大 → grid 需翻转
-        return first > 100 || last <= 100
-    }()
-
-    private static let lock = NSLock()
-    private static var cache: [String: [[[Bool]]]] = [:]
-
-    /// 返回整串每个字的点阵（ [[[Bool]]] = [字][行][列] ）
-    static func grids(for text: String) -> [[[Bool]]] {
-        lock.lock()
-        if let hit = cache[text] {
-            lock.unlock()
-            return hit
-        }
-        lock.unlock()
-        let built = text.map { sampleCharacter($0) }
-        lock.lock()
-        if cache.count > 400 { cache.removeAll(keepingCapacity: true) }
-        cache[text] = built
-        lock.unlock()
-        return built
+    /// 旧 `size` 语义是「点阵字高」；映射到 Zpix 的 pt 字号。
+    /// 适度放大（用户要求「稍微加大一点点」）并按 0.5pt 规整，保证渲染锐利。
+    static func pointSize(_ dotHeight: CGFloat) -> CGFloat {
+        (max(11, dotHeight * 1.25) * 2).rounded() / 2
     }
 
-    /// 单字采样：透明底绘制文字，只按 alpha 判断笔画是否被覆盖。
-    /// 文字颜色无关（透明底 alpha=0，笔画 alpha=255），不依赖颜色空间/翻转约定。
-    private static func sampleCharacter(_ ch: Character) -> [[Bool]] {
-        let n = rowsPerChar
-        let blank = Array(repeating: Array(repeating: false, count: n), count: n)
-        guard let ctx = CGContext(
-            data: nil, width: px, height: px,
-            bitsPerComponent: 8, bytesPerRow: px * 4,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else { return blank }
-
-        // 关键：整张位图清成全透明，未绘制处 alpha = 0
-        ctx.clear(CGRect(x: 0, y: 0, width: px, height: px))
-
-        let font = UIFont.systemFont(ofSize: 112, weight: .medium)
-        let attr = NSAttributedString(
-            string: String(ch),
-            attributes: [.font: font, .foregroundColor: UIColor.white]
-        )
-        let line = CTLineCreateWithAttributedString(attr as CFAttributedString)
-        var ascent: CGFloat = 0, descent: CGFloat = 0, leading: CGFloat = 0
-        let advance = CTLineGetTypographicBounds(line, &ascent, &descent, &leading)
-        let glyphH = ascent + descent
-        let scale = min(CGFloat(px) * 0.88 / max(1, advance),
-                        CGFloat(px) * 0.88 / max(1, glyphH))
-        ctx.saveGState()
-        ctx.translateBy(x: (CGFloat(px) - advance * scale) / 2,
-                        y: (CGFloat(px) - glyphH * scale) / 2 + descent * scale)
-        ctx.scaleBy(x: scale, y: scale)
-        CTLineDraw(line, ctx)   // CoreText 字形 y 向上，方向确定
-        ctx.restoreGState()
-
-        guard let raw = ctx.data else { return blank }
-        let bytes = raw.assumingMemoryBound(to: UInt8.self)
-        let bpr = ctx.bytesPerRow
-        let totalBytes = px * bpr
-        let cell = CGFloat(px) / CGFloat(n)
-
-        // CGBitmapContext 内存第 0 行 = y=0 = 字形底部；
-        // grid 第 0 行是视觉顶部，故行序翻转。
-        var grid = Array(repeating: Array(repeating: false, count: n), count: n)
-        for r in 0..<n {
-            for c in 0..<n {
-                var on = 0
-                for sy in 0..<3 {
-                    for sx in 0..<3 {
-                        let fx = cell * (CGFloat(c) + 0.2 + 0.3 * CGFloat(sx))
-                        let fyTop = cell * (CGFloat(r) + 0.2 + 0.3 * CGFloat(sy))
-                        let ySrc = needsRowFlip ? (px - 1 - Int(fyTop)) : Int(fyTop)
-                        let x = Int(fx)
-                        guard ySrc >= 0, ySrc < px, x >= 0, x < px else { continue }
-                        let idx = ySrc * bpr + x * 4 + 3   // alpha 通道
-                        guard idx >= 0, idx + 3 < totalBytes else { continue }
-                        if bytes[idx] > 100 { on += 1 }
-                    }
-                }
-                // 1.2.2：4 → 3，笔画更连贯（阈值过严会让汉字断笔、发虚）
-                grid[r][c] = on >= 3
-            }
-        }
-
-        // 兜底：仅当几乎全亮（马赛克）才判异常；85% 阈值避免密笔画汉字被误杀
-        let lit = grid.reduce(0) { $0 + $1.filter { $0 }.count }
-        if lit > n * n * 85 / 100 { return blank }
-        return grid
+    /// 直接按 PostScript 名取字体。UIAppFonts 在进程启动时同步注册，View 渲染时必然就绪；
+    /// Font.custom 自带安全 fallback（字体缺失时系统字体兜底，绝不留白）。
+    /// 不做 UIFont(name:) 探测——它在注册时机边界可能误判为 nil 而错误回退。
+    static func cn(_ dotHeight: CGFloat) -> Font {
+        .custom(name, size: pointSize(dotHeight))
     }
 }
 
-/// 中文点阵文本视图：视觉与 DotMatrixText 完全同风格（同 gapRatio / 圆角点）。
-/// `size` 为字高（pt）；任意文字可用，标签、按钮、长句都走这里。
-/// 传 `wrapWidth` 时按该宽度自动折行（所有字符等宽，折行计算精确）。
+/// 中文点阵文本：Zpix 像素字体 + SwiftUI 原生布局。
+/// 保留 1.2.x 调用签名（gapRatio / wrapWidth / wrapAlignment），调用点零改动。
 struct DotCnText: View {
     let text: String
     var size: CGFloat = 12
     var color: Color = Mono.paperInk
-    /// 1.2.2：点间隙 0.22 → 0.10，点更实；配合下方 1.15× 放大，单字净宽仅约 +4%
+    /// 兼容旧签名；字距现由字体自身保证，不再使用
     var gapRatio: CGFloat = 0.10
-    /// 提供时按此宽度折行（多行绘制）
+    /// 提供时作为最大宽度上限（长句折行用）；nil 时宽度由父容器决定
     var wrapWidth: CGFloat? = nil
-    /// 折行时的水平对齐（自动折行的长说明句默认左对齐）
     var wrapAlignment: HorizontalAlignment = .leading
 
-    /// 1.2.2：按用户要求「稍微加大一点点」，与收窄的点间隙相互抵消，布局几乎不变
-    private var unit: CGFloat { size * 1.15 / CGFloat(DotCnGlyphCache.rowsPerChar) }
-    private var step: CGFloat { unit * (1 + gapRatio) }
-    private var dot: CGFloat { unit * (1 - gapRatio * 0.15) }
-    private var charWidth: CGFloat { CGFloat(DotCnGlyphCache.colsPerChar) * step }
-    private var charGap: CGFloat { step * 0.55 }
-
-    private var chars: [Character] { Array(text) }
-    private var grids: [[[Bool]]] { DotCnGlyphCache.grids(for: text) }
-
-    private var singleLineWidth: CGFloat {
-        CGFloat(chars.count) * charWidth + CGFloat(max(0, chars.count - 1)) * charGap
+    private var stackAlignment: Alignment {
+        Alignment(horizontal: wrapAlignment, vertical: .top)
     }
-    private var lineH: CGFloat { CGFloat(DotCnGlyphCache.rowsPerChar) * step }
-    private var lineAdvance: CGFloat { lineH + step * 0.5 }
-
-    /// 1.2.1：未显式指定 wrapWidth 时，超过安全宽度（小屏可用区）自动折行，
-    /// 避免长句单行绘制被屏幕右缘裁掉。
-    private var effectiveWrap: CGFloat? {
-        if let wrapWidth { return wrapWidth }
-        return singleLineWidth > 330 ? 330 : nil
+    private var textAlignment: TextAlignment {
+        if wrapAlignment == .trailing { return .trailing }
+        if wrapAlignment == .center { return .center }
+        return .leading
     }
 
-    /// 折行布局：返回每行 [字符下标]
-    private var lines: [[Int]] {
-        guard let wrap = effectiveWrap, wrap > charWidth else { return [Array(0..<chars.count)] }
-        var result: [[Int]] = []
-        var current: [Int] = []
-        var x: CGFloat = 0
-        for i in 0..<chars.count {
-            let w = charWidth + (current.isEmpty ? 0 : charGap)
-            if x + w > wrap, !current.isEmpty {
-                result.append(current)
-                current = []
-                x = charWidth
-            } else {
-                x += w
-            }
-            current.append(i)
-        }
-        if !current.isEmpty { result.append(current) }
-        return result
-    }
-
-    private var totalWidth: CGFloat { effectiveWrap ?? singleLineWidth }
-    /// 行距大于行高，末行底部也要算进去，否则多行最后一行被裁
-    private var totalHeight: CGFloat {
-        CGFloat(max(0, lines.count - 1)) * lineAdvance + lineH
+    /// 基础文本（避免在 @ViewBuilder 的 body 里用 let + return）
+    private var label: some View {
+        Text(text)
+            .font(CakocheFont.cn(size))
+            .tracking(0.2)
+            .foregroundStyle(color)
+            .lineSpacing(2)
+            .multilineTextAlignment(textAlignment)
+            // 固定宽度容器（如「按钮 1」70pt）中自动缩字号，绝不截断
+            .minimumScaleFactor(0.8)
+            // 水平可被压缩 → 自动换行；垂直保持理想高度 → 长句末行不被裁
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     var body: some View {
-        Canvas { context, _ in
-            let layout = lines
-            for (li, line) in layout.enumerated() {
-                let lineWidth = CGFloat(line.count) * charWidth + CGFloat(max(0, line.count - 1)) * charGap
-                let originX: CGFloat = {
-                    if let wrap = effectiveWrap {
-                        switch wrapAlignment {
-                        case .leading: return 0
-                        case .trailing: return wrap - lineWidth
-                        default: return (wrap - lineWidth) / 2
-                        }
-                    }
-                    return 0
-                }()
-                for (pos, charIdx) in line.enumerated() where charIdx < grids.count {
-                    let grid = grids[charIdx]
-                    let baseX = originX + CGFloat(pos) * (charWidth + charGap)
-                    let baseY = CGFloat(li) * lineAdvance
-                    for (row, rowBits) in grid.enumerated() {
-                        for (col, on) in rowBits.enumerated() where on {
-                            let rect = CGRect(
-                                x: baseX + CGFloat(col) * step,
-                                y: baseY + CGFloat(row) * step,
-                                width: dot,
-                                height: dot
-                            )
-                            context.fill(
-                                Path(roundedRect: rect, cornerRadius: 0),  // 1.2.2 实心方点
-                                with: .color(color)
-                            )
-                        }
-                    }
-                }
+        Group {
+            if let w = wrapWidth {
+                label.frame(maxWidth: w, alignment: stackAlignment)
+            } else {
+                label
             }
         }
-        .frame(width: max(1, totalWidth), height: totalHeight)
         .accessibilityLabel(Text(text))
     }
 }
