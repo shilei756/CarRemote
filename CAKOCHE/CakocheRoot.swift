@@ -44,6 +44,9 @@ struct CakocheHome: View {
     @State private var showControl = false
     @State private var cockpit = false
     @State private var selectedID = CakocheModels.selectedID
+    /// 油量点阵配色：空 = 多色随机（默认）；非空 = 用户指定单色（hex）
+    @AppStorage("cakoche.fuelDot.hex") private var fuelDotHex = ""
+    @State private var showFuelColor = false
 
     private var model: CakocheModel {
         CakocheModels.all.first { $0.id == selectedID } ?? CakocheModels.all[0]
@@ -78,6 +81,9 @@ struct CakocheHome: View {
         }
         .sheet(isPresented: $showControl) {
             CakocheControlSheet(control: control)
+        }
+        .sheet(isPresented: $showFuelColor) {
+            FuelColorPickerSheet(hex: $fuelDotHex)
         }
         .onAppear {
             Task { await appState.refreshStatus() }
@@ -194,12 +200,26 @@ struct CakocheHome: View {
                 }
                 .padding(.bottom, 6)
             }
-            // 1.2.0：跃动油量条（密集点阵网格，点亮区随机跃动闪烁）
+            // 1.2.5：跃动油量条（默认多色随机，点按进入配色面板）
             FuelDotBar(progress: fuelProgress, rows: 7,
-                       color: Mono.paperInk, dim: Mono.paperHair)
+                       color: fuelDotHex.isEmpty ? nil : Color(hex: fuelDotHex),
+                       dim: Mono.paperHair)
                 .frame(height: 34)
+                .contentShape(Rectangle())
+                .onTapGesture { showFuelColor = true }
+                .accessibilityHint("点按自定义油量点阵颜色")
             HStack(alignment: .center) {
                 DotCnText(text: "油量", size: 8, color: Mono.paperDim)
+                Spacer()
+                Button { showFuelColor = true } label: {
+                    HStack(spacing: 4) {
+                        DotCnText(text: "点按换色", size: 8, color: Mono.paperDim)
+                        Image(systemName: "paintpalette")
+                            .font(.system(size: 8, weight: .semibold))
+                            .foregroundStyle(Mono.paperDim)
+                    }
+                }
+                .buttonStyle(.plain)
                 Spacer()
                 Text(fuelText)
                     .font(.system(size: 10).monospacedDigit())

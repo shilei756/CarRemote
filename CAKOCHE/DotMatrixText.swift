@@ -219,13 +219,25 @@ struct DotCnText: View {
 
 /// 跃动油量条（1.2.0）：密集小方块网格，点亮比例 = 油量，
 /// 点亮区每列高度随机波动、密度随机闪烁，呈现均衡器式的上下跃动效果。
+///
+/// 1.2.5：颜色升级——默认「多色随机」（每个点亮方块从调色板随机取色，并随时间
+/// 缓慢换色）；用户点按后可在调色板里选单色或自定义任意颜色（color 非 nil）。
 struct FuelDotBar: View {
     var progress: Double
     var rows: Int = 7
-    var color: Color = Mono.paperInk
+    /// 自定义单色；nil = 默认多色随机模式
+    var color: Color? = nil
     var dim: Color = Mono.paperHair
     /// 闪烁节奏（秒）
     var tickInterval: Double = 0.14
+
+    /// 默认调色板：高饱和、在白纸底上都有足够对比
+    static let palette: [Color] = [
+        Color(hex: "FF3B30"), Color(hex: "FF9500"), Color(hex: "FFCC00"),
+        Color(hex: "34C759"), Color(hex: "00C7BE"), Color(hex: "0A84FF"),
+        Color(hex: "5E5CE6"), Color(hex: "BF5AF2"), Color(hex: "FF375F"),
+        Color(hex: "FF6B22")
+    ]
 
     private func hash(_ a: Int, _ b: Int, _ c: Int) -> Int {
         var h = a &* 2654435761 &+ b &* 40503 &+ c &* 97
@@ -266,8 +278,20 @@ struct FuelDotBar: View {
                         }
                         let rect = CGRect(x: CGFloat(c) * advance, y: CGFloat(r) * advance,
                                           width: cell, height: cell)
+                        let dotColor: Color
+                        if on {
+                            if let color {
+                                dotColor = color
+                            } else {
+                                // 多色随机：每格独立取色，约 0.8 秒换一批（t / 6）
+                                let idx = hash(c, r, t / 6) % Self.palette.count
+                                dotColor = Self.palette[idx]
+                            }
+                        } else {
+                            dotColor = dim
+                        }
                         ctx.fill(Path(roundedRect: rect, cornerRadius: cell * 0.22),
-                                 with: .color(on ? color : dim))
+                                 with: .color(dotColor))
                     }
                 }
             }
