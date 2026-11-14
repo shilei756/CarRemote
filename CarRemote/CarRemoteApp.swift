@@ -132,6 +132,15 @@ struct RootView: View {
         .onAppear {
             applyUIScale(CGFloat(SharedStore.loadSettings().uiScale))
             VehicleAlertService.clearAppBadge()
+            #if !CAKOCHE
+            applyPendingPage()
+            #endif
+        }
+        // 「打开 App 页面」快捷指令会拉起 App 并写下待跳转标记，回前台时消费
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            #if !CAKOCHE
+            applyPendingPage()
+            #endif
         }
         // 点击「车辆异常」通知直接回到控车页
         .onReceive(NotificationCenter.default.publisher(for: .vehicleAlertTapped)) { _ in
@@ -150,6 +159,19 @@ struct RootView: View {
             Text("确认要执行「\(appState.pendingWidgetCommand?.displayName ?? "")」吗？")
         }
     }
+
+    /// 消费「打开 App 页面」快捷指令写下的标记，映射到正式版 5 个 Tab。
+    /// CAKOCHE 侧由 CakocheRoot.applyPendingPage() 消费同一标记（各自 root 互斥，不冲突）。
+    /// 用字符串字面量比较，避免引用 @available(iOS 16) 的 AppEnum 类型。
+    #if !CAKOCHE
+    private func applyPendingPage() {
+        guard let raw = CakochePendingPage.consume() else { return }
+        switch raw {
+        case "mine": TabRouter.shared.select(.profile)
+        default: TabRouter.shared.select(.control)   // home / climate → 控车首页（空调在此页）
+        }
+    }
+    #endif
 }
 
 /// 启动占位

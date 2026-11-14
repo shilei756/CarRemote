@@ -47,7 +47,7 @@ enum CakochePendingPage {
 @available(iOS 16.0, *)
 struct OpenCakochePageIntent: AppIntent {
     static var title: LocalizedStringResource = "打开 App 页面"
-    static var description: IntentDescription = "直接打开 CAKOCHE 的车辆首页、空调面板或我的页面"
+    static var description: IntentDescription = "直接打开车辆首页、空调面板或我的页面（长安控车 / CAKOCHE 自动适配当前 App 的标签页）"
     static var openAppWhenRun: Bool = true
 
     @Parameter(title: "页面")

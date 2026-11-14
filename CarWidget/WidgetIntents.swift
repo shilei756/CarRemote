@@ -23,10 +23,26 @@ enum WidgetSlotRunner {
         await perform(command: command(forSlot: slot))
     }
 
-    /// 执行单条指令（锁屏快捷按钮与槽位按钮共用）。
+    /// 空调链路（1.11.0）：完全跟随用户在「设置 → 新版空调」里选的模式。
+    ///
+    /// 正式版小组件的 bundle id 不带 cakoche 前缀，所以 `ACService.useNewChannel()`
+    /// 在这里等价于 `SharedStore.loadACMode() == .new`。这里显式读 acMode，
+    /// 不依赖 bundle id 判定，语义更直白：用户选新版就走开放平台，选官方版就直连。
+    static var usesNewAC: Bool { SharedStore.loadACMode() == .new }
+
+    /// 开空调目标温度：用户上次设定 > 车机当前设定 > 24（与主 App defaultACTemp 一致）
+    static func acTemperature(snapshot: StatusSnapshot? = nil) -> Int {
+        if let saved = SharedStore.loadACLastTemp() { return saved }
+        if let current = snapshot?.acTempC, (16...32).contains(Int(current.rounded())) {
+            return Int(current.rounded())
+        }
+        return 24
+    }
+
+    /// 执行单条指令（锁屏快捷按钮、槽位按钮、快捷指令共用）。
     /// 结果落盘并刷新时间线：小组件界面显示绿✓/红✗横幅作为点击反馈
     @MainActor
-    static func perform(command: CarCommand?) async -> String {
+    static func perform(command: CarCommand?, temperature: Int? = nil) async -> String {
         // 1.10.0 A 方案防误触：开关打开时，高危指令第一次点按只登记「待确认」，
         // 8 秒内第二次点按同一按钮才真正下发。拦截放在执行入口而非 SwiftUI 状态，
         // 因此不依赖 WidgetKit 重绘，连点两次也不会丢指令。
@@ -42,12 +58,48 @@ enum WidgetSlotRunner {
         let credentials = SharedStore.loadCredentials() ?? WidgetLocalStore.loadCredentials()
         if let credentials, let command {
             do {
-                let result = try await CarService.execute(command: command, credentials: credentials)
+                let isAC = (command == .openAir || command == .closeAir)
+                let result: CommandResult
+                if isAC, Self.usesNewAC {
+                    // 新版（长安开放平台 / 网页版 newAC）：支持带目标温度，
+                    // 授权统一由站主网站下发（/api/open/token + /api/ac/*）。
+                    let temp = command == .openAir
+                        ? (temperature ?? Self.acTemperature())
+                        : nil
+                    result = try await ACService.executeOfficial(
+                        command: command, credentials: credentials, temperature: temp)
+                } else {
+                    // 官方版（网页版 performAction 直连）及其余 14 条指令：车联网直连。
+                    // 官方版按车机当前设定执行，不下发温度，与主 App 行为一致。
+                    result = try await CarService.execute(command: command, credentials: credentials)
+                }
                 ok = result.ok
-                text = result.ok ? "\(command.displayName)成功" : "\(command.displayName)失败：\(CarIntentRunner.cleanReason(result.message))"
+                if result.ok {
+                    let mode = isAC ? (Self.usesNewAC ? "新版" : "官方版") : ""
+                    if command == .openAir, Self.usesNewAC {
+                        let t = temperature ?? Self.acTemperature()
+                        text = "空调已开启（\(mode) \(t)℃）"
+                    } else if isAC {
+                        text = "\(command.displayName)成功（\(mode)）"
+                    } else {
+                        text = "\(command.displayName)成功"
+                    }
+                } else {
+                    var reason = CarIntentRunner.cleanReason(result.message)
+                    if isAC, Self.usesNewAC,
+                       reason.contains("开通") || reason.contains("凭证") || reason.contains("授权") {
+                        reason += "，请在 App 内扫码开通新版空调"
+                    }
+                    text = "\(command.displayName)失败：\(reason)"
+                }
             } catch {
+                var reason = CarIntentRunner.cleanReason(error.localizedDescription)
+                if (command == .openAir || command == .closeAir), Self.usesNewAC,
+                   reason.contains("开通") || reason.contains("凭证") || reason.contains("授权") {
+                    reason += "，请在 App 内扫码开通新版空调"
+                }
                 ok = false
-                text = "\(command.displayName)失败：\(CarIntentRunner.cleanReason(error.localizedDescription))"
+                text = "\(command.displayName)失败：\(reason)"
             }
             // 执行成功后本地同步翻转状态：锁屏按钮图标立即反映最新锁态/发动机态
             if ok { syncSnapshotState(command: command) }

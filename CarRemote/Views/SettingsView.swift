@@ -879,6 +879,43 @@ struct SiriSettingsPage: View {
             }
 
             Section {
+                Label {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("全部功能已独立封装")
+                        Text("控车 17 项、查看 7 项、页面跳转 1 项，共 25 个动作。在快捷指令里按名称搜索即可单独拖进自动化；查看类动作返回文本，可继续接「朗读」「发微信」「写备忘录」。")
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "square.grid.2x2")
+                }
+                Label {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("空调跟随你的选择")
+                        Text("开 / 关空调、空调定温会按「设置 → 新版空调」里选的链路下发：新版走开放平台（支持 16~32℃ 定温），官方版走车机直连。桌面小组件的空调按钮同样跟随。")
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "snowflake")
+                }
+                Label {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("小组件独立动作")
+                        Text("桌面小组件另有一套「小组件 ·」前缀的动作（16 条控车 + 空调定温 + 车况查看），可单独绑到锁屏 / 主屏，也能在快捷指令里运行。")
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "rectangle.on.rectangle")
+                }
+            } header: {
+                Text("全功能快捷指令")
+            } footer: {
+                Text("360 全景（拍照 + 轮询取图）不在快捷指令内，其余控车与查看功能全部可用。")
+            }
+
+            Section {
                 siriPhraseRow("车辆状态", phrase: "四门是否锁好、四窗与天窗是否关好、发动机有没有熄火、四轮胎压、续航油量里程电压")
                 siriPhraseRow("车辆位置", phrase: "具体地址、城市、定位时间、经纬度、车速")
                 siriPhraseRow("小组件独立登录", phrase: "免签 / 巨魔安装时在快捷指令里运行，填手机号与控车码绑定")

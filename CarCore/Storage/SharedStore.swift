@@ -851,14 +851,23 @@ public enum SharedStore {
 
     // MARK: 空调模式 / 主题（独立键存放，避免影响 AppSettings 解码兼容）
 
+    /// 空调控制模式（新版开放平台 / 官方版直连）。
+    ///
+    /// 1.11.0：改为多通道读写。小组件是独立进程，全能签 / 巨魔重签环境下
+    /// App Group 组名会变，原先只写单一 `defaults` 时小组件读不到用户在
+    /// 「设置 → 新版空调」里选的模式，会退回默认 .new 导致选了官方版却走新版。
+    /// 与 loadServerBaseURL / loadACOpenRefreshToken 同套路：读取遍历候选组，
+    /// 写入全部落笔（无权限的组静默失败，无害）。
     public static func loadACMode() -> ACMode {
-        guard let raw = defaults?.string(forKey: Key.acMode),
-              let mode = ACMode(rawValue: raw) else { return .new }
-        return mode
+        for d in allDefaults {
+            if let raw = d.string(forKey: Key.acMode),
+               let mode = ACMode(rawValue: raw) { return mode }
+        }
+        return .new
     }
 
     public static func saveACMode(_ mode: ACMode) {
-        defaults?.set(mode.rawValue, forKey: Key.acMode)
+        for d in allDefaults { d.set(mode.rawValue, forKey: Key.acMode) }
     }
 
     /// 空调开通到期时间（刷新 token 剩余有效期换算，用于「剩余 X 天」展示）
@@ -904,17 +913,23 @@ public enum SharedStore {
         allDefaults.forEach { $0.set(value, forKey: Key.acOpenRefreshToken) }
     }
 
-    /// 上次开空调选择的温度（网页版 localStorage ac_last_temp，16~32 有效）
+    /// 上次开空调选择的温度（网页版 localStorage ac_last_temp，16~32 有效）。
+    /// 1.11.0：同样改多通道，让小组件的新版空调能沿用用户上次设定的温度。
     public static func loadACLastTemp() -> Int? {
-        guard let t = defaults?.integer(forKey: Key.acLastTemp), (16...32).contains(t) else { return nil }
-        return t
+        for d in allDefaults {
+            let t = d.integer(forKey: Key.acLastTemp)
+            if (16...32).contains(t) { return t }
+        }
+        return nil
     }
 
     public static func saveACLastTemp(_ temp: Int?) {
-        if let temp, (16...32).contains(temp) {
-            defaults?.set(temp, forKey: Key.acLastTemp)
-        } else {
-            defaults?.removeObject(forKey: Key.acLastTemp)
+        for d in allDefaults {
+            if let temp, (16...32).contains(temp) {
+                d.set(temp, forKey: Key.acLastTemp)
+            } else {
+                d.removeObject(forKey: Key.acLastTemp)
+            }
         }
     }
 
