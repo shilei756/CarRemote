@@ -1,39 +1,35 @@
 import AppIntents
 import WidgetKit
 import Foundation
+import CarCore
 
-/// 车辆状态（1.9.0 详细版：Siri / 快捷指令 / 小组件共用）。
+/// 车辆状态（详细版：Siri / 快捷指令 / 小组件共用）。
 ///
 /// 用户要的「车辆状态」不是一句「续航多少」，而是：
 /// 四门是否锁好、四窗与天窗是否关好、车有没有熄火、四轮胎压，
 /// 外加续航 / 油量 / 总里程 / 电瓶电压。
-/// 执行后会刷新本地快照，桌面小组件同步更新。
+/// 结果同时作为文本返回，快捷指令里可以接着「朗读」「发微信」「写入备忘录」。
 @available(iOS 16.0, *)
-public struct CarStatusIntent: AppIntent {
-    public static var title: LocalizedStringResource = "车辆状态"
-    public static var description: IntentDescription = "查询四门锁态、四窗与天窗、是否熄火、四轮胎压、续航与油量"
-    public static var openAppWhenRun: Bool = false
+struct CarStatusIntent: AppIntent {
+    static var title: LocalizedStringResource = "车辆状态"
+    static var description: IntentDescription = "查询四门锁态、四窗与天窗、是否熄火、四轮胎压、续航与油量"
+    static var openAppWhenRun: Bool = false
 
-    public init() {}
+    init() {}
 
-    public func perform() async throws -> some IntentResult & ProvidesDialog {
-        guard let credentials = SharedStore.loadCredentials() else {
-            return .result(dialog: IntentDialog(stringLiteral: "请先在「长安控车」App 中登录"))
-        }
+    func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> {
         do {
-            let (status, car, updatedCredentials) = try await CarService.refresh(credentials: credentials)
-            SharedStore.saveCredentials(updatedCredentials)
-            SharedStore.saveStatusSnapshot(StatusSnapshot(carName: car.displayName, status: status))
-            WidgetCenter.shared.reloadAllTimelines()
-
-            return .result(dialog: IntentDialog(stringLiteral: Self.describe(status, carName: car.displayName)))
+            let (status, car) = try await CarQuery.load()
+            let text = Self.describe(status, carName: car.displayName)
+            return .result(value: text, dialog: IntentDialog(stringLiteral: text))
         } catch {
-            return .result(dialog: IntentDialog(stringLiteral: "查询失败：\(CarIntentRunner.cleanReason(error.localizedDescription))"))
+            let text = "查询失败：\(CarIntentRunner.cleanReason(error.localizedDescription))"
+            return .result(value: text, dialog: IntentDialog(stringLiteral: text))
         }
     }
 
     /// 逐项拼装播报文本（Siri 朗读 / 快捷指令结果 / 小组件反馈三处同源）
-    public static func describe(_ status: CarStatus, carName: String) -> String {
+    static func describe(_ status: CarStatus, carName: String) -> String {
         let dw = status.doorsAndWindows
         // 局部函数包装：CarStatus.format 带默认参数，直接引用成函数值会丢失默认值
         func fmt(_ value: Double?) -> String { CarStatus.format(value) }
@@ -80,27 +76,31 @@ public struct CarStatusIntent: AppIntent {
     }
 }
 
-/// 查询车辆位置（1.9.0 新增）。
+// MARK: - 车辆位置
+
+/// 查询车辆位置。
 /// 与 App 内「车辆位置」卡片同源：car/location 接口返回的具体地址、城市、
 /// 定位时间、经纬度与车速；Siri 朗读、快捷指令结果里直接可读。
 @available(iOS 16.0, *)
-public struct CarLocationIntent: AppIntent {
-    public static var title: LocalizedStringResource = "查询车辆位置"
-    public static var description: IntentDescription = "读取车辆最新定位：地址、定位时间、经纬度与车速"
-    public static var openAppWhenRun: Bool = false
+struct CarLocationIntent: AppIntent {
+    static var title: LocalizedStringResource = "查询车辆位置"
+    static var description: IntentDescription = "读取车辆最新定位：地址、定位时间、经纬度与车速"
+    static var openAppWhenRun: Bool = false
 
-    public init() {}
+    init() {}
 
-    public func perform() async throws -> some IntentResult & ProvidesDialog {
+    func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> {
         guard let credentials = SharedStore.loadCredentials() else {
-            return .result(dialog: IntentDialog(stringLiteral: "请先在「长安控车」App 中登录"))
+            let text = "请先在 App 内登录（手机号 + 控车码）"
+            return .result(value: text, dialog: IntentDialog(stringLiteral: text))
         }
         do {
             let (token, updatedCredentials) = try await AuthService.validAccessToken(for: credentials)
             SharedStore.saveCredentials(updatedCredentials)
             let cars = try await CarService.fetchCars(accessToken: token)
             guard let car = cars.first else {
-                return .result(dialog: IntentDialog(stringLiteral: "未获取到车辆信息，请确认账号已绑定车辆"))
+                let text = "未获取到车辆信息，请确认账号已绑定车辆"
+                return .result(value: text, dialog: IntentDialog(stringLiteral: text))
             }
             let location = try await CarService.fetchLocation(carId: car.carId, accessToken: token)
             var lines: [String] = []
@@ -109,9 +109,11 @@ public struct CarLocationIntent: AppIntent {
             if !location.gpsTime.isEmpty { lines.append("定位时间：\(location.gpsTime)") }
             lines.append(String(format: "经纬度：%.6f, %.6f", location.latitude, location.longitude))
             if let speed = location.speed { lines.append(String(format: "车速：%.0f km/h", speed)) }
-            return .result(dialog: IntentDialog(stringLiteral: lines.joined(separator: "\n")))
+            let text = lines.joined(separator: "\n")
+            return .result(value: text, dialog: IntentDialog(stringLiteral: text))
         } catch {
-            return .result(dialog: IntentDialog(stringLiteral: "位置查询失败：\(CarIntentRunner.cleanReason(error.localizedDescription))"))
+            let text = "位置查询失败：\(CarIntentRunner.cleanReason(error.localizedDescription))"
+            return .result(value: text, dialog: IntentDialog(stringLiteral: text))
         }
     }
 }

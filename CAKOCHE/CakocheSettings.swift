@@ -100,6 +100,33 @@ struct CakocheSettingsPage: View {
                 }
                 .padding(.top, 4)
 
+                // MARK: 1.2.6 快捷指令 / Siri（全部功能已独立封装）
+                section("快捷指令与 Siri", "25 个控车 / 查看动作，可单独拖进自动化")
+                Button { openShortcuts() } label: {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "wand.and.stars")
+                            .font(.system(size: 13, weight: .light))
+                            .foregroundStyle(Mono.paperInk)
+                            .frame(width: 20)
+                        VStack(alignment: .leading, spacing: 5) {
+                            DotCnText(text: "在快捷指令中查看动作", size: 10, color: Mono.paperInk)
+                            DotCnText(text: "搜索「CAKOCHE」即可看到开锁、空调、车况、位置等全部动作",
+                                      size: 8, color: Mono.paperDim, wrapAlignment: .leading)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        Spacer()
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Mono.paperDim)
+                            .padding(.top, 3)
+                    }
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 13)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("在快捷指令中查看 CAKOCHE 动作")
+                Hairline(color: Mono.paperHair)
+
                 // MARK: 账号授权
                 section("账号授权", "手机号与控车码由站主网站校验")
                 VStack(alignment: .leading, spacing: 11) {
@@ -167,7 +194,7 @@ struct CakocheSettingsPage: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("退出登录")
 
-                DotCnText(text: "CAKOCHE 1.2.4 · 空调新版通道 · 网站统一授权",
+                DotCnText(text: "CAKOCHE 1.2.6 · 空调新版通道 · 快捷指令全量封装",
                           size: 8, color: Mono.paperDim)
                     .padding(.horizontal, 22)
                     .padding(.bottom, 44)
@@ -243,6 +270,12 @@ struct CakocheSettingsPage: View {
 
     private var hostText: String {
         URL(string: APIConfig.siteBaseURL)?.host ?? APIConfig.siteBaseURL
+    }
+
+    /// 跳到「快捷指令」App（系统自带，无需额外安装）
+    private func openShortcuts() {
+        guard let url = URL(string: "shortcuts://") else { return }
+        UIApplication.shared.open(url)
     }
 
     private func openMap() {

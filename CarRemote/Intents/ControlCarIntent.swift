@@ -1,14 +1,19 @@
 import AppIntents
 import WidgetKit
 import Foundation
+import CarCore
 
-// MARK: - 统一控车 Intent（Siri 重新设计）
+// MARK: - 统一控车 Intent（兼容入口）
 
 /// 控车指令选项（Siri / 快捷指令的参数枚举，对应 CarCommand）
+///
+/// 保留这条统一入口只是为了「一句话控制一切」与老快捷指令兼容；
+/// 新版本每个功能都有独立 Intent，可单独拖拽、单独命名。
 @available(iOS 16.0, *)
-public enum CarCommandOption: String, AppEnum, CaseIterable, Sendable {
+enum CarCommandOption: String, AppEnum, CaseIterable, Sendable {
     case unlockDoor
     case lockDoor
+    case oneKeyLock
     case flashLight
     case whistle
     case remoteSearchCar
@@ -22,14 +27,15 @@ public enum CarCommandOption: String, AppEnum, CaseIterable, Sendable {
     case openAir
     case closeAir
 
-    public static var typeDisplayRepresentation: TypeDisplayRepresentation {
+    static var typeDisplayRepresentation: TypeDisplayRepresentation {
         TypeDisplayRepresentation(name: "控车指令")
     }
 
-    public static var caseDisplayRepresentations: [CarCommandOption: DisplayRepresentation] {
+    static var caseDisplayRepresentations: [CarCommandOption: DisplayRepresentation] {
         [
             .unlockDoor: DisplayRepresentation(title: "开锁", image: DisplayRepresentation.Image(systemName: "lock.open")),
             .lockDoor: DisplayRepresentation(title: "闭锁", image: DisplayRepresentation.Image(systemName: "lock")),
+            .oneKeyLock: DisplayRepresentation(title: "一键闭锁", image: DisplayRepresentation.Image(systemName: "lock.circle.fill")),
             .flashLight: DisplayRepresentation(title: "闪灯", image: DisplayRepresentation.Image(systemName: "light.beacon.max")),
             .whistle: DisplayRepresentation(title: "鸣笛", image: DisplayRepresentation.Image(systemName: "speaker.wave.2")),
             .remoteSearchCar: DisplayRepresentation(title: "寻车", image: DisplayRepresentation.Image(systemName: "car.circle")),
@@ -46,10 +52,11 @@ public enum CarCommandOption: String, AppEnum, CaseIterable, Sendable {
     }
 
     /// 对应的业务指令
-    public var command: CarCommand {
+    var command: CarCommand {
         switch self {
         case .unlockDoor: return .unlockDoor
         case .lockDoor: return .lockDoor
+        case .oneKeyLock: return .oneKeyLock
         case .flashLight: return .flashLight
         case .whistle: return .whistle
         case .remoteSearchCar: return .remoteSearchCar
@@ -69,21 +76,21 @@ public enum CarCommandOption: String, AppEnum, CaseIterable, Sendable {
 /// 统一控车指令：Siri 说「控制车辆」→ 追问要控制什么 → 高危操作语音确认后执行。
 /// 相比逐条 Intent，一条指令覆盖全部控车能力，快捷指令 App 中也可选择具体指令。
 @available(iOS 16.0, *)
-public struct ControlCarIntent: AppIntent {
-    public static var title: LocalizedStringResource = "控制车辆"
-    public static var description: IntentDescription = "向你的爱车发送任意控车指令（开锁、闭锁、空调、车窗、点火等）"
-    public static var openAppWhenRun: Bool = false
+struct ControlCarIntent: AppIntent {
+    static var title: LocalizedStringResource = "控制车辆"
+    static var description: IntentDescription = "向你的爱车发送任意控车指令（开锁、闭锁、空调、车窗、点火等）"
+    static var openAppWhenRun: Bool = false
 
     @Parameter(title: "指令", requestValueDialog: "想对车做什么？")
-    public var command: CarCommandOption
+    var command: CarCommandOption
 
-    public init() {}
+    init() {}
 
-    public init(command: CarCommandOption) {
+    init(command: CarCommandOption) {
         self.command = command
     }
 
-    public func perform() async throws -> some IntentResult & ProvidesDialog {
+    func perform() async throws -> some IntentResult & ProvidesDialog {
         let cmd = command.command
         // 高危操作（开锁/闭锁/点火/熄火）先语音确认，取消则直接结束
         if cmd.isDangerous {

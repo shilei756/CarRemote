@@ -47,6 +47,8 @@ struct CakocheHome: View {
     /// 油量点阵配色：空 = 多色随机（默认）；非空 = 用户指定单色（hex）
     @AppStorage("cakoche.fuelDot.hex") private var fuelDotHex = ""
     @State private var showFuelColor = false
+    /// 1.2.6：快捷指令「打开 App 页面」的落地页（首页 / 空调 / 我的）
+    @Environment(\.scenePhase) private var scenePhase
 
     private var model: CakocheModel {
         CakocheModels.all.first { $0.id == selectedID } ?? CakocheModels.all[0]
@@ -86,11 +88,27 @@ struct CakocheHome: View {
             FuelColorPickerSheet(hex: $fuelDotHex)
         }
         .onAppear {
+            applyPendingPage()
             Task { await appState.refreshStatus() }
+        }
+        // 快捷指令在 App 已在前台时也能切页：回到 active 时再取一次
+        .onChange(of: scenePhase) { phase in
+            if phase == .active { applyPendingPage() }
         }
         .onChange(of: selectedID) { newValue in
             CakocheModels.selectedID = newValue
             cockpit = false
+        }
+    }
+
+    /// 消费快捷指令写下的「待跳转页面」标记（读完即清，不会重复跳）
+    /// 取值与 `CakochePageOption` 的 rawValue 一致：home / climate / mine
+    private func applyPendingPage() {
+        guard let raw = CakochePendingPage.consume() else { return }
+        switch raw {
+        case "climate": page = 1
+        case "mine": page = 2
+        default: page = 0
         }
     }
 
