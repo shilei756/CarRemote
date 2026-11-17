@@ -107,12 +107,22 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
     /// 这三类统一改用白逸动（`c211.glb`，也就是 .yidongWhite）的完整座舱渲染，
     /// 车外仍显示各车型自己的车模/车图，互不影响。
     public var cockpitModelName: String {
+        #if CAKOCHE
+        // CAKOCHE 维持旧的「借白逸动完整座舱」逻辑不动。
         switch self {
         case .univ, .yidong3, .univK:
-            return "c211.glb"                  // 白逸动 · 完整分件座舱
+            return "c211.glb"
         default:
             return model3DName ?? "c211.glb"
         }
+        #else
+        // 1.11.3「个是个的」：每款 GLB 的 Int_P 子树都自带完整分件内饰
+        //（门板 Tex_Door_Int / 仪表台 Tex_IP_Int / 顶棚 Tex_Roof_Int / 座椅 Tex_Seat_Int），
+        // 所以座舱直接用车型自己的 3D 车模、只把相机坐进去即可，
+        // 而不是全车型统一换成白逸动 c211（那样会丢掉 UNI-V/三代逸动各自的内饰，
+        // 也是「进不去座舱」的根因）。无 3D 车模的车型仍回退白逸动。
+        return model3DName ?? "c211.glb"
+        #endif
     }
 
     /// 油箱容积 L（网页版 CAR_MODELS.tank：切换车型时联动油量百分比）

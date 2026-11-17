@@ -121,9 +121,20 @@ enum GLBCarModelLoader {
             let scenesJSON = json["scenes"] as? [[String: Any]] ?? []
 
             // ---- 贴图：image 字节 → CGImage → TextureResource（WebP/PNG/JPEG 通吃）----
+            // 1.11.3 关键修复：岁岁长安 GLB 的贴图走 `EXT_texture_webp` 扩展，
+            // source 藏在 textures[i].extensions.EXT_texture_webp.source 里，
+            // 标准 textures[i].source 字段为空。旧代码只读标准字段 → 所有贴图
+            // 加载失败 → 轮毂/内饰（baseColor=[1,1,1]）全渲染成纯白、尾灯发灰。
+            // 这里优先读扩展 source，回退标准 source，彻底根治贴图丢失。
             var imageTextures: [Int: TextureResource] = [:]
             for (ti, t) in texturesJSON.enumerated() {
-                guard let src = t["source"] as? Int, src < imagesJSON.count else { continue }
+                var src: Int? = t["source"] as? Int
+                if src == nil,
+                   let ext = t["extensions"] as? [String: Any],
+                   let webp = ext["EXT_texture_webp"] as? [String: Any] {
+                    src = webp["source"] as? Int
+                }
+                guard let src, src < imagesJSON.count else { continue }
                 let img = imagesJSON[src]
                 guard let bvi = img["bufferView"] as? Int, bvi < views.count else { continue }
                 let v = views[bvi]
@@ -479,9 +490,14 @@ enum GLBCarModelLoader {
                     let nodeName = node["name"] as? String ?? ""
                     let meshName = meshes[meshIdx]["name"] as? String ?? ""
                     #if !CAKOCHE
-                    let isWheel = nodeName.localizedCaseInsensitiveContains("wheel")
+                    // 1.11.3：轮毂以「材质名」判定最可靠（C211_Tex_Wheel 等）。
+                    // 节点名/网格名可能不带 wheel，之前只看它们导致轮毂没识别 → 吃 tint / 发白。
+                    let matName = params.name
+                    let isWheel = matName.localizedCaseInsensitiveContains("wheel")
+                        || nodeName.localizedCaseInsensitiveContains("wheel")
                         || meshName.localizedCaseInsensitiveContains("wheel")
                     let isInterior = nodeInInterior[ni] ?? false
+                        || matName.localizedCaseInsensitiveContains("_int")
                     #else
                     let isWheel = false
                     let isInterior = false
@@ -842,30 +858,53 @@ enum GLBCarModelLoader {
                                      isInterior: Bool = false) -> PhysicallyBasedMaterial {
         var m = PhysicallyBasedMaterial()
         var c = p.baseColor
-        // 配色变体：整体乘色调（线性空间），贴图颜色 × tint
-        // 1.11.2 对齐岁岁长安 viewer3d.js:871-873：轮毂不跟车漆变色 → 不吃 -gray tint
-        if let tint, !isWheel {
+        let lowerName = p.name.lowercased()
+        #if !CAKOCHE
+        // ===== 1.11.3 配色修复（对齐岁岁长安 viewer3d.js）=====
+        // 根因：GLB 贴图走 EXT_texture_webp，旧解析只读标准 source 导致贴图全丢，
+        // 轮毂/内饰（baseColor=[1,1,1]）就渲染成纯白。贴图解析已修复，
+        // 这里让贴图正常显色；兜底色只在「贴图确实没解出来」时启用，避免叠色失真。
+        var extraClearcoat: Float = 0
+        let hasTexture = p.textureIndex != nil && textures[p.textureIndex!] != nil
+
+        // ① 轮毂：绝不吃车身 -gray tint（轮毂不是车漆）。贴图正常时保留本色；
+        //    贴图缺失时用深枪灰兜底，避免白轮毂。
+        if isWheel {
+            if !hasTexture { c = SIMD4<Float>(0.20, 0.21, 0.23, c.w) }
+        } else if let tint {
             c = SIMD4<Float>(c.x * tint.x, c.y * tint.y, c.z * tint.z, c.w)
         }
-        #if !CAKOCHE
-        // 1.11.2 对齐岁岁长安 viewer3d.js:348-360：
-        // 内饰纯黑塑料（亮度 < 0.10）往 (0.09,0.09,0.10) lerp 0.20 提亮，
-        // 避免近看是一坨死黑。贴图类材质 baseColor≈1 不会被误伤。
-        var extraClearcoat: Float = 0
-        if isInterior {
+
+        // ② 尾灯：LOn 发光面已在上游过滤；剩下的 Light_Red / Tex_Light_Red 靠贴图
+        //    与材质 factor 显红。仅当贴图缺失且材质几乎无红色时补一层红，
+        //    避免灰漆 tint 把灯罩洗成灰色。
+        let isTailRed = lowerName.contains("light") && lowerName.contains("red")
+        if isTailRed && !hasTexture && c.x > c.z {
+            c = SIMD4<Float>(0.62, 0.03, 0.04, c.w)
+        }
+
+        // ③ 内饰：贴图恢复后按贴图本色显示。只对「无贴图的白色哑光塑料」
+        //    （顶棚/门板内衬）按岁岁长安 _dimHeadliner 压暗，避免纯白刺眼；
+        //    纯黑塑料（亮度<0.10）微提亮，避免死黑块。有贴图的一律不动。
+        if isInterior && !hasTexture {
             let lum = 0.2126 * c.x + 0.7152 * c.y + 0.0722 * c.z
-            if lum < 0.10 {
+            if lowerName.contains("whitematteplastic") || (lum > 0.75) {
+                c = SIMD4<Float>(c.x * 0.42, c.y * 0.42, c.z * 0.42, c.w)
+            } else if lum < 0.10 {
                 let k: Float = 0.20
                 let target = SIMD3<Float>(0.09, 0.09, 0.10)
                 c = SIMD4<Float>(c.x + (target.x - c.x) * k,
                                  c.y + (target.y - c.y) * k,
                                  c.z + (target.z - c.z) * k, c.w)
-                // RealityKit 无 envMapIntensity，用一层薄清漆近似增强内饰反射
                 extraClearcoat = 0.15
             }
         }
+        #else
+        // CAKOCHE：车体整色 tint，轮毂不吃灰 tint（原行为）
+        if let tint, !isWheel {
+            c = SIMD4<Float>(c.x * tint.x, c.y * tint.y, c.z * tint.z, c.w)
+        }
         #endif
-        let lowerName = p.name.lowercased()
         let isGlass = lowerName.contains("glass") || lowerName.contains("window")
         var baseAlpha: CGFloat = 1
         if p.alphaMode == "BLEND" && p.textureIndex == nil {

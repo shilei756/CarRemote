@@ -484,6 +484,9 @@ struct CarVisual3DStage: View {
         }
         if let modelOverride { return modelOverride }
         #endif
+        // 1.11.3「个是个的」（仅正式版走这里）：车外/座舱共用车型自己的 GLB，
+        // 每个 GLB 的 Int_P 子树自带完整内饰，进座舱只切相机不换模型。
+        // cockpitModelName 已改为返回各车型自身 model3DName（见 SharedStore）。
         if cockpitInterior { return style.cockpitModelName }
         return style.model3DName
     }
@@ -491,8 +494,13 @@ struct CarVisual3DStage: View {
     /// 座舱态强制进 3D：即使当前停在 2D 档、用户关了 3D 开关、或车型没有
     /// 3D 车模，点「座舱」都会直接切到 3D 车内第一视角。
     private var show3D: Bool {
+        #if !CAKOCHE
+        // 1.11.3：正式版彻底去掉 2D 车图，一律显示 3D 车模。
+        return true
+        #else
         if minimalChrome { return true }
         return cockpitInterior || (car3DEnabled && mode == .threeD)
+        #endif
     }
 
     /// 是否为「我的爱车」GLB 官方模（拖拽参考该 App：横+纵向均可旋转）
@@ -534,22 +542,48 @@ struct CarVisual3DStage: View {
                                 .accessibilityLabel(accessibilityModelDescription)
                                 .opacity(model.isLoaded ? 1 : 0)
                             if !model.isLoaded {
-                                // 加载中：先用 2D 车图占位，后台解析完成后无缝替换为 3D
+                                #if CAKOCHE
+                                // CAKOCHE 维持 2D 车图占位
                                 Image(style.sideImageName)
                                     .resizable()
                                     .aspectRatio(contentMode: .fit)
                                     .accessibilityElement(children: .ignore)
                                     .accessibilityLabel("正在加载\(style.displayName)三维车模")
+                                #else
+                                // 正式版：不再用 2D 贴图，改轻量骨架占位
+                                VStack(spacing: 8) {
+                                    ProgressView()
+                                        .tint(WebTheme.blue)
+                                    Text("正在加载\(style.displayName)三维车模")
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(WebTheme.faint)
+                                }
+                                .accessibilityElement(children: .ignore)
+                                .accessibilityLabel("正在加载\(style.displayName)三维车模")
+                                #endif
                             }
                         }
                     } else {
-                        // 2D 档（1.1.4 用户反馈：「俯视改为 2D 之前的车图」）：
-                        // 直接显示各车型的 2D 侧视大图（与网页版 /static/img/*_side.png 同源）
+                        #if CAKOCHE
+                        // CAKOCHE 保留 2D 车图档
                         Image(style.sideImageName)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
                             .accessibilityElement(children: .ignore)
                             .accessibilityLabel("\(style.displayName) 二维车辆图片")
+                        #else
+                        // 正式版：无 2D 贴图，无车模时显示车名文字占位
+                        VStack(spacing: 6) {
+                            Image(systemName: "car.fill")
+                                .font(.system(size: 34))
+                                .foregroundStyle(WebTheme.faint)
+                            Text(style.displayName)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(WebTheme.muted)
+                        }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(style.displayName)
+                        #endif
                     }
                 }
                 // 1.1.4：车外展示保持 200pt 舞台高度（与 2D 车图一致）。
@@ -604,10 +638,14 @@ struct CarVisual3DStage: View {
                     if !cockpitManaged && show3D && !model.loadFailed && style.model3DName != nil {
                         viewModeSlider
                     }
-                    // 3D / 2D 胶囊滑块（对齐智慧云控车模页右上角切换控件）
+                    // 3D / 2D 胶囊滑块：正式版去掉 2D 档，隐藏该滑块；CAKOCHE 保留
+                    #if !CAKOCHE
+                    // 正式版一律 3D，无 2D 切换
+                    #else
                     if style.model3DName != nil {
                         stageModeSlider
                     }
+                    #endif
                 }
                 .padding(.horizontal, 2)
                 .padding(.top, 2)

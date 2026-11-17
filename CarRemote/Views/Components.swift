@@ -133,40 +133,61 @@ struct ControlButtonView: View {
         Button(action: action) {
             VStack(spacing: 6) {
                 ZStack {
-                    // 白底圆钮（.cbtn / .cbig 均为白底）
-                    Circle()
-                        .fill(WebTheme.card)
-                        .frame(width: isPrimary ? 54 : 46, height: isPrimary ? 54 : 46)
-                    if isPrimary {
-                        // 大钮描边：开锁=绿、闭锁=灰（.cbig.unlock / .cbig.lock）
+                    // 主题下：按键本体整体换成主题渐变（QQ 式换肤，不只换描边）；
+                    // 经典模式：白底圆钮（.cbtn / .cbig 均为白底）
+                    if WebTheme.myth != nil {
                         Circle()
-                            .strokeBorder(borderColor, lineWidth: 2.5)
-                            .frame(width: 54, height: 54)
-                            .shadow(color: shadowColor, radius: 14, x: 0, y: 4)
+                            .fill(LinearGradient(
+                                colors: [WebTheme.blue, WebTheme.purple],
+                                startPoint: .topLeading, endPoint: .bottomTrailing))
+                            .frame(width: isPrimary ? 54 : 46, height: isPrimary ? 54 : 46)
+                            .shadow(color: WebTheme.blue.opacity(isPrimary ? 0.35 : 0.22),
+                                    radius: isPrimary ? 14 : 8, x: 0, y: 4)
                     } else {
                         Circle()
-                            .strokeBorder(WebTheme.border, lineWidth: 1)
-                            .frame(width: 46, height: 46)
-                            .shadow(color: Color(red: 15/255, green: 23/255, blue: 42/255).opacity(0.05), radius: 8, x: 0, y: 2)
+                            .fill(WebTheme.card)
+                            .frame(width: isPrimary ? 54 : 46, height: isPrimary ? 54 : 46)
+                        if isPrimary {
+                            // 大钮描边：开锁=绿、闭锁=灰（.cbig.unlock / .cbig.lock）
+                            Circle()
+                                .strokeBorder(borderColor, lineWidth: 2.5)
+                                .frame(width: 54, height: 54)
+                                .shadow(color: shadowColor, radius: 14, x: 0, y: 4)
+                        } else {
+                            Circle()
+                                .strokeBorder(WebTheme.border, lineWidth: 1)
+                                .frame(width: 46, height: 46)
+                                .shadow(color: Color(red: 15/255, green: 23/255, blue: 42/255).opacity(0.05), radius: 8, x: 0, y: 2)
+                        }
                     }
                     if isExecuting {
                         ProgressView()
-                            .tint(iconColor)
+                            .tint(WebTheme.myth != nil ? .white : iconColor)
                     } else {
-                        Image(systemName: command.sfSymbol)
+                        Image(systemName: displaySymbol)
                             .font(.system(size: isPrimary ? 24 : 19, weight: .semibold))
-                            .foregroundStyle(iconColor)
+                            .foregroundStyle(WebTheme.myth != nil ? .white : iconColor)
                     }
                 }
                 Text(command.displayName)
                     .font(.system(size: 10.5))
-                    .foregroundStyle(WebTheme.muted)
+                    .foregroundStyle(WebTheme.myth != nil ? WebTheme.blue : WebTheme.muted)
             }
             .frame(maxWidth: .infinity)
             .accessibilityLabel("\(command.displayName)\(command.isDangerous ? "，高危操作" : "")")
         }
         .buttonStyle(.plain)
         .disabled(isExecuting)
+    }
+
+    /// 一键闭锁 1.11.3：正式版改用空心图标（实心圆点太难看）；CAKOCHE 保持原样
+    private var displaySymbol: String {
+        #if CAKOCHE
+        return command.sfSymbol
+        #else
+        if command == .oneKeyLock { return "lock.circle" }
+        return command.sfSymbol
+        #endif
     }
 
     /// 大钮描边色：开锁绿 / 一键闭锁蓝 / 闭锁灰（三个锁按钮颜色区分，避免混淆）

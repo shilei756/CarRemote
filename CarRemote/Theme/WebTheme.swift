@@ -94,14 +94,25 @@ enum WebTheme {
     }
 
     // 语义色（网页版 --blue/--green/--amber/--red/--purple）
-    // 神兽主题下主色染主题色（网页版：按键与图标随神兽换色）
+    // 主题下全部语义色染成主题色系 —— QQ 式全局换肤的核心：
+    // 按键填充 / 描边 / 图标 / 底栏 / 进度条用的都是这几个语义色，
+    // 它们一起变，界面才会「连按键都替换」，而不只是换背景。
     static var blue: Color {
         if let myth { return Color(hex: myth.mainHex) }
         return Color(hex: 0x3b82f6)
     }
-    static let green = Color(hex: 0x22c55e)
-    static let amber = Color(hex: 0xf59e0b)
-    static let red = Color(hex: 0xef4444)
+    static var green: Color {
+        if let myth { return Color(hex: myth.mainHex) }
+        return Color(hex: 0x22c55e)
+    }
+    static var amber: Color {
+        if let myth { return Color(hex: myth.goldHex) }
+        return Color(hex: 0xf59e0b)
+    }
+    static var red: Color {
+        if let myth { return Color(hex: myth.goldHex) }
+        return Color(hex: 0xef4444)
+    }
     static var purple: Color {
         if let myth { return Color(hex: myth.deepHex) }
         return Color(hex: 0x7c3aed)

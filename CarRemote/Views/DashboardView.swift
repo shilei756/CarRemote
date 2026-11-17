@@ -351,17 +351,30 @@ struct DashboardView: View {
         // RealityKit 场景会争用主线程，实机表现为「3D 档点座舱直接卡死」。
         // 2D 档没有已运行的 ARView（点座舱是新建舞台），所以一直正常。
         // 车外/座舱同模型的车型保持单实例复用，切换只动相机，不闪占位图。
-        // 1.11.2 座舱卡死根治：车外与座舱一律拆成两个独立舞台实例。
-        // 旧判断 `cockpitModelName != (model3DName ?? cockpitModelName)` 恒为 false
-        //（cockpitModelName 缺省就等于 model3DName），导致两个视角共用同一
-        // ARView，切座舱时在同一场景内换 GLB，多车型连续切换会主线程卡死。
-        // 用 isCockpit 做 id 的一部分后，切换 = 销毁旧舞台（prepareForRemoval
-        // 停逐帧订阅 + 暂停 session）→ 新建干净舞台，等价于一直正常的 2D 档路径。
-        let stageIdentity = isCockpit ? "cockpit" : "exterior"
+        // 1.11.3「个是个的」：每个 GLB 自带外观 + 内饰两套几何（Int_P 子树），
+        // 进座舱是把相机坐进「自己车」的内饰，而不是换成白逸动 c211 的模型。
+        // 因此车外/座舱共用同一个车型 GLB，切换只切相机、绝不销毁重建舞台 ——
+        // 上一版按 isCockpit 拆分 id 导致新舞台 cameraEntity 未就绪时切相机被丢弃，
+        // 这正是「逸动/UNI-V 进不去座舱」的真正原因。舞台身份只绑车型 GLB：
+        // 切车型才重建，切视角只动相机，既保留各自内饰又不卡死。
+        let activeGLB = settings.carModelStyle.model3DName ?? "c211.glb"
         return VStack(spacing: 0) {
-            // 1.6.0：座舱态一律创建 3D 舞台（哪怕是 2D 档、关了 3D 开关、
-            // 或车型没有 3D 车模），由舞台内部切到白逸动完整座舱；
-            // 车外态才按用户设置决定 3D 车模 / 2D 车图。
+            // 正式版：一律创建 3D 舞台，不再有 2D 车图档。
+            // CAKOCHE：座舱态强制 3D，车外态按用户 3D 开关决定。
+            #if !CAKOCHE
+            if true {
+                CarVisual3DStage(
+                    style: settings.carModelStyle,
+                    doorsAndWindows: status.doorsAndWindows,
+                    vehicleStarted: status.isVehicleStarted,
+                    wheelsRolling: status.shouldRollWheels,
+                    car3DEnabled: true
+                )
+                .frame(width: stageWidth)
+                // 只按车型 GLB 标识：切车型重建，切座舱视角不重建（只切相机）
+                .id("car-stage-\(style.rawValue)-\(activeGLB)")
+            }
+            #else
             if isCockpit || (settings.car3DEnabled && settings.carModelStyle.has3DModel) {
                 CarVisual3DStage(
                     style: settings.carModelStyle,
@@ -371,9 +384,7 @@ struct DashboardView: View {
                     car3DEnabled: settings.car3DEnabled
                 )
                 .frame(width: stageWidth)
-                // 标识变化时 SwiftUI 销毁整个舞台（含 @StateObject 与 ARView）
-                // 并新建，等价于 2D 档点座舱那条已验证正常的路径。
-                .id("car-stage-\(style.rawValue)-\(stageIdentity)")
+                .id("car-stage-\(style.rawValue)-\(activeGLB)")
             } else {
                 Image(settings.carModelStyle.sideImageName)
                     .resizable()
@@ -381,6 +392,7 @@ struct DashboardView: View {
                     .frame(width: stageWidth, height: 200)
                     .accessibilityLabel("\(settings.carModelStyle.displayName) 车辆图片")
             }
+            #endif
 
             // 椭圆阴影（网页版 .car-shadow：径向渐变椭圆呼吸）
             // 座舱第一视角在车内，地面阴影会穿帮，切座舱时移除。
@@ -1124,22 +1136,31 @@ struct CompactControlButton: View {
         Button(action: action) {
             VStack(spacing: 6) {
                 ZStack {
-                    Circle()
-                        .fill(WebTheme.card2)
-                        .frame(width: 40, height: 40)
+                    // 主题下按键整体换主题色（渐变+白图标），经典模式用卡片底+语义色图标
+                    if WebTheme.myth != nil {
+                        Circle()
+                            .fill(LinearGradient(
+                                colors: [WebTheme.blue, WebTheme.purple],
+                                startPoint: .topLeading, endPoint: .bottomTrailing))
+                            .frame(width: 40, height: 40)
+                    } else {
+                        Circle()
+                            .fill(WebTheme.card2)
+                            .frame(width: 40, height: 40)
+                    }
                     if isExecuting {
                         ProgressView()
                             .scaleEffect(0.7)
-                            .tint(iconColor)
+                            .tint(WebTheme.myth != nil ? .white : iconColor)
                     } else {
                         Image(systemName: command.sfSymbol)
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(iconColor)
+                            .foregroundStyle(WebTheme.myth != nil ? .white : iconColor)
                     }
                 }
                 Text(command.displayName)
                     .font(.system(size: 9.5))
-                    .foregroundStyle(WebTheme.muted)
+                    .foregroundStyle(WebTheme.myth != nil ? WebTheme.blue : WebTheme.muted)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }

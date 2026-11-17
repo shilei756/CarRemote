@@ -10,6 +10,8 @@ struct SettingsView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     @State private var settings: AppSettings = SharedStore.loadSettings()
+    // 1.11.3：「切换车型」默认折叠，点标题展开，只列车名不显示 2D 车图
+    @State private var carModelExpanded = false
     @State private var showLogoutConfirm = false
     @State private var appTheme: AppTheme = SharedStore.loadAppTheme()
     // 服务器地址（仅站主可见）
@@ -117,85 +119,86 @@ struct SettingsView: View {
 
     private var carModelCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("切换车型")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(WebTheme.txt)
-                Spacer()
-                Text("左右滑动查看全部车型")
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(WebTheme.faint)
-            }
-            // 车架号自动识别开关（1.11.1）：开启后按车架号自动切到绑定车型
+            // 标题行 = 折叠开关：显示当前车型名 + 展开箭头，默认收起
             Button {
-                SharedStore.modelAuto.toggle()
-                if SharedStore.modelAuto {
-                    // 恢复自动时立即按当前车况应用一次
-                    if let code = appState.status?.seriesCode,
-                       let style = CarModelStyle.from(seriesCode: code) {
-                        settings.carModelStyle = style
-                        settings.tankCapacityL = style.tankCapacityL
-                        saveSettings()
-                    }
-                }
+                withAnimation(.easeInOut(duration: 0.2)) { carModelExpanded.toggle() }
             } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: SharedStore.modelAuto ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(SharedStore.modelAuto ? WebTheme.blue : WebTheme.faint)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("按车架号自动识别车型")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(WebTheme.txt)
-                        Text(autoModelNote)
-                            .font(.system(size: 10))
-                            .foregroundStyle(WebTheme.faint)
-                            .lineLimit(1)
-                    }
+                HStack {
+                    Text("车型")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(WebTheme.txt)
+                    Text(settings.carModelStyle.displayName)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(WebTheme.blue)
                     Spacer()
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(WebTheme.faint)
+                        .rotationEffect(.degrees(carModelExpanded ? 180 : 0))
                 }
-                .padding(.vertical, 6)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("按车架号自动识别车型")
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    ForEach(CarModelStyle.allCases, id: \.self) { style in
-                        Button {
-                            guard settings.carModelStyle != style else { return }
-                            SharedStore.modelAuto = false   // 手选退出自动，刷新不再覆盖
-                            // 油箱容积联动车型默认值（网页版 CAR_MODELS.tank）
+            .accessibilityLabel("车型：\(settings.carModelStyle.displayName)，点击\(carModelExpanded ? "收起" : "展开")")
+
+            if carModelExpanded {
+                // 车架号自动识别开关（1.11.1）：开启后按车架号自动切到绑定车型
+                Button {
+                    SharedStore.modelAuto.toggle()
+                    if SharedStore.modelAuto {
+                        if let code = appState.status?.seriesCode,
+                           let style = CarModelStyle.from(seriesCode: code) {
                             settings.carModelStyle = style
                             settings.tankCapacityL = style.tankCapacityL
                             saveSettings()
-                        } label: {
-                            VStack(spacing: 6) {
-                                Image(style.sideImageName)
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                                    .frame(height: 42)
-                                Text(style.displayName)
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(WebTheme.txt)
-                                    .lineLimit(1)
-                                Text(style.has3DModel ? "3D 车模" : "\(Int(style.tankCapacityL))L 油箱")
-                                    .font(.system(size: 9.5))
-                                    .foregroundStyle(WebTheme.faint)
-                            }
-                            .frame(width: 112)
-                            .padding(.vertical, 12)
-                            .background(settings.carModelStyle == style ? WebTheme.blue.opacity(0.09) : WebTheme.card2.opacity(0.7))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .strokeBorder(settings.carModelStyle == style ? WebTheme.blue : WebTheme.border, lineWidth: settings.carModelStyle == style ? 1.5 : 1)
-                            )
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("切换车型为\(style.displayName)")
                     }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: SharedStore.modelAuto ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(SharedStore.modelAuto ? WebTheme.blue : WebTheme.faint)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("按车架号自动识别车型")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(WebTheme.txt)
+                            Text(autoModelNote)
+                                .font(.system(size: 10))
+                                .foregroundStyle(WebTheme.faint)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                    }
+                    .padding(.vertical, 6)
                 }
-                .padding(.horizontal, 2)
-                .padding(.vertical, 2)
+                .buttonStyle(.plain)
+                .accessibilityLabel("按车架号自动识别车型")
+
+                // 车型列表：只显示车名，不显示 2D 车图
+                ForEach(CarModelStyle.allCases, id: \.self) { style in
+                    Button {
+                        guard settings.carModelStyle != style else { return }
+                        SharedStore.modelAuto = false   // 手选退出自动，刷新不再覆盖
+                        settings.carModelStyle = style
+                        settings.tankCapacityL = style.tankCapacityL
+                        saveSettings()
+                    } label: {
+                        HStack {
+                            Image(systemName: settings.carModelStyle == style ? "checkmark.circle.fill" : "circle")
+                                .font(.system(size: 15))
+                                .foregroundStyle(settings.carModelStyle == style ? WebTheme.blue : WebTheme.faint)
+                            Text(style.displayName)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(WebTheme.txt)
+                            Spacer()
+                        }
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 12)
+                        .background(settings.carModelStyle == style ? WebTheme.blue.opacity(0.09) : WebTheme.card2.opacity(0.7))
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("切换车型为\(style.displayName)")
+                }
             }
         }
         .padding(16)
