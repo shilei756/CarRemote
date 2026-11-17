@@ -81,8 +81,11 @@ private struct AppearanceRoot: View {
     @EnvironmentObject private var appState: AppState
 
     private var preferredScheme: ColorScheme? {
-        // 神兽主题有自己一整套配色，强制浅色以免系统控件擅自变黑
-        if appState.mythTheme != nil { return .light }
+        // 1.11.2 深色科技主题：强制深色，让 TabBar / Form / 系统控件整体变黑，
+        // 与深色玻璃卡片、霓虹主色一起构成完整的酷炫深色主题（不只是换几张卡）。
+        if let myth = appState.mythTheme {
+            return myth.isDark ? .dark : .light
+        }
         return themeManager.theme == .dark ? nil : .light
     }
 

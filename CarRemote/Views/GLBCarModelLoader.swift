@@ -338,17 +338,15 @@ enum GLBCarModelLoader {
             var deferredFit: [(verts: [SIMD3<Float>], frame: SIMD3<Float>)] = []
             for (ni, node) in nodesJSON.enumerated() {
                 guard let meshIdx = node["mesh"] as? Int, meshIdx < meshes.count else { continue }
-                #if CAKOCHE
-                // 1.2.3：CAKOCHE 车模统一熄灯，只留车身本体。
+                // 1.2.3 起 CAKOCHE 熄灯；1.11.2 正式版跟进：车模统一熄灯，只留车身本体。
                 // 官方 GLB 里 `LOn` 网格是「点亮状态」的发光灯面（大灯 HL /
                 // 日行灯 DRL / 左右示宽灯 / 尾灯 TL / 刹车灯 BL / 门迎宾灯），
-                // 12 款中有 7 款残留未清理，常驻渲染会让车灯和示廓灯一直亮着。
-                // 这里按节点名 / 网格名跳过；车灯玻璃罩（LightGlass_*）保留，
-                // 呈熄灭质感。仅 CAKOCHE 编译生效，正式版行为零变化。
+                // 常驻渲染会让车灯和示廓灯一直亮着，且大灯面片被异常拉伸成白色光锥，
+                // 正式版此前未过滤（CAKOCHE 已过滤）→ 两版本统一按节点名 / 网格名跳过。
+                // 车灯玻璃罩（LightGlass_*）保留，呈熄灭质感。
                 let ckNodeName = node["name"] as? String ?? ""
                 let ckMeshName = meshes[meshIdx]["name"] as? String ?? ""
                 if ckNodeName.contains("LOn") || ckMeshName.contains("LOn") { continue }
-                #endif
                 let isSteeringNode = (node["name"] as? String) == "Tex_Trumpet_Int"
                 let world = worldMatrices[ni]
                 // 归属枢轴的世界平移（根空间）：顶点局部 = 世界位 − 铰链平移
@@ -467,18 +465,34 @@ enum GLBCarModelLoader {
                     // 材质（含贴图缓存）
                     let matIdx = prim["material"] as? Int ?? 0
                     let params = matIdx < materials.count ? materials[matIdx] : MatParams()
-                    #if CAKOCHE
-                    // 1.2.3：材质层的第二道保险 —— 名字含 LOn 的自发光灯材质
-                    // 一律不渲染（大灯/日行灯/示宽灯/尾灯/刹车灯/门迎宾灯）。
+                    // 材质层的第二道保险 —— 名字含 LOn 的自发光灯材质一律不渲染
+                    //（大灯/日行灯/示宽灯/尾灯/刹车灯/门迎宾灯）。1.11.2 起两版本统一生效。
                     if params.name.contains("LOn") { continue }
-                    #endif
                     // 官方模自带的假地面阴影面片与本 App 纯净卡片背景不搭，直接跳过
                     if params.name.lowercased().contains("shadow") { continue }
+
+                    // 1.11.2 配色修复（对齐岁岁长安 viewer3d.js）：
+                    //  ① 轮毂不吃车身 -gray tint（轮毂材质名不含 wheel，须看节点/网格名）
+                    //  ② 内饰纯黑塑料提亮（Int_P 子树）
+                    // 同一材质可能同时被内饰/外观、轮毂/车身复用，故把两个标志纳入缓存键，
+                    // 否则一处修改会串色到另一处。
+                    let nodeName = node["name"] as? String ?? ""
+                    let meshName = meshes[meshIdx]["name"] as? String ?? ""
+                    #if !CAKOCHE
+                    let isWheel = nodeName.localizedCaseInsensitiveContains("wheel")
+                        || meshName.localizedCaseInsensitiveContains("wheel")
+                    let isInterior = nodeInInterior[ni] ?? false
+                    #else
+                    let isWheel = false
+                    let isInterior = false
+                    #endif
+                    let matKey = matIdx * 4 + (isWheel ? 2 : 0) + (isInterior ? 1 : 0)
                     let mat: PhysicallyBasedMaterial
-                    if let cached = materialCache[matIdx] { mat = cached }
+                    if let cached = materialCache[matKey] { mat = cached }
                     else {
-                        mat = makeMaterial(params, textures: imageTextures, tint: tint)
-                        materialCache[matIdx] = mat
+                        mat = makeMaterial(params, textures: imageTextures, tint: tint,
+                                           isWheel: isWheel, isInterior: isInterior)
+                        materialCache[matKey] = mat
                     }
 
                     // 构建网格，挂到归属枢轴实体（无枢轴则挂车根）
@@ -823,13 +837,34 @@ enum GLBCarModelLoader {
 
     private static func makeMaterial(_ p: MatParams,
                                      textures: [Int: TextureResource],
-                                     tint: SIMD4<Float>? = nil) -> PhysicallyBasedMaterial {
+                                     tint: SIMD4<Float>? = nil,
+                                     isWheel: Bool = false,
+                                     isInterior: Bool = false) -> PhysicallyBasedMaterial {
         var m = PhysicallyBasedMaterial()
         var c = p.baseColor
         // 配色变体：整体乘色调（线性空间），贴图颜色 × tint
-        if let tint {
+        // 1.11.2 对齐岁岁长安 viewer3d.js:871-873：轮毂不跟车漆变色 → 不吃 -gray tint
+        if let tint, !isWheel {
             c = SIMD4<Float>(c.x * tint.x, c.y * tint.y, c.z * tint.z, c.w)
         }
+        #if !CAKOCHE
+        // 1.11.2 对齐岁岁长安 viewer3d.js:348-360：
+        // 内饰纯黑塑料（亮度 < 0.10）往 (0.09,0.09,0.10) lerp 0.20 提亮，
+        // 避免近看是一坨死黑。贴图类材质 baseColor≈1 不会被误伤。
+        var extraClearcoat: Float = 0
+        if isInterior {
+            let lum = 0.2126 * c.x + 0.7152 * c.y + 0.0722 * c.z
+            if lum < 0.10 {
+                let k: Float = 0.20
+                let target = SIMD3<Float>(0.09, 0.09, 0.10)
+                c = SIMD4<Float>(c.x + (target.x - c.x) * k,
+                                 c.y + (target.y - c.y) * k,
+                                 c.z + (target.z - c.z) * k, c.w)
+                // RealityKit 无 envMapIntensity，用一层薄清漆近似增强内饰反射
+                extraClearcoat = 0.15
+            }
+        }
+        #endif
         let lowerName = p.name.lowercased()
         let isGlass = lowerName.contains("glass") || lowerName.contains("window")
         var baseAlpha: CGFloat = 1
@@ -851,10 +886,20 @@ enum GLBCarModelLoader {
         // 车漆类材质加一层薄清漆（与 .rk 管线一致，影棚级高光）
         let isPaintLike = lowerName.contains("carpaint") || lowerName.contains("car_paint")
             || lowerName.contains("cp_m") || lowerName.contains("paint")
+        #if !CAKOCHE
+        if isPaintLike {
+            m.clearcoat = 0.9
+            m.clearcoatRoughness = 0.06
+        } else if extraClearcoat > 0 {
+            m.clearcoat = extraClearcoat
+            m.clearcoatRoughness = 0.25
+        }
+        #else
         if isPaintLike {
             m.clearcoat = 0.9
             m.clearcoatRoughness = 0.06
         }
+        #endif
         if let ti = p.textureIndex, let tex = textures[ti] {
             m.baseColor.texture = .init(tex)
         }

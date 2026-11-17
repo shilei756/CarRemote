@@ -467,23 +467,25 @@ public final class Car3DView: UIView {
     private(set) var isRetired = false
 
     /// 开启展示模式；可指定初始方位角（GLB 官方模用斜前 45° 对齐「我的爱车」主页）
+    /// 1.11.2：正式版车模不再自转，固定在参考图的斜前 3/4 角度；
+    /// 用户仍可手动拖拽 / 捏合。CAKOCHE 保留原有慢速展示自转。
     public func enableShowcase(initialAzimuth: Float? = nil) {
         isShowcase = true
         if let a = initialAzimuth {
             orbitAzimuth = a
             applyOrbitCamera()
         }
+        #if CAKOCHE
         if showcaseCancellable == nil {
             showcaseCancellable = arView.scene.subscribe(to: SceneEvents.Update.self) { [weak self] ev in
                 guard let self, self.isShowcase, self.viewMode == .exterior else { return }
                 guard CACurrentMediaTime() - self.lastUserOrbitTime > 5 else { return }
                 // 舒缓展示自转（约 29 秒/圈），自动取景保持整车入画
-                // 注意：切到座舱第一视角时自转必须停下，否则相机会绕着车厢转圈，
-                // 用户看到的将是「从车门外斜看进去的一堆内饰零件」。
                 self.orbitAzimuth += Float(ev.deltaTime) * 0.22
                 self.applyOrbitCamera()
             }
         }
+        #endif
     }
 
     /// 用户手动旋转/缩放 → 暂停展示自转 5 秒

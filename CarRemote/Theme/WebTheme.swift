@@ -16,8 +16,10 @@ import CarCore
 /// 自动重解析，无需任何视图重算，从此整体一起变深 / 一起变浅。
 enum WebTheme {
     /// 当前深色是否生效（与动态色闭包、preferredColorScheme 共用同一 trait 判定）
+    /// 1.11.2：深色科技主题（neon/aurora/cyber）无论系统深浅都按深色语义渲染
     static var isDark: Bool {
-        UITraitCollection.current.userInterfaceStyle == .dark && myth == nil
+        if let myth { return myth.isDark }
+        return UITraitCollection.current.userInterfaceStyle == .dark
     }
 
     /// 当前神兽主题（nil = 经典默认）
@@ -28,7 +30,8 @@ enum WebTheme {
     /// 与 TabBar / Form / `.secondary` 等系统语义色看到的是同一个 trait，
     /// 因此绝不会再出现「系统控件黑了、自定义白卡还是白的」的割裂。
     private static func prefersDark(_ trait: UITraitCollection) -> Bool {
-        trait.userInterfaceStyle == .dark && SharedStore.loadMythTheme() == nil
+        if let myth = SharedStore.loadMythTheme() { return myth.isDark }
+        return trait.userInterfaceStyle == .dark
     }
 
     private static func uiColor(_ hex: UInt) -> UIColor {
@@ -53,11 +56,18 @@ enum WebTheme {
         return adaptive(light: 0xedf0f4, dark: 0x101318)
     }
     static var card: Color {
-        if myth != nil { return Color(hex: 0xffffff) }
+        // 神兽水墨主题：白卡；1.11.2 深色科技主题：深色玻璃卡；其余跟随系统
+        if let myth {
+            if myth.isDark { return Color(hex: 0x141a24).opacity(0.92) }
+            return Color(hex: 0xffffff)
+        }
         return adaptive(light: 0xffffff, dark: 0x181c23)
     }
     static var card2: Color {
-        if let myth { return Color(hex: myth.bgHex).opacity(0.55) }
+        if let myth {
+            if myth.isDark { return Color(hex: myth.deepHex).opacity(0.72) }
+            return Color(hex: myth.bgHex).opacity(0.55)
+        }
         return adaptive(light: 0xf1f4f8, dark: 0x20252e)
     }
     static var border: Color {
@@ -390,28 +400,33 @@ struct WebConsoleBackground: View {
             } else {
                 WebTheme.bg0
                 if let myth = WebTheme.myth {
-                    // 神兽主题：主题色光晕（网页版：右上主色雾 + 左下鎏金雾）
-                    RadialGradient(
-                        colors: [Color(hex: myth.mainHex).opacity(0.16), .clear],
-                        center: .init(x: 0.88, y: 0.06),
-                        startRadius: 0,
-                        endRadius: 300
-                    )
-                    RadialGradient(
-                        colors: [Color(hex: myth.goldHex).opacity(0.12), .clear],
-                        center: .init(x: 0.04, y: 0.94),
-                        startRadius: 0,
-                        endRadius: 280
-                    )
-                    // 神兽图腾：右上探出（网页版 #mythWatermark）
-                    Image(myth.imageName)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 340)
-                        .rotationEffect(.degrees(-6))
-                        .opacity(0.16)
-                        .position(x: UIScreen.main.bounds.width * 0.78, y: 130)
-                        .allowsHitTesting(false)
+                    if myth.isTech {
+                        // 1.11.2 酷炫科技主题：深色底 + 主/辅色强霓虹光晕 + 发光网格
+                        TechBackdrop(mainHex: myth.mainHex, goldHex: myth.goldHex)
+                    } else {
+                        // 神兽主题：主题色光晕（网页版：右上主色雾 + 左下鎏金雾）
+                        RadialGradient(
+                            colors: [Color(hex: myth.mainHex).opacity(0.16), .clear],
+                            center: .init(x: 0.88, y: 0.06),
+                            startRadius: 0,
+                            endRadius: 300
+                        )
+                        RadialGradient(
+                            colors: [Color(hex: myth.goldHex).opacity(0.12), .clear],
+                            center: .init(x: 0.04, y: 0.94),
+                            startRadius: 0,
+                            endRadius: 280
+                        )
+                        // 神兽图腾：右上探出（网页版 #mythWatermark）
+                        Image(myth.imageName)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 340)
+                            .rotationEffect(.degrees(-6))
+                            .opacity(0.16)
+                            .position(x: UIScreen.main.bounds.width * 0.78, y: 130)
+                            .allowsHitTesting(false)
+                    }
                 } else {
                     RadialGradient(
                         colors: [WebTheme.blue.opacity(0.06), .clear],
@@ -429,6 +444,80 @@ struct WebConsoleBackground: View {
             }
         }
         .ignoresSafeArea()
+    }
+}
+
+// MARK: - 1.11.2 酷炫科技主题背景（QQ 式全局换肤的视觉核心）
+
+/// 深色科技主题背景：呼吸霓虹光晕 + 发光网格 + 斜向扫光。
+/// 所有元素 allowsHitTesting(false)，纯装饰不拦截任何交互。
+struct TechBackdrop: View {
+    let mainHex: UInt
+    let goldHex: UInt
+    @State private var breathe = false
+    @State private var sweep = false
+
+    private var main: Color { Color(hex: mainHex) }
+    private var gold: Color { Color(hex: goldHex) }
+
+    var body: some View {
+        ZStack {
+            // 1) 双色呼吸光晕（对角铺开，慢速明暗呼吸）
+            RadialGradient(colors: [main.opacity(breathe ? 0.30 : 0.18), .clear],
+                           center: .init(x: 0.86, y: 0.02), startRadius: 0, endRadius: 360)
+            RadialGradient(colors: [gold.opacity(breathe ? 0.26 : 0.14), .clear],
+                           center: .init(x: 0.06, y: 0.92), startRadius: 0, endRadius: 320)
+            // 2) 发光网格线：细网格 + 主色低透明度，营造科技 HUD 质感
+            TechGrid(color: main)
+                .opacity(0.16)
+            // 3) 斜向扫光：一条宽光带从左下扫到右上，循环
+            GeometryReader { geo in
+                LinearGradient(
+                    colors: [.clear, main.opacity(0.10), gold.opacity(0.14), .clear],
+                    startPoint: .leading, endPoint: .trailing
+                )
+                .frame(width: geo.size.width * 0.9)
+                .rotationEffect(.degrees(-24))
+                .offset(x: sweep ? geo.size.width * 1.2 : -geo.size.width * 1.2)
+                .blur(radius: 6)
+            }
+            .clipped()
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 3.2).repeatForever(autoreverses: true)) {
+                breathe = true
+            }
+            withAnimation(.linear(duration: 7).repeatForever(autoreverses: false)) {
+                sweep = true
+            }
+        }
+    }
+}
+
+/// 科技网格：横竖等距细线，用 GeometryReader + Path 绘制，避免图片资源
+private struct TechGrid: View {
+    let color: Color
+    private let spacing: CGFloat = 42
+    var body: some View {
+        GeometryReader { geo in
+            Path { path in
+                var x: CGFloat = 0
+                while x <= geo.size.width {
+                    path.move(to: CGPoint(x: x, y: 0))
+                    path.addLine(to: CGPoint(x: x, y: geo.size.height))
+                    x += spacing
+                }
+                var y: CGFloat = 0
+                while y <= geo.size.height {
+                    path.move(to: CGPoint(x: 0, y: y))
+                    path.addLine(to: CGPoint(x: geo.size.width, y: y))
+                    y += spacing
+                }
+            }
+            .stroke(color, lineWidth: 0.6)
+        }
     }
 }
 

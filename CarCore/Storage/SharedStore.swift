@@ -183,6 +183,26 @@ public enum MythTheme: String, Codable, CaseIterable, Sendable {
     case zhuque = "zhuque"
     case qilin = "qilin"
     case baihu = "baihu"
+    // 1.11.2 正式版：QQ 式酷炫全局主题（所有用户可用，不受神兽白名单限制）
+    case neon = "neon"          // 霓虹科技（第一款，电光青×品红）
+    case aurora = "aurora"      // 极光流光（极光绿×青蓝）
+    case cyber = "cyber"        // 赛博机甲（橙红×琥珀）
+
+    /// 是否深色科技主题（深色底 + 深色卡片 + 深色系统控件）
+    public var isDark: Bool {
+        switch self {
+        case .neon, .aurora, .cyber: return true
+        default: return false
+        }
+    }
+
+    /// 是否 1.11.2 新增的科技主题（与神兽水墨主题区分：无图腾、走科技光效）
+    public var isTech: Bool {
+        switch self {
+        case .neon, .aurora, .cyber: return true
+        default: return false
+        }
+    }
 
     /// 名称（网页版 name）
     public var name: String {
@@ -191,6 +211,9 @@ public enum MythTheme: String, Codable, CaseIterable, Sendable {
         case .zhuque: return "朱雀"
         case .qilin: return "麒麟"
         case .baihu: return "白虎"
+        case .neon: return "霓虹科技"
+        case .aurora: return "极光流光"
+        case .cyber: return "赛博机甲"
         }
     }
 
@@ -201,6 +224,9 @@ public enum MythTheme: String, Codable, CaseIterable, Sendable {
         case .zhuque: return "丹霞·赤金羽焰"
         case .qilin: return "鎏金·瑞兽献祥"
         case .baihu: return "玄墨·银霜"
+        case .neon: return "电光·赛博霓虹"
+        case .aurora: return "流光·极光幻境"
+        case .cyber: return "机甲·琥珀动能"
         }
     }
 
@@ -211,6 +237,9 @@ public enum MythTheme: String, Codable, CaseIterable, Sendable {
         case .zhuque: return "赤霞羽焰为底、丹金为纹，按键与图标染朱赤色，寓意南方朱雀护佑"
         case .qilin: return "鎏金祥云为底、琥珀为纹，按键与图标染鎏金色，寓意金麒麟踏云献瑞"
         case .baihu: return "玄铁墨灰为底、水墨为纹，按键与图标染墨灰色，寓意西方白虎镇煞辟邪"
+        case .neon: return "深空为底、电光青与品红霓虹为纹，按键图标与底栏整体发光，赛博科技拉满"
+        case .aurora: return "极夜为底、极光绿与青蓝流转为纹，按键图标与底栏随极光一起流动"
+        case .cyber: return "碳黑为底、橙红与琥珀机甲为纹，按键图标与底栏染上机械动能质感"
         }
     }
 
@@ -221,6 +250,9 @@ public enum MythTheme: String, Codable, CaseIterable, Sendable {
         case .zhuque: return 0xdc2626
         case .qilin: return 0xb8860b
         case .baihu: return 0x4a4f57
+        case .neon: return 0x00e5ff
+        case .aurora: return 0x34d8a0
+        case .cyber: return 0xff5a1f
         }
     }
 
@@ -231,16 +263,22 @@ public enum MythTheme: String, Codable, CaseIterable, Sendable {
         case .zhuque: return 0x991b1b
         case .qilin: return 0x7a5a06
         case .baihu: return 0x23272e
+        case .neon: return 0x0a0e27
+        case .aurora: return 0x0b2a2a
+        case .cyber: return 0x1a1d24
         }
     }
 
-    /// 鎏金（--myth-gold）
+    /// 鎏金 / 辅色（--myth-gold）
     public var goldHex: UInt {
         switch self {
         case .qinglong: return 0xb8860b
         case .zhuque: return 0xd97706
         case .qilin: return 0xe3b23c
         case .baihu: return 0x8a8f98
+        case .neon: return 0xff2e97
+        case .aurora: return 0x4fa8ff
+        case .cyber: return 0xffb020
         }
     }
 
@@ -251,6 +289,9 @@ public enum MythTheme: String, Codable, CaseIterable, Sendable {
         case .zhuque: return 0xf9ede6
         case .qilin: return 0xfdf8ec
         case .baihu: return 0xececee
+        case .neon: return 0x070b14
+        case .aurora: return 0x08161c
+        case .cyber: return 0x0d0f14
         }
     }
 
@@ -261,6 +302,9 @@ public enum MythTheme: String, Codable, CaseIterable, Sendable {
         case .zhuque: return 0x3d1a10
         case .qilin: return 0x3a2a08
         case .baihu: return 0x23262b
+        case .neon: return 0xe8f6ff
+        case .aurora: return 0xe4fff6
+        case .cyber: return 0xf5f0e8
         }
     }
 
@@ -271,6 +315,9 @@ public enum MythTheme: String, Codable, CaseIterable, Sendable {
         case .zhuque: return 0x7c4a38
         case .qilin: return 0x7a5a1e
         case .baihu: return 0x4c5058
+        case .neon: return 0x8fa3bf
+        case .aurora: return 0x86b3a8
+        case .cyber: return 0xa89e90
         }
     }
 
@@ -281,6 +328,9 @@ public enum MythTheme: String, Codable, CaseIterable, Sendable {
         case .zhuque: return 0xa5705e
         case .qilin: return 0xa8834a
         case .baihu: return 0x9a9da4
+        case .neon: return 0x5a6e8a
+        case .aurora: return 0x557f79
+        case .cyber: return 0x6e665c
         }
     }
 
@@ -294,6 +344,9 @@ public enum MythTheme: String, Codable, CaseIterable, Sendable {
         case .zhuque: return [0xfdf3ec, 0xf5b891, 0xdc2626, 0xd97706]
         case .qilin: return [0xfdf6e6, 0xf0d896, 0xb8860b, 0x7a5a06]
         case .baihu: return [0xf4f8fd, 0xc3d2e6, 0x5b6b83, 0x2b3949]
+        case .neon: return [0x070b14, 0x0a0e27, 0x00e5ff, 0xff2e97]
+        case .aurora: return [0x08161c, 0x0b2a2a, 0x34d8a0, 0x4fa8ff]
+        case .cyber: return [0x0d0f14, 0x1a1d24, 0xff5a1f, 0xffb020]
         }
     }
 }

@@ -613,7 +613,8 @@ struct WallpaperSheet: View {
             }
         }
         .task {
-            // 网页版 mythEntry：服务端授权判定后才显示神兽主题区
+            // 网页版 mythEntry：服务端授权判定后才显示「神兽」主题区；
+            // 1.11.2 酷炫科技主题对所有用户开放，不依赖此处授权。
             guard !mythChecked, let phone = appState.credentials?.phone else { return }
             mythChecked = true
             let access = await MythService.check(phone: phone)
@@ -688,6 +689,8 @@ struct WallpaperSheet: View {
                 }
                 .buttonStyle(.plain)
             }
+            // 1.11.2 QQ 式酷炫主题：所有正式版用户可用，不受神兽白名单限制
+            techSection
             if mythAllowed {
                 mythSection
             }
@@ -715,8 +718,41 @@ struct WallpaperSheet: View {
                 .font(.system(size: 10.5))
                 .foregroundStyle(WebTheme.muted)
 
-            ForEach(MythTheme.allCases, id: \.self) { theme in
+            ForEach(MythTheme.allCases.filter { !$0.isTech }, id: \.self) { theme in
                 mythOption(theme)
+            }
+        }
+        .padding(14)
+        .glassCard()
+    }
+
+    // MARK: - 1.11.2 QQ 式酷炫主题（所有用户可用）
+
+    private var techThemes: [MythTheme] { [.neon, .aurora, .cyber] }
+
+    private var techSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color(hex: 0x00e5ff))
+                Text("酷炫主题")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(WebTheme.txt)
+                Spacer()
+                Text("QQ 式 · 全局换肤")
+                    .font(.system(size: 10))
+                    .foregroundStyle(WebTheme.faint)
+            }
+            Text("第一款霓虹科技最酷炫：背景、卡片、按键、图标、底栏与系统控件一起变")
+                .font(.system(size: 10.5))
+                .foregroundStyle(WebTheme.muted)
+            Text("深色主题需到「我的 → 主题模式」选夜间，系统控件才会一起变黑")
+                .font(.system(size: 9.5))
+                .foregroundStyle(WebTheme.faint)
+
+            ForEach(techThemes, id: \.self) { theme in
+                techOption(theme)
             }
 
             Button {
@@ -741,6 +777,77 @@ struct WallpaperSheet: View {
         }
         .padding(14)
         .glassCard()
+    }
+
+    /// 单个科技主题卡：预览渐变 + 发光符号，选中态整卡描边发光
+    private func techOption(_ theme: MythTheme) -> some View {
+        let selected = myth == theme
+        let main = Color(hex: theme.mainHex)
+        let gold = Color(hex: theme.goldHex)
+        let symbol: String = {
+            switch theme {
+            case .neon: return "bolt.fill"
+            case .aurora: return "sparkles"
+            case .cyber: return "gearshape.2.fill"
+            default: return "star.fill"
+            }
+        }()
+        return Button {
+            withAnimation(.easeInOut(duration: 0.25)) { myth = theme }
+        } label: {
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(LinearGradient(
+                            colors: theme.previewHexes.map { Color(hex: $0) },
+                            startPoint: .topLeading, endPoint: .bottomTrailing))
+                    Image(systemName: symbol)
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(.white)
+                        .shadow(color: main, radius: 8)
+                }
+                .frame(width: 54, height: 54)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 5) {
+                        Text(theme.name)
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(WebTheme.txt)
+                        if selected {
+                            Text("使用中")
+                                .font(.system(size: 9, weight: .bold))
+                                .padding(.horizontal, 5).padding(.vertical, 1.5)
+                                .background(main.opacity(0.16))
+                                .foregroundStyle(main)
+                                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                        }
+                    }
+                    Text(theme.subtitle)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(main)
+                    Text(theme.desc)
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(WebTheme.faint)
+                        .lineLimit(2)
+                }
+                Spacer()
+                if selected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(main)
+                }
+            }
+            .padding(10)
+            .background(WebTheme.card2)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(colors: [main, gold],
+                                       startPoint: .topLeading, endPoint: .bottomTrailing),
+                        lineWidth: selected ? 2 : 0.6
+                    )
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     /// 单个神兽主题卡（网页版 mythList 行）

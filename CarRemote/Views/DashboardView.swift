@@ -351,8 +351,13 @@ struct DashboardView: View {
         // RealityKit 场景会争用主线程，实机表现为「3D 档点座舱直接卡死」。
         // 2D 档没有已运行的 ARView（点座舱是新建舞台），所以一直正常。
         // 车外/座舱同模型的车型保持单实例复用，切换只动相机，不闪占位图。
-        let modelSwaps = style.cockpitModelName != (style.model3DName ?? style.cockpitModelName)
-        let stageIdentity = modelSwaps ? (isCockpit ? "cockpit" : "exterior") : "shared"
+        // 1.11.2 座舱卡死根治：车外与座舱一律拆成两个独立舞台实例。
+        // 旧判断 `cockpitModelName != (model3DName ?? cockpitModelName)` 恒为 false
+        //（cockpitModelName 缺省就等于 model3DName），导致两个视角共用同一
+        // ARView，切座舱时在同一场景内换 GLB，多车型连续切换会主线程卡死。
+        // 用 isCockpit 做 id 的一部分后，切换 = 销毁旧舞台（prepareForRemoval
+        // 停逐帧订阅 + 暂停 session）→ 新建干净舞台，等价于一直正常的 2D 档路径。
+        let stageIdentity = isCockpit ? "cockpit" : "exterior"
         return VStack(spacing: 0) {
             // 1.6.0：座舱态一律创建 3D 舞台（哪怕是 2D 档、关了 3D 开关、
             // 或车型没有 3D 车模），由舞台内部切到白逸动完整座舱；
