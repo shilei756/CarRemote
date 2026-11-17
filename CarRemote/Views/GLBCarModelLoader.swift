@@ -891,7 +891,7 @@ enum GLBCarModelLoader {
             m.clearcoat = 0.9
             m.clearcoatRoughness = 0.06
         } else if extraClearcoat > 0 {
-            m.clearcoat = extraClearcoat
+            m.clearcoat = .init(floatLiteral: extraClearcoat)
             m.clearcoatRoughness = 0.25
         }
         #else
