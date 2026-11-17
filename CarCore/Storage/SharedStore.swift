@@ -9,23 +9,40 @@ import UIKit
 public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
     case yidong = "yidong"                  // 逸动PLUS
     case yidongWhite = "yidong_white"       // 逸动PLUS 白色
-    case yidong3 = "yidong3"                // 三代逸动（网站新增 2D 车模，增加不替换）
+    case yidong3 = "yidong3"                // 三代逸动 / 逸达
     case univ = "univ"                      // UNI-V
     case cs75 = "cs75"                      // CS75PLUS
     case univK = "univ_k"                   // UNI-K
     case cs7520 = "cs75_20"                 // CS75 20款
-    case cs75Black = "cs75_black"            // CS75PLUS 黑色（用户网站新增 2D 图，增加不替换）
+    case cs75Black = "cs75_black"            // CS75PLUS 黑色
+    // 1.11.5：车型卡片覆盖「我的爱车」全部车模，个是个的、每款用自己的 GLB + 内饰
+    case shenlanSl03 = "shenlan_sl03"       // 深蓝 SL03（c236）
+    case univPhev = "univ_phev"             // UNI-V 智电 iDD（c281phev）
+    case yidaPhev = "yida_phev"             // 逸达 iDD（c589phev）
+    case unit = "unit"                      // UNI-T（s202）
+    case cs55 = "cs55"                      // CS55PLUS（s203）
+    case cs55Phev = "cs55_phev"             // CS55PLUS 智电 iDD（s203phev）
+    case cs75Mca = "cs75_mca"               // CS75PLUS 改款（s311mca）
+    case cs75Mca1Phev = "cs75_mca1_phev"    // CS75PLUS 三代 iDD（s311mca1phev）
+    case cs75Phev = "cs75_phev"             // CS75PLUS iDD（s311phev）
 
-    /// 「我的爱车」GLB 官方车模 ↔ 现有 2D 车型映射（能对应上的都接 3D，其余车型已删除）：
-    ///   c211=逸动PLUS（1.5.1 起灰/白两款均换用本模）  c281=UNI-V
-    ///   c589=三代逸动   s311=CS75PLUS 二代   s311mca1phev=CS75PLUS 三代（无对应 2D，已删）
-    ///   cd569=CS35PLUS / s202=UNI-T / s203=CS55PLUS / c236 / c281phev / s311mca：无 2D 对应，已删
+    /// 车型 → 官方 GLB 车模映射（每款车对应自己独立的模型与内饰）。
     public static let glbModelNames: [CarModelStyle: String] = [
         .univ: "c281",          // UNI-V → C281 官方 GLB（门/窗/尾门/天窗/车轮全联动）
         .yidong3: "c589",       // 三代逸动 → C589 官方 GLB
         .cs75: "s311",          // CS75PLUS → S311 二代官方 GLB
         .cs75Black: "s311",     // CS75PLUS 黑色（同 S311 车身）
-        .cs7520: "s311"         // CS75 20款（暂以二代模顶替，一代模暂缺）
+        .cs7520: "s311",        // CS75 20款（暂以二代模顶替）
+        .univK: "cd569",        // UNI-K → CD569 官方 GLB
+        .shenlanSl03: "c236",   // 深蓝 SL03 → C236
+        .univPhev: "c281phev",  // UNI-V 智电 iDD → C281_P
+        .yidaPhev: "c589phev",  // 逸达 iDD → C589_P
+        .unit: "s202",          // UNI-T → S202
+        .cs55: "s203",          // CS55PLUS → S203
+        .cs55Phev: "s203phev",  // CS55PLUS 智电 → S203_P
+        .cs75Mca: "s311mca",    // CS75PLUS 改款 → S311MCA
+        .cs75Mca1Phev: "s311mca1phev", // CS75PLUS 三代 iDD → S311_P
+        .cs75Phev: "s311phev"   // CS75PLUS iDD → S311_PHEV
     ]
 
     /// 展示名（网页版 CAR_MODELS.name）
@@ -39,14 +56,23 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
         case .univK: return "UNI-K"
         case .cs7520: return "CS75 20款"
         case .cs75Black: return "CS75 黑色"
+        case .shenlanSl03: return "深蓝 SL03"
+        case .univPhev: return "UNI-V 智电 iDD"
+        case .yidaPhev: return "逸达 iDD"
+        case .unit: return "UNI-T"
+        case .cs55: return "CS55PLUS"
+        case .cs55Phev: return "CS55PLUS 智电"
+        case .cs75Mca: return "CS75PLUS 改款"
+        case .cs75Mca1Phev: return "CS75PLUS 三代 iDD"
+        case .cs75Phev: return "CS75PLUS iDD"
         }
     }
 
     public var sfSymbol: String {
         switch self {
-        case .yidong, .yidongWhite, .yidong3: return "car"
-        case .univ: return "car.rear"
-        case .cs75, .cs75Black, .univK, .cs7520: return "car.front"
+        case .yidong, .yidongWhite, .yidong3, .yidaPhev: return "car"
+        case .univ, .univPhev, .shenlanSl03: return "car.rear"
+        case .cs75, .cs75Black, .univK, .cs7520, .cs75Mca, .cs75Mca1Phev, .cs75Phev, .cs55, .cs55Phev, .unit: return "car.front"
         }
     }
 
@@ -61,6 +87,16 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
         case .univK: return "car_univ_k"
         case .cs7520: return "car_cs75_20"
         case .cs75Black: return "car_cs75_black"
+        // 以下车型无独立 2D 图（正式版已不用 2D 贴图），复用最接近的现有图占位
+        case .shenlanSl03: return "car_univ"
+        case .univPhev: return "car_univ"
+        case .yidaPhev: return "car_yidong3"
+        case .unit: return "car_univ_k"
+        case .cs55: return "car_cs75plus"
+        case .cs55Phev: return "car_cs75plus"
+        case .cs75Mca: return "car_cs75plus"
+        case .cs75Mca1Phev: return "car_cs75plus"
+        case .cs75Phev: return "car_cs75plus"
         }
     }
 
@@ -75,6 +111,15 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
         case .univK: return "car_top_univ_k"
         case .cs7520: return "car_top_cs75_20"
         case .cs75Black: return "car_top_cs75_black"
+        case .shenlanSl03: return "car_top_univ"
+        case .univPhev: return "car_top_univ"
+        case .yidaPhev: return "car_top_yidong3"
+        case .unit: return "car_top_univ_k"
+        case .cs55: return "car_top_cs75plus"
+        case .cs55Phev: return "car_top_cs75plus"
+        case .cs75Mca: return "car_top_cs75plus"
+        case .cs75Mca1Phev: return "car_top_cs75plus"
+        case .cs75Phev: return "car_top_cs75plus"
         }
     }
 
@@ -108,7 +153,7 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
     /// 车外仍显示各车型自己的车模/车图，互不影响。
     public var cockpitModelName: String {
         #if CAKOCHE
-        // CAKOCHE 维持旧的「借白逸动完整座舱」逻辑不动。
+        // CAKOCHE 维持旧的「借白逸动完整座舱」逻辑不动（新增 case 走 default）。
         switch self {
         case .univ, .yidong3, .univK:
             return "c211.glb"
@@ -128,10 +173,10 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
     /// 油箱容积 L（网页版 CAR_MODELS.tank：切换车型时联动油量百分比）
     public var tankCapacityL: Double {
         switch self {
-        case .yidong, .yidongWhite, .yidong3: return 53
-        case .univ: return 51
-        case .cs75, .cs75Black, .cs7520: return 58
-        case .univK: return 56
+        case .yidong, .yidongWhite, .yidong3, .yidaPhev: return 53
+        case .univ, .univPhev, .shenlanSl03: return 51
+        case .cs75, .cs75Black, .cs7520, .cs75Mca, .cs75Mca1Phev, .cs75Phev, .cs55, .cs55Phev: return 58
+        case .univK, .unit: return 56
         }
     }
 
@@ -172,10 +217,14 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
         guard let id = glbID else { return nil }
         switch id {
         case "c211": return .yidongWhite          // 逸动 PLUS（白，完整座舱）
+        case "c236": return .shenlanSl03          // 深蓝 SL03
         case "c281": return .univ                 // UNI-V
         case "c589": return .yidong3              // 三代逸动 / 逸达
+        case "cd569": return .univK               // UNI-K
+        case "s202": return .unit                 // UNI-T
+        case "s203": return .cs55                 // CS55PLUS
         case "s311": return .cs75                 // CS75 PLUS
-        default: return nil                        // 正式版无对应 2D 的车型不自动切换
+        default: return nil
         }
     }
 }
