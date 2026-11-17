@@ -206,7 +206,11 @@ public final class Car3DView: UIView {
     private var interiorEye = SIMD3<Float>(0, 1.10, -0.15)
     private var interiorLookAt = SIMD3<Float>(0, 0.92, 1.65)
 
-    private static let defaultAzimuth: Float = .pi / 2   // 初始视角：车身正侧面（车头朝左）
+    #if CAKOCHE
+    private static let defaultAzimuth: Float = .pi / 2   // CAKOCHE 维持正侧面（车头朝左）
+    #else
+    private static let defaultAzimuth: Float = .pi * 0.22 // 正式版：车头斜前 3/4 朝向观察者
+    #endif
     private static let defaultElevation: Float = 0.2514
     /// 垂直视场角（度）。RealityKit 的 `fieldOfViewInDegrees` 按垂直方向应用，
     /// 水平视野由视口宽高比推导 —— fittedRadius 的 tanH/tanV 必须与此一致。

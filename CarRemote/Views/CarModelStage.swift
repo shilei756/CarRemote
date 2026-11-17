@@ -254,7 +254,14 @@ struct CarModel3DRepresentable: UIViewRepresentable {
         // 初始斜前视角 + 缓慢自转，拖拽/捏合暂停、闲置 5 秒恢复。
         // 座舱第一视角不启用：相机要固定在驾驶位，不能绕车转。
         if modelName.hasSuffix(".glb"), !cockpitLocked {
+            #if CAKOCHE
             view.enableShowcase(initialAzimuth: .pi * 0.75)
+            #else
+            // 1.11.4：旧版 .pi*0.75 让车尾斜对着人（用户反馈「车屁股对人」）。
+            // 车头在 +X 方向，相机放到 +X 偏 +Z（约 40°）→ 车头斜前 3/4 朝向观察者，
+            // 与「岁岁长安」主页陈列一致。
+            view.enableShowcase(initialAzimuth: .pi * 0.22)
+            #endif
         }
 
         // 异步加载：glb 解析 + 贴图解码放后台线程（6MB 车模 + 25 个 PBR 材质，
@@ -484,9 +491,9 @@ struct CarVisual3DStage: View {
         }
         if let modelOverride { return modelOverride }
         #endif
-        // 1.11.3「个是个的」（仅正式版走这里）：车外/座舱共用车型自己的 GLB，
-        // 每个 GLB 的 Int_P 子树自带完整内饰，进座舱只切相机不换模型。
-        // cockpitModelName 已改为返回各车型自身 model3DName（见 SharedStore）。
+        // 1.11.4：正式版车模库/全系切换用 modelOverride 直接指定 14 款中任意 GLB。
+        // 每个 GLB 的 Int_P 子树自带完整内饰，车外/座舱都用它，进座舱只切相机。
+        if let modelOverride { return modelOverride }
         if cockpitInterior { return style.cockpitModelName }
         return style.model3DName
     }
