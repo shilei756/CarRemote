@@ -73,6 +73,10 @@ struct SettingsView: View {
                 }
                 await loadACRemaining()
             }
+            // 车况自动识别车型后刷新本地设置副本的选中态
+            .onReceive(NotificationCenter.default.publisher(for: SharedStore.didAutoModelStyle)) { _ in
+                if SharedStore.modelAuto { settings = SharedStore.loadSettings() }
+            }
         }
         .tint(WebTheme.blue)
     }
@@ -122,11 +126,43 @@ struct SettingsView: View {
                     .font(.system(size: 10.5))
                     .foregroundStyle(WebTheme.faint)
             }
+            // 车架号自动识别开关（1.11.1）：开启后按车架号自动切到绑定车型
+            Button {
+                SharedStore.modelAuto.toggle()
+                if SharedStore.modelAuto {
+                    // 恢复自动时立即按当前车况应用一次
+                    if let code = appState.status?.seriesCode,
+                       let style = CarModelStyle.from(seriesCode: code) {
+                        settings.carModelStyle = style
+                        settings.tankCapacityL = style.tankCapacityL
+                        saveSettings()
+                    }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: SharedStore.modelAuto ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(SharedStore.modelAuto ? WebTheme.blue : WebTheme.faint)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("按车架号自动识别车型")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(WebTheme.txt)
+                        Text(autoModelNote)
+                            .font(.system(size: 10))
+                            .foregroundStyle(WebTheme.faint)
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                }
+                .padding(.vertical, 6)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("按车架号自动识别车型")
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
                     ForEach(CarModelStyle.allCases, id: \.self) { style in
                         Button {
                             guard settings.carModelStyle != style else { return }
+                            SharedStore.modelAuto = false   // 手选退出自动，刷新不再覆盖
                             // 油箱容积联动车型默认值（网页版 CAR_MODELS.tank）
                             settings.carModelStyle = style
                             settings.tankCapacityL = style.tankCapacityL
@@ -165,6 +201,17 @@ struct SettingsView: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .glassCard(radius: 16)
+    }
+
+    /// 车架号识别说明（正式版）。
+    private var autoModelNote: String {
+        guard let code = appState.status?.seriesCode, !code.isEmpty else {
+            return SharedStore.modelAuto ? "自动模式 · 未读到车架号编码" : "手动选择中"
+        }
+        if let style = CarModelStyle.from(seriesCode: code) {
+            return "\(code) → \(style.displayName)"
+        }
+        return "\(code) · 无对应外观，保持当前"
     }
 
     // MARK: - 设置列表（逐行进入子页）

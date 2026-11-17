@@ -445,7 +445,7 @@ struct CarVisual3DStage: View {
     var car3DEnabled: Bool = true
 
     // MARK: CAKOCHE 专用可选参数（正式版不传，默认值保证行为零变化）
-    /// 直接指定 GLB 文件名（12 款全系切换），绕过 CarModelStyle 映射
+    /// 直接指定 GLB 文件名（14 款全系切换），绕过 CarModelStyle 映射
     var modelOverride: String? = nil
     /// 隐藏舞台自带的 WebTheme 胶囊控件（极简 UI 自己提供控制入口）
     var minimalChrome = false

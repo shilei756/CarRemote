@@ -99,6 +99,10 @@ struct CakocheHome: View {
             CakocheModels.selectedID = newValue
             cockpit = false
         }
+        // 车况刷新后按车架号自动识别车型：同步 AppState 写入的 selectedID 到本地 @State
+        .onReceive(NotificationCenter.default.publisher(for: CakocheModels.didAutoSelect)) { note in
+            if let id = note.object as? String, id != selectedID { selectedID = id }
+        }
     }
 
     /// 消费快捷指令写下的「待跳转页面」标记（读完即清，不会重复跳）
@@ -176,7 +180,7 @@ struct CakocheHome: View {
         .accessibilityAddTraits(on ? [.isSelected] : [])
     }
 
-    /// 3D 真车模铺满：指定 12 款之一，隐藏原胶囊控件，切 INT 进 c211 完整座舱。
+    /// 3D 真车模铺满：指定 14 款之一，隐藏原胶囊控件，切 INT 进 c211 完整座舱。
     /// 换车型 / 换内外都换 .id 强制重建舞台，避免同一 ARView 中途换 GLB 卡死（1.8.0 教训）。
     private func stage(geo: GeometryProxy) -> some View {
         let height = max(210, geo.size.height * 0.42)

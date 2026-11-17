@@ -2,7 +2,7 @@
 //  GLBCarModelLoader.swift
 //  长安控车 — 「我的爱车」GLB 车模零依赖解析器
 //
-//  资产来源：从「我的爱车」App（com.kancher.kc2026）提取的 12 款长安系 3D 车模
+//  资产来源：从「我的爱车」App（com.kancher.kc2026）与「岁岁长安 v5.17」提取的 14 款长安系 3D 车模
 //  （GLB 2.0 格式），已离线预处理：meshopt 压缩已解码还原、动画已剔除、
 //  贴图保留 WebP（iOS 14+ ImageIO 原生解码）、顶点保留量化 SHORT/BYTE
 //  （本解析器原生反量化），因此单模型体积控制在 2~6MB。

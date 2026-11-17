@@ -133,6 +133,41 @@ public enum CarModelStyle: String, Codable, CaseIterable, Sendable {
         CarCommand.whistle.rawValue,
         CarCommand.remoteSearchCar.rawValue
     ]
+
+    /// 1.11.1：车架号系列码 → 正式版车型外观（自动识别）。
+    /// 复刻网页版 detectModelKey：归一化 → 折算 GLB id → 反查有 3D 的车型。
+    /// 正式版只有 8 款外观，映射粒度较粗：新能/iDD 并入对应燃油款显示。
+    public static func from(seriesCode: String?) -> CarModelStyle? {
+        guard let sc = seriesCode, !sc.isEmpty else { return nil }
+        let raw = sc.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        let cands = [
+            raw.replacingOccurrences(of: "-", with: "_"),
+            raw.replacingOccurrences(of: "[_-]", with: "", options: .regularExpression),
+            raw.split(separator: "-").first.map(String.init) ?? "",
+            raw
+        ]
+        // seriesCode 前缀 → GLB id（与 Gallery 命名一致）
+        let glbID: String? = {
+            if cands.contains(where: { $0.hasPrefix("c211") }) { return "c211" }
+            if cands.contains(where: { $0.hasPrefix("c281") }) { return "c281" }
+            if cands.contains(where: { $0.hasPrefix("c589") }) { return "c589" }
+            if cands.contains(where: { $0.hasPrefix("s311mca") }) { return "s311" }
+            if cands.contains(where: { $0.hasPrefix("s311") }) { return "s311" }
+            if cands.contains(where: { $0.hasPrefix("cd569") }) { return "cd569" }
+            if cands.contains(where: { $0.hasPrefix("s203") }) { return "s203" }
+            if cands.contains(where: { $0.hasPrefix("s202") }) { return "s202" }
+            if cands.contains(where: { $0.hasPrefix("c236") }) { return "c236" }
+            return nil
+        }()
+        guard let id = glbID else { return nil }
+        switch id {
+        case "c211": return .yidongWhite          // 逸动 PLUS（白，完整座舱）
+        case "c281": return .univ                 // UNI-V
+        case "c589": return .yidong3              // 三代逸动 / 逸达
+        case "s311": return .cs75                 // CS75 PLUS
+        default: return nil                        // 正式版无对应 2D 的车型不自动切换
+        }
+    }
 }
 
 /// App 主题（与网页版夜间模式对应）
@@ -612,6 +647,16 @@ public enum SharedStore {
         /// 1.10.0 小组件防误触开关（独立轻量键，供小组件在免签环境也能读到）
         static let widgetGuard = "carremote.widgetGuardEnabled"
     }
+
+    /// 1.11.1：正式版车型自动识别开关（车架号 seriesCode 自动切车模）。
+    /// 用 standard 存储，与 CAKOCHE 的 cakoche.modelAuto 互不干扰。
+    private static let modelAutoKey = "carremote.modelAuto"
+    public static var modelAuto: Bool {
+        get { UserDefaults.standard.object(forKey: modelAutoKey) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: modelAutoKey) }
+    }
+    /// 正式版自动识别切换车型外观时发出（object 为 CarModelStyle），供设置页刷新选中态。
+    public static let didAutoModelStyle = Notification.Name("carremote.didAutoModelStyle")
 
     private static var defaults: UserDefaults? {
         UserDefaults(suiteName: APIConfig.appGroupIdentifier)

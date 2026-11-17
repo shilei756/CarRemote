@@ -32,7 +32,7 @@ struct CakocheSettingsPage: View {
                 Button { withAnimation(.easeInOut(duration: 0.22)) { modelsExpanded.toggle() } } label: {
                     HStack(spacing: 8) {
                         DotCnText(text: "3D 车模", size: 10, color: Mono.paperInk)
-                        DotCnText(text: "全系 12 款", size: 8, color: Mono.paperDim)
+                        DotCnText(text: "全系 \(CakocheModels.all.count) 款", size: 8, color: Mono.paperDim)
                         Spacer()
                         Image(systemName: "chevron.down")
                             .font(.system(size: 11, weight: .semibold))
@@ -45,8 +45,33 @@ struct CakocheSettingsPage: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("车模选择，已\(modelsExpanded ? "展开" : "折叠")")
                 if modelsExpanded {
+                    // 车架号自动识别行：点按恢复自动并按当前车况立即应用
+                    Button {
+                        CakocheModels.applyAutoNow(seriesCode: appState.status?.seriesCode)
+                    } label: {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                DotCnText(text: "自动识别（按车架号）", size: 10, color: Mono.paperInk)
+                                DotCnText(text: autoNote, size: 7, color: Mono.paperDim)
+                            }
+                            Spacer()
+                            if CakocheModels.modelAuto {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(Mono.red).font(.system(size: 15))
+                            }
+                        }
+                        .padding(.horizontal, 22)
+                        .padding(.vertical, 11)
+                        .background(CakocheModels.modelAuto
+                                    ? Mono.paperHair.opacity(0.35) : Color.clear)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("自动按车架号识别车模")
+                    Hairline(color: Mono.paperHair).padding(.leading, 22)
+
                     ForEach(CakocheModels.all) { model in
                         Button {
+                            CakocheModels.modelAuto = false   // 手选退出自动，刷新不再覆盖
                             selectedID = model.id
                         } label: {
                             HStack(spacing: 12) {
@@ -57,18 +82,18 @@ struct CakocheSettingsPage: View {
                                               size: 7, color: Mono.paperDim)
                                 }
                                 Spacer()
-                                if selectedID == model.id {
+                                if !CakocheModels.modelAuto && selectedID == model.id {
                                     Circle().fill(Mono.red).frame(width: 7, height: 7)
                                 }
                             }
                             .padding(.horizontal, 22)
                             .padding(.vertical, 11)
-                            .background(selectedID == model.id
+                            .background(!CakocheModels.modelAuto && selectedID == model.id
                                         ? Mono.paperHair.opacity(0.35) : Color.clear)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(model.name)
-                        .accessibilityAddTraits(selectedID == model.id ? [.isSelected] : [])
+                        .accessibilityAddTraits(!CakocheModels.modelAuto && selectedID == model.id ? [.isSelected] : [])
                         Hairline(color: Mono.paperHair).padding(.leading, 22)
                     }
                 }
@@ -266,6 +291,18 @@ struct CakocheSettingsPage: View {
     private var maskedPhone: String {
         guard let phone = appState.credentials?.phone, phone.count == 11 else { return "--" }
         return String(phone.prefix(3)) + "****" + String(phone.suffix(4))
+    }
+
+    /// 车架号识别说明：显示 seriesCode → 折算后的车型名。
+    private var autoNote: String {
+        guard let code = appState.status?.seriesCode, !code.isEmpty else {
+            return "未读到车架号编码，可手动选择"
+        }
+        if let id = CakocheModels.detectModelKey(code),
+           let m = CakocheModels.all.first(where: { $0.id == id }) {
+            return "车架号 \(code) → \(m.name)"
+        }
+        return "车架号 \(code) · 未匹配到车模"
     }
 
     private var hostText: String {

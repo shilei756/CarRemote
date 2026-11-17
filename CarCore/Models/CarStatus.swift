@@ -85,6 +85,27 @@ public struct CarStatus: @unchecked Sendable {
         keys.contains { dict[$0] != nil }
     }
 
+    // MARK: - 车型识别（1.2.7，车架号系列码，多字段容错）
+
+    /// 车系码（如 C211-1 / S311MCA-1 / C281-P），用于自动匹配车模。
+    /// 车况接口 keys=* 全量返回，字段名在不同车型间有差异，故多候选键容错。
+    public var seriesCode: String? {
+        for key in ["seriesCode", "series_code", "vehicleSeriesCode", "carSeriesCode",
+                    "series", "modelCode", "vehicleModelCode", "carModelCode"] {
+            if let s = raw[key] as? String, !s.isEmpty { return s }
+            if let n = raw[key] as? NSNumber, n.stringValue.count > 0 { return n.stringValue }
+        }
+        return nil
+    }
+
+    /// 车系名称（仅用于设置页展示识别结果）。
+    public var seriesName: String? {
+        for key in ["seriesName", "series_name", "vehicleSeriesName", "carSeriesName", "modelName"] {
+            if let s = raw[key] as? String, !s.isEmpty { return s }
+        }
+        return nil
+    }
+
     // MARK: - 油量 / 续航 / 里程
 
     /// 剩余续航 km

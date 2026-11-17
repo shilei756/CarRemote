@@ -326,6 +326,25 @@ final class AppState: ObservableObject {
 
     // MARK: - 车况刷新
 
+    /// 车架号自动识别车模（1.2.7 / 1.11.1）：
+    /// CAKOCHE 走 CakocheModels（14 款），正式版走 CarModelStyle（8 款外观）。
+    /// 两者都尊重各自的「自动/手选」开关，识别失败时保持现状不打断用户。
+    private func applyAutoModel(seriesCode: String?) {
+        guard let code = seriesCode, !code.isEmpty else { return }
+        #if CAKOCHE
+        CakocheModels.applyAutoModelIfNeeded(seriesCode: code)
+        #else
+        guard SharedStore.modelAuto,
+              let style = CarModelStyle.from(seriesCode: code) else { return }
+        var s = SharedStore.loadSettings()
+        guard s.carModelStyle != style else { return }
+        s.carModelStyle = style
+        s.tankCapacityL = style.tankCapacityL
+        SharedStore.saveSettings(s)
+        NotificationCenter.default.post(name: SharedStore.didAutoModelStyle, object: style)
+        #endif
+    }
+
     func refreshStatus() async {
         guard let credentials, !isRefreshing else { return }
         isRefreshing = true
@@ -335,6 +354,8 @@ final class AppState: ObservableObject {
             SharedStore.saveCredentials(updatedCredentials)
             self.status = status
             self.statusUpdatedAt = Date()
+            // 车架号 seriesCode 自动识别车模（自动模式下、车型变化时切换；手选不覆盖）
+            applyAutoModel(seriesCode: status.seriesCode)
             SharedStore.saveStatusSnapshot(StatusSnapshot(
                 carName: car.displayName,
                 status: status,
