@@ -35,13 +35,29 @@ public enum APIClient {
         "Accept": "application/json, text/plain, */*"
     ]
 
+    /// 站点网关要求所有请求带 sharecode 访问凭证（分享链接 ?sharecode=）。
+    /// 仅对站主自有域名注入；长安官方车联网接口保持原样。已带则不重复。
+    public static func shareCodeURL(_ url: URL) -> URL {
+        guard APIConfig.isSiteURL(url),
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return url
+        }
+        if components.queryItems?.contains(where: { $0.name == "sharecode" }) == true {
+            return url
+        }
+        var items = components.queryItems ?? []
+        items.append(URLQueryItem(name: "sharecode", value: APIConfig.siteShareCode))
+        components.queryItems = items
+        return components.url ?? url
+    }
+
     public static func request(
         _ url: URL,
         method: String = "GET",
         headers: [String: String] = [:],
         body: Data? = nil
     ) async throws -> Any {
-        var request = URLRequest(url: url)
+        var request = URLRequest(url: APIClient.shareCodeURL(url))
         request.httpMethod = method
         request.timeoutInterval = 25
         request.cachePolicy = .reloadIgnoringLocalCacheData
@@ -86,7 +102,7 @@ public enum APIClient {
         headers: [String: String] = [:],
         body: Data? = nil
     ) async throws -> (status: Int, data: Data) {
-        var request = URLRequest(url: url)
+        var request = URLRequest(url: APIClient.shareCodeURL(url))
         request.httpMethod = method
         request.timeoutInterval = 25
         request.cachePolicy = .reloadIgnoringLocalCacheData

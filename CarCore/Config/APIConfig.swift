@@ -16,6 +16,19 @@ public enum APIConfig {
         SharedStore.loadServerBaseURL() ?? defaultSiteBaseURL
     }
 
+    /// 站点访问凭证（分享链接 ?sharecode=）。网关会拦截没有 sharecode 的请求。
+    /// 由 APIClient 对「所有发往站主域名的请求」统一注入，上层无需关心。
+    public static let siteShareCode = "XQVATDNHMB"
+
+    /// 判断 URL 是否指向站主自有域名（需要注入 sharecode）。
+    /// 长安官方车联网接口（m.iov.changan.com.cn 等）返回 false，不受影响。
+    public static func isSiteURL(_ url: URL) -> Bool {
+        guard let host = url.host?.lowercased() else { return false }
+        let siteHost = URL(string: siteBaseURL)?.host?.lowercased()
+            ?? URL(string: defaultSiteBaseURL)?.host?.lowercased()
+        return host == siteHost
+    }
+
     /// 卡密获取联系方式（展示在体验网关页面）
     public static let ownerContactQQ = "2317665079"
 
