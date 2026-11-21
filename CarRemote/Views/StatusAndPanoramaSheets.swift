@@ -274,8 +274,8 @@ struct VehicleStatusPage: View {
     private func tiresGroup(status: CarStatus) -> some View {
         StatusGroup(title: "胎压", symbol: "circle.hexagongrid.circle", tint: WebTheme.green) {
             StatusPairGrid(items: status.tirePressures.map { tire in
-                .init(tire.label, tire.valueKPa.map { "\(Int($0.rounded()))" } ?? "--",
-                      tire.isLow ? WebTheme.red : WebTheme.txt)
+                StatusPair(tire.label, tire.valueKPa.map { "\(Int($0.rounded()))" } ?? "--",
+                           tire.isLow ? WebTheme.red : WebTheme.txt)
             })
         }
     }
