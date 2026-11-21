@@ -152,20 +152,10 @@ private struct QuickControlButtons: View {
         }
     }
 
+    /// 1.11.7：全部控车按钮统一用「闭锁」的绿色，不再五颜六色（靠图标区分功能）。
+    /// 待确认态仍是橙色（防误触提示），不受此改色影响。
     private func buttonTint(_ command: CarCommand?) -> Color {
-        switch command {
-        case .flashLight: return .blue
-        case .unlockDoor: return .orange
-        case .lockDoor: return .green
-        case .oneKeyLock: return .mint
-        case .whistle: return .purple
-        case .remoteSearchCar: return .cyan
-        case .openEngine: return .red
-        case .closeEngine: return .gray
-        case .openAir: return .teal
-        case .closeAir: return .indigo
-        default: return .blue
-        }
+        return .green
     }
 }
 
@@ -312,9 +302,9 @@ struct MediumWidgetView: View {
 
     var body: some View {
         if let snapshot = entry.snapshot {
-            VStack(spacing: 8) {
+            VStack(spacing: 6) {
                 HStack(alignment: .top, spacing: 10) {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 5) {
                             Text(snapshot.carName)
                                 .font(.system(size: 13, weight: .bold))
@@ -330,10 +320,15 @@ struct MediumWidgetView: View {
                                 .font(.system(size: 9))
                                 .foregroundStyle(.secondary)
                         }
-                        Text("油量 \(CarStatus.format(snapshot.fuelLeftLiters)) L · 里程 \(CarStatus.format(snapshot.totalOdometerKm)) km · 电压 \(CarStatus.format(snapshot.batteryVoltage)) V")
-                            .font(.system(size: 9))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                        // 1.11.7：油量/里程/电压分两行完整展示，电压不再被 lineLimit 截断
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("油量 \(CarStatus.format(snapshot.fuelLeftLiters)) L · 里程 \(CarStatus.format(snapshot.totalOdometerKm)) km")
+                            Text("电压 \(CarStatus.format(snapshot.batteryVoltage)) V")
+                        }
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
                         Text("更新于 \(relativeTimeText(snapshot.updatedAt))")
                             .font(.system(size: 8))
                             .foregroundStyle(.tertiary)

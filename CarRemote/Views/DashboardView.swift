@@ -126,7 +126,9 @@ struct DashboardView: View {
                             .accessibilityLabel("刷新车况")
                             .disabled(appState.isRefreshing)
                         }
-                        .padding(.top, 6)
+                        // 1.11.7：整体上移（6 → 2）。ScrollView 默认遵守安全区，
+                        // 顶部按键不会与状态栏/灵动岛重合，无需再手动加状态栏高度（会重复留白）。
+                        .padding(.top, 2)
                         if let errorMessage = appState.errorMessage {
                             errorBanner(errorMessage)
                         }
@@ -144,7 +146,7 @@ struct DashboardView: View {
                         Spacer(minLength: 32)
                     }
                     .padding(.horizontal, 16)
-                    .padding(.top, 4)
+                    .padding(.top, 0)
                 }
             .refreshable {
                 await appState.refreshStatus()
@@ -153,9 +155,10 @@ struct DashboardView: View {
                 if viewModel.acMode == .new {
                     await viewModel.loadACRemainingDays()
                 }
-                // 实时状态轮询：每 30 秒自动刷新车况（开锁/闭锁后状态自动跟随，无需手动刷新）
+                // 1.11.7：实时状态轮询 30s → 12s，车况/控车后状态跟随更快；
+                // refreshStatus 内部有 isRefreshing 去重，轮询不会叠加请求。
                 while !Task.isCancelled {
-                    try? await Task.sleep(nanoseconds: 30_000_000_000)
+                    try? await Task.sleep(nanoseconds: 12_000_000_000)
                     if Task.isCancelled { break }
                     await appState.refreshStatus()
                 }
@@ -468,11 +471,11 @@ struct DashboardView: View {
                             .font(.system(size: 10))
                             .foregroundStyle(WebTheme.faint)
                     }
-                    // 油量条（网页版 .ftrack）
-                    WebTrack(
+                    // 1.11.7：油量条改为网页同款点阵 + 充电式脉冲，点击可换颜色
+                    WebDotMatrix(
                         fraction: (status.fuelLeftLiters ?? 0) / SharedStore.loadSettings().tankCapacityL,
-                        fill: LinearGradient(colors: [WebTheme.amber, WebTheme.amber.opacity(0.7)], startPoint: .leading, endPoint: .trailing),
-                        height: 4
+                        rows: 3, cols: 36, height: 20,
+                        colorHex: DotMatrixColorStore.hex
                     )
                     // 总里程
                     HStack(spacing: 4) {
@@ -533,11 +536,11 @@ struct DashboardView: View {
                                 .foregroundStyle(voltageColor(status.batteryVoltage))
                         }
                     }
-                    // 电瓶条（网页版 .btrack：11V~15V 区间）
-                    WebTrack(
+                    // 1.11.7：电压条改为网页同款点阵 + 充电式脉冲，点击可换颜色
+                    WebDotMatrix(
                         fraction: ((status.batteryVoltage ?? 11) - 10.5) / 4.5,
-                        fill: LinearGradient(colors: [voltageColor(status.batteryVoltage)], startPoint: .leading, endPoint: .trailing),
-                        height: 3
+                        rows: 2, cols: 22, height: 14,
+                        colorHex: DotMatrixColorStore.hex
                     )
                     // 空调设定
                     if status.acTempC != nil {
@@ -1171,8 +1174,9 @@ struct CompactControlButton: View {
         .disabled(isExecuting)
     }
 
+    /// 1.11.7：更多控车网格按钮统一用闭锁绿（主题下已由渐变+白图标接管）
     private var iconColor: Color {
-        command.isDangerous ? WebTheme.amber : WebTheme.blue
+        WebTheme.green
     }
 }
 

@@ -26,7 +26,54 @@ private struct StatusRow: View {
     }
 }
 
-/// 分组卡片
+/// 双列单元：左「字段名」灰、右「值」黑（对齐网页版每行两组字段）
+struct StatusPair: Identifiable {
+    let id = UUID()
+    let label: String
+    let value: String
+    var color: Color? = nil
+
+    init(_ label: String, _ value: String, _ color: Color? = nil) {
+        self.label = label
+        self.value = value
+        self.color = color
+    }
+}
+
+/// 双列网格：每行两组「字段名 + 值」，间距宽松贴合网页版车况卡
+private struct StatusPairGrid: View {
+    let items: [StatusPair]
+
+    var body: some View {
+        LazyVGrid(
+            columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 2),
+            spacing: 0
+        ) {
+            ForEach(items) { item in
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(item.label)
+                        .font(.system(size: 12))
+                        .foregroundStyle(WebTheme.muted)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                    Spacer(minLength: 2)
+                    Text(item.value)
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(item.color ?? WebTheme.txt)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                }
+                .padding(.vertical, 11)
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(WebTheme.border.opacity(0.45)).frame(height: 0.5)
+                }
+            }
+        }
+    }
+}
+
+/// 分组卡片（网页版圆角白卡 + 加粗彩色标题）
 private struct StatusGroup<Content: View>: View {
     let title: String
     let symbol: String
@@ -34,25 +81,26 @@ private struct StatusGroup<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 7) {
                 Image(systemName: symbol)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(tint)
                 Text(title)
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(WebTheme.txt)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(tint)
             }
-            .padding(.bottom, 6)
+            .padding(.bottom, 4)
             content
         }
-        .padding(14)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassCard(radius: 14)
+        .glassCard(radius: 18)
     }
 }
 
-/// 车辆状态页（原生重写网页版 /vehicle_status；已独立为底部「车况」标签页）
+/// 车辆状态页（1.11.7 重写：同步网页版 /vehicle_status 全部车况字段，双列卡片布局）
+/// 对照网页截图：动力系统 / 门窗 / 灯光状态 / 空调环境 / 里程与能耗 / 车辆概况 / 胎压
 struct VehicleStatusPage: View {
     @EnvironmentObject private var appState: AppState
 
@@ -64,10 +112,13 @@ struct VehicleStatusPage: View {
                     VStack(spacing: 12) {
                         if let status = appState.status {
                             header(status: status)
-                            powerGroup(status: status)
-                            climateGroup(status: status)
-                            doorsGroup(status: status)
-                            tiresGroup(status: status)
+                            powerGroup(status: status)       // 动力系统
+                            doorsGroup(status: status)       // 门窗
+                            lightsGroup(status: status)      // 灯光状态
+                            climateGroup(status: status)     // 空调环境
+                            mileageGroup(status: status)     // 里程与能耗
+                            overviewGroup(status: status)    // 车辆概况
+                            tiresGroup(status: status)       // 胎压
                         } else {
                             EmptyStateView(systemImage: "gauge.with.dots.needle.33percent",
                                            title: "暂无车况数据",
@@ -76,15 +127,14 @@ struct VehicleStatusPage: View {
                         Spacer(minLength: 24)
                     }
                     .padding(.horizontal, 16)
-                    .padding(.top, 8)
+                    .padding(.top, 4)
                 }
             }
-            .inlineTitle("车辆状态")
+            .inlineTitle("车况")
             .refreshable {
                 await appState.refreshStatus()
             }
             .task {
-                // 进入页面先刷一次（控车页 30 秒轮询仍在后台持续更新）
                 if appState.statusUpdatedAt == nil {
                     await appState.refreshStatus()
                 }
@@ -96,114 +146,209 @@ struct VehicleStatusPage: View {
     private func header(status: CarStatus) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text("更新时间：\(appState.statusUpdatedAt.map { Self.timeText($0) } ?? "--")")
-                    .font(.system(size: 12))
-                    .monospacedDigit()
-                    .foregroundStyle(WebTheme.muted)
+                Text("车况")
+                    .font(.system(size: 26, weight: .heavy))
+                    .foregroundStyle(WebTheme.txt)
+                Text("更新于 \(appState.statusUpdatedAt.map { Self.timeText($0) } ?? "--")")
+                    .font(.system(size: 11))
+                    .foregroundStyle(WebTheme.faint)
             }
             Spacer()
             let badge = status.stateFlags.statusBadge
             HStack(spacing: 5) {
-                Circle().fill(Self.flagColor(badge.key)).frame(width: 6, height: 6)
+                Circle().fill(Self.flagColor(badge.key)).frame(width: 7, height: 7)
                 Text(badge.text)
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Self.flagColor(badge.key))
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(Self.flagColor(badge.key).opacity(0.09))
+            .foregroundStyle(Self.flagColor(badge.key))
+            .padding(.horizontal, 11)
+            .padding(.vertical, 6)
+            .background(Self.flagColor(badge.key).opacity(0.10))
             .clipShape(Capsule())
         }
         .padding(.horizontal, 4)
+        .padding(.bottom, 2)
     }
 
-    /// 动力系统
+    // MARK: - 各分组（双列）
+
     private func powerGroup(status: CarStatus) -> some View {
         StatusGroup(title: "动力系统", symbol: "engine.combustion", tint: WebTheme.amber) {
-            StatusRow(label: "发动机",
-                      value: status.engineRunning ? "运行中" : "已熄火",
-                      color: status.engineRunning ? WebTheme.green : WebTheme.muted)
-            if let t = Self.number(status.raw, ["coolantTemperature", "engineCoolantTemp", "coolantTemp"]) {
-                StatusRow(label: "发动机水温", value: String(format: "%.1f ℃", t))
-            }
-            StatusRow(label: "电瓶电压",
-                      value: status.batteryVoltage.map { String(format: "%.1f V", $0) } ?? "--",
-                      color: voltageColor(status.batteryVoltage))
-            if let speed = Self.number(status.raw, ["vehicleSpeed", "speed"]) {
-                StatusRow(label: "车速", value: String(format: "%.0f km/h", speed))
-            }
-            StatusRow(label: "总里程", value: (CarStatus.format(status.totalOdometerKm)) + " km")
+            StatusPairGrid(items: [
+                .init("发动机", status.engineRunning ? "运行中" : "熄火",
+                      status.engineRunning ? WebTheme.green : WebTheme.txt),
+                .init("发动机水温", Self.fmt(status.raw, ["engineWaterTemp", "coolantTemperature", "waterTemp", "engineCoolantTemp"], "℃", 1)),
+                .init("冷却液状态", Self.stateText(status.raw, ["engineCoolantStatus", "coolantStatus"])),
+                .init("机油压力", Self.stateText(status.raw, ["oilPressureStatus", "engineOilPressure"])),
+                .init("变速箱", Self.stateText(status.raw, ["transmissionSystemStatus", "gearboxStatus"])),
+                .init("ABS", Self.stateText(status.raw, ["absStatus"])),
+                .init("稳定控制", Self.stateText(status.raw, ["vehicleStabilityControlSystemStatus", "stabilityControlStatus"])),
+                .init("安全气囊", Self.stateText(status.raw, ["airbagSystemStatus", "airbagStatus"])),
+                .init("发动机系统", Self.stateText(status.raw, ["engineSystemStatus"])),
+                .init("驱动电机", Self.stateText(status.raw, ["driveMotorStatus", "motorStatus"])),
+                .init("动力电池", Self.stateText(status.raw, ["powerBatteryStatus", "batterySystemStatus"])),
+                .init("充电系统", Self.stateText(status.raw, ["chargingSystemStatus"])),
+                .init("无钥匙系统", Self.stateText(status.raw, ["keylessEntryStartSystemStatus", "keylessSystemStatus"])),
+                .init("转向助力", Self.stateText(status.raw, ["assistantSteeringStatus", "steeringAssistStatus"])),
+                .init("燃油压力", Self.stateText(status.raw, ["fuelPressureStatus", "fuelPressure"])),
+            ])
         }
     }
 
-    /// 空调环境
+    private func doorsGroup(status: CarStatus) -> some View {
+        StatusGroup(title: "门窗", symbol: "door.left.hand.open", tint: WebTheme.blue) {
+            StatusPairGrid(items: [
+                .init("左前门", Self.lockText(Self.val(status.raw, ["leftFrontDoorStatus"]))),
+                .init("右前门", Self.lockText(Self.val(status.raw, ["rightFrontDoorStatus"]))),
+                .init("左后门", Self.lockText(Self.val(status.raw, ["leftRearDoorStatus"]))),
+                .init("右后门", Self.lockText(Self.val(status.raw, ["rightRearDoorStatus"]))),
+                .init("左前车窗", Self.closeText(Self.val(status.raw, ["diverWindow", "driverWindow", "leftFrontDoorrWindow", "leftFrontDoorWindow"]))),
+                .init("右前车窗", Self.closeText(Self.val(status.raw, ["passengerWindow"]))),
+                .init("左后车窗", Self.closeText(Self.val(status.raw, ["leftRearWindow"]))),
+                .init("右后车窗", Self.closeText(Self.val(status.raw, ["rightRearWindow"]))),
+                .init("天窗", Self.closeText(Self.val(status.raw, ["sunroof", "skyWindow", "dormer"]))),
+                .init("后备箱", Self.closeText(Self.val(status.raw, ["trunk"]))),
+                .init("前机盖", Self.closeText(Self.val(status.raw, ["hood"]))),
+            ])
+        }
+    }
+
+    private func lightsGroup(status: CarStatus) -> some View {
+        StatusGroup(title: "灯光状态", symbol: "lightbulb", tint: WebTheme.amber) {
+            StatusPairGrid(items: [
+                .init("近光灯", Self.onOffText(Self.val(status.raw, ["lowBeam", "lowBeamStatus"]))),
+                .init("远光灯", Self.onOffText(Self.val(status.raw, ["highBeam", "highBeamStatus"]))),
+                .init("示廓灯", Self.onOffText(Self.val(status.raw, ["positionLight", "widthLight"]))),
+                .init("前雾灯", Self.onOffText(Self.val(status.raw, ["frontFogLight"]))),
+                .init("后雾灯", Self.onOffText(Self.val(status.raw, ["rearFogLight"]))),
+                .init("左转向灯", Self.onOffText(Self.val(status.raw, ["leftTurnSignal"]))),
+                .init("右转向灯", Self.onOffText(Self.val(status.raw, ["rightTurnSignal"]))),
+                .init("双闪", Self.onOffText(Self.val(status.raw, ["hazardLight", "doubleFlash", "warningLight"]))),
+            ])
+        }
+    }
+
     private func climateGroup(status: CarStatus) -> some View {
         StatusGroup(title: "空调环境", symbol: "snowflake", tint: WebTheme.blue) {
-            StatusRow(label: "车外温度", value: status.vehicleTempC.map { String(format: "%.0f ℃", $0) } ?? "--")
-            StatusRow(label: "空调设定", value: status.acTempC.map { String(format: "%.0f ℃", $0) } ?? "未开启")
+            StatusPairGrid(items: [
+                .init("车外温度", Self.fmt(status.raw, ["vehicleTemperature", "outsideTemp", "ambientTemperature"], "℃", 0)),
+                .init("车内温度", Self.fmt(status.raw, ["vehicleTempIn", "insideTemp", "interiorTemperature", "inCarTemperature"], "℃", 0)),
+                .init("设定温度", Self.acSetText(status.raw)),
+                .init("空气循环", Self.recycleText(Self.val(status.raw, ["airRecycleStatus", "airCirculationStatus"]))),
+                .init("PM2.5", Self.fmt(status.raw, ["pm25", "pm2_5", "pm25Value"], "", 0)),
+                .init("空气质量", Self.fmt(status.raw, ["airQualityInCarLevel", "airQuality", "airQualityLevel"], "级", 0)),
+                .init("风速档位", Self.fanText(status.raw)),
+            ])
         }
     }
 
-    /// 门窗
-    private func doorsGroup(status: CarStatus) -> some View {
-        StatusGroup(title: "门窗", symbol: "door.left.hand.open", tint: WebTheme.purple) {
-            StatusRow(label: "左前门", value: doorText(["leftFrontDoorStatus"]))
-            StatusRow(label: "右前门", value: doorText(["rightFrontDoorStatus"]))
-            StatusRow(label: "左后门", value: doorText(["leftRearDoorStatus"]))
-            StatusRow(label: "右后门", value: doorText(["rightRearDoorStatus"]))
-            StatusRow(label: "后备箱", value: doorText(["trunk"]))
-            StatusRow(label: "引擎盖", value: doorText(["hood"]))
-            StatusRow(label: "天窗", value: doorText(["sunroof", "skyWindow", "dormer"]))
-            StatusRow(label: "车窗", value: windowText())
+    private func mileageGroup(status: CarStatus) -> some View {
+        let fuelPct = status.fuelLeftLiters.map { l in
+            Int(min(max(l / SharedStore.loadSettings().tankCapacityL * 100, 0), 100).rounded())
+        }
+        return StatusGroup(title: "里程与能耗", symbol: "road.lanes", tint: WebTheme.green) {
+            StatusPairGrid(items: [
+                .init("剩余续航", (CarStatus.format(status.remainingRangeKm)) + " km"),
+                .init("剩余油量", (CarStatus.format(status.fuelLeftLiters)) + " L"),
+                .init("剩余油量", fuelPct.map { "\($0)%" } ?? "--"),
+                .init("百公里油耗", Self.fmt(status.raw, ["fuelConsumption100km", "oilWear100km", "averageFuelConsumption"], "L", 1)),
+                .init("总里程", (CarStatus.format(status.totalOdometerKm)) + " km"),
+                .init("电瓶电压", status.batteryVoltage.map { String(format: "%.1f V", $0) } ?? "--"),
+                .init("上次行程", Self.lastTripText(status)),
+            ])
         }
     }
 
-    /// 胎压
+    private func overviewGroup(status: CarStatus) -> some View {
+        StatusGroup(title: "车辆概况", symbol: "car.fill", tint: WebTheme.purple) {
+            StatusPairGrid(items: [
+                .init("总里程", (CarStatus.format(status.totalOdometerKm)) + " km"),
+                .init("钥匙电量", Self.stateText(status.raw, ["keyBatteryStatus", "remoteKeyBatteryStatus"])),
+                .init("GPS", Self.val(status.raw, ["gpsStatus"]) == 1 ? "有效" : "--"),
+                .init("信号强度", Self.fmt(status.raw, ["signalStrength", "gpsSignalStrength"], "%", 0)),
+                .init("上次点火", Self.timeStampText(status.raw, ["ignitionTime", "lastIgnitionTime", "startTime"])),
+            ])
+        }
+    }
+
     private func tiresGroup(status: CarStatus) -> some View {
-        StatusGroup(title: "胎压监测", symbol: "circle.hexagongrid.circle", tint: WebTheme.green) {
-            ForEach(Array(status.tirePressures.enumerated()), id: \.offset) { _, tire in
-                let text = tire.valueKPa.map { "\(Int($0.rounded())) kPa" } ?? "--"
-                StatusRow(label: tire.label, value: text,
-                          color: tire.isLow ? WebTheme.red : nil)
-            }
+        StatusGroup(title: "胎压", symbol: "circle.hexagongrid.circle", tint: WebTheme.green) {
+            StatusPairGrid(items: status.tirePressures.map { tire in
+                .init(tire.label, tire.valueKPa.map { "\(Int($0.rounded()))" } ?? "--",
+                      tire.isLow ? WebTheme.red : WebTheme.txt)
+            })
         }
     }
 
-    // MARK: - 取值工具
+    // MARK: - 取值工具（多候选键容错，缺字段显示 "--"，不误报异常）
 
-    /// 车门类：1 = 打开（网页版同语义），nil = 官网未返回
-    private func doorText(_ keys: [String]) -> String {
-        guard let raw = appState.status else { return "--" }
+    private static func val(_ dict: [String: Any], _ keys: [String]) -> Double? {
         for key in keys {
-            if let v = Self.number(raw.raw, [key]) {
-                return v == 1 ? "打开" : "关闭"
-            }
-            if let s = raw.raw[key] as? String, s == "1" || s == "0" {
-                return s == "1" ? "打开" : "关闭"
-            }
-        }
-        return "--"
-    }
-
-    private func windowText() -> String {
-        guard let raw = appState.status else { return "--" }
-        let keys = ["diverWindow", "driverWindow", "leftFrontDoorrWindow", "leftFrontDoorWindow",
-                    "passengerWindow", "leftRearWindow", "rightRearWindow", "window"]
-        for key in keys {
-            if let v = Self.number(raw.raw, [key]), v == 1 { return "有车窗未关" }
-        }
-        if keys.contains(where: { Self.number(raw.raw, [$0]) != nil }) { return "全部关闭" }
-        return "--"
-    }
-
-    private static func number(_ dict: [String: Any], _ keys: [String]) -> Double? {
-        for key in keys {
-            guard let value = dict[key] else { continue }
-            if let d = value as? Double { return d }
-            if let i = value as? Int { return Double(i) }
-            if let s = value as? String, let d = Double(s) { return d }
+            guard let v = dict[key] else { continue }
+            if let d = v as? Double { return d }
+            if let i = v as? Int { return Double(i) }
+            if let b = v as? Bool { return b ? 1 : 0 }
+            if let s = v as? String, let d = Double(s) { return d }
         }
         return nil
+    }
+
+    /// 数值 + 单位（nil → "--"）
+    private static func fmt(_ dict: [String: Any], _ keys: [String], _ unit: String, _ digits: Int) -> String {
+        guard let v = val(dict, keys) else { return "--" }
+        let num = String(format: "%.\(digits)f", v)
+        return num + unit
+    }
+
+    /// 正常 / 异常（1=正常，0=异常，缺失=--）
+    private static func stateText(_ dict: [String: Any], _ keys: [String]) -> String {
+        guard let v = val(dict, keys) else { return "--" }
+        return v == 1 ? "正常" : "异常"
+    }
+
+    /// 门锁：1=已解锁，0=已上锁，缺失=--
+    private static func lockText(_ v: Double?) -> String {
+        guard let v else { return "--" }
+        return v == 1 ? "已解锁" : "已上锁"
+    }
+
+    /// 门窗/天窗：1=关闭，0=打开（网页版 isOpen 语义 1=已关闭），缺失=--
+    private static func closeText(_ v: Double?) -> String {
+        guard let v else { return "--" }
+        return v == 1 ? "关闭" : "打开"
+    }
+
+    private static func onOffText(_ v: Double?) -> String {
+        guard let v else { return "--" }
+        return v == 1 ? "开启" : "关闭"
+    }
+
+    private static func recycleText(_ v: Double?) -> String {
+        guard let v else { return "--" }
+        return v == 1 ? "内循环" : "外循环"
+    }
+
+    private static func acSetText(_ dict: [String: Any]) -> String {
+        guard let v = val(dict, ["airConditioningSetTemperature", "acTemp"]) else { return "--" }
+        return String(format: "设定 %.0f℃", v)
+    }
+
+    private static func fanText(_ dict: [String: Any]) -> String {
+        guard let v = val(dict, ["windSpeed", "fanSpeed", "airVolume", "wind"]) else { return "--" }
+        return String(format: "%.0f 档", v)
+    }
+
+    private static func lastTripText(_ status: CarStatus) -> String {
+        guard status.lastTripKm != nil || status.lastTripOilLiters != nil else { return "--" }
+        return "\(CarStatus.format(status.lastTripKm)) km · 油耗 \(CarStatus.format(status.lastTripOilLiters)) L"
+    }
+
+    private static func timeStampText(_ dict: [String: Any], _ keys: [String]) -> String {
+        for key in keys {
+            if let s = dict[key] as? String, !s.isEmpty { return s }
+            if let n = dict[key] as? NSNumber { return n.stringValue }
+        }
+        return "--"
     }
 
     private func voltageColor(_ voltage: Double?) -> Color {

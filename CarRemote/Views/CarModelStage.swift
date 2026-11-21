@@ -593,14 +593,19 @@ struct CarVisual3DStage: View {
                         #endif
                     }
                 }
-                // 1.1.4：车外展示保持 200pt 舞台高度（与 2D 车图一致）。
-                // 1.5.0：切到座舱第一视角时把视口加高到 288pt —— 画面放大靠
-                // 「相机坐进车内 + 72° 广角 + 更大的渲染视口」实现，
-                // 不再用 scaleEffect 把整张 ARView 撑大后硬裁成矩形贴片。
+                // 1.11.7：正式版对标网页版，车模区整体缩小并上移 —— 车外舞台
+                // 200 → 148pt、座舱 288 → 236pt，给下方车况卡留出更多空间。
+                // CAKOCHE 维持原尺寸不动。
+                #if CAKOCHE
                 .frame(height: stageHeight ?? (cockpitInterior || cockpitOverride ? 288 : 200))
+                #else
+                .frame(height: stageHeight ?? (cockpitInterior || cockpitOverride ? 236 : 148))
+                #endif
 
                 HStack(alignment: .top) {
-                    // 重置视角 + 俯视图：放在「我的爱车」标题正下方（1.1.4 用户反馈）
+                    // 1.11.7：正式版去掉「俯视图 / 重置视角」悬浮按钮（对齐网页版纯净车模区）；
+                    // CAKOCHE 保留原样。车模仍可手势旋转/捏合/双击复位，功能不丢。
+                    #if CAKOCHE
                     if show3D && !model.loadFailed && style.model3DName != nil {
                         Button {
                             model.topView()
@@ -639,6 +644,7 @@ struct CarVisual3DStage: View {
                         .buttonStyle(.plain)
                         .accessibilityLabel("重置车模视角")
                     }
+                    #endif
                     Spacer()
                     // 外 / 内 视角切换：车库页独立使用才显示；首页由「座舱」胶囊托管，
                     // 避免与座舱胶囊重复且切到车内后按钮被放大裁切。
