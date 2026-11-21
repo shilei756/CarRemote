@@ -89,19 +89,19 @@ struct WebDotMatrix: View {
                 let ch = (size.height - gap * CGFloat(rows - 1)) / CGFloat(rows)
                 guard cw > 0, ch > 0 else { return }
                 let p = max(0, min(1, fraction))
-                let litCells = Int((Double(cols * rows) * p).rounded())
+                // 1.11.8：网页版按「列」填充——一列的上下两点同时亮/灭，
+                // 所以两行点亮宽度一致、左右对齐（旧版按行填充导致两行不齐）。
+                let litCols = Int((Double(cols) * p).rounded())
 
                 for r in 0..<rows {
                     for c in 0..<cols {
-                        // 从下往上、从左往右填充（网页版电量条习惯）
-                        let index = r * cols + c
                         let rect = CGRect(x: CGFloat(c) * (cw + gap),
                                           y: CGFloat(rows - 1 - r) * (ch + gap),
                                           width: cw, height: ch)
-                        if index < litCells {
+                        if c < litCols {
                             // 充电式脉冲：一道高亮光带沿列方向循环扫过
                             let wave = (sin(t * 2.2 - Double(c) * 0.38) + 1) / 2  // 0~1
-                            let brightness = 0.55 + 0.45 * wave
+                            let brightness = 0.62 + 0.38 * wave
                             let dot = baseColor.opacity(brightness)
                             ctx.fill(Path(roundedRect: rect, cornerRadius: min(cw, ch) * 0.22),
                                      with: .color(dot))

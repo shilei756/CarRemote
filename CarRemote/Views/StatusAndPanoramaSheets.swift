@@ -179,18 +179,18 @@ struct VehicleStatusPage: View {
                       status.engineRunning ? WebTheme.green : WebTheme.txt),
                 .init("发动机水温", Self.fmt(status.raw, ["engineWaterTemp", "coolantTemperature", "waterTemp", "engineCoolantTemp"], "℃", 1)),
                 .init("冷却液状态", Self.stateText(status.raw, ["engineCoolantStatus", "coolantStatus"])),
-                .init("机油压力", Self.stateText(status.raw, ["oilPressureStatus", "engineOilPressure"])),
+                .init("机油压力", Self.stateText(status.raw, ["lowOilPressureFlag", "oilPressureStatus", "engineOilPressure"])),
                 .init("变速箱", Self.stateText(status.raw, ["transmissionSystemStatus", "gearboxStatus"])),
                 .init("ABS", Self.stateText(status.raw, ["absStatus"])),
                 .init("稳定控制", Self.stateText(status.raw, ["vehicleStabilityControlSystemStatus", "stabilityControlStatus"])),
                 .init("安全气囊", Self.stateText(status.raw, ["airbagSystemStatus", "airbagStatus"])),
                 .init("发动机系统", Self.stateText(status.raw, ["engineSystemStatus"])),
-                .init("驱动电机", Self.stateText(status.raw, ["driveMotorStatus", "motorStatus"])),
+                .init("驱动电机", Self.stateText(status.raw, ["motorSystemStatus", "driveMotorStatus", "motorStatus"])),
                 .init("动力电池", Self.stateText(status.raw, ["powerBatteryStatus", "batterySystemStatus"])),
-                .init("充电系统", Self.stateText(status.raw, ["chargingSystemStatus"])),
+                .init("充电系统", Self.stateText(status.raw, ["chargeSystemStatus", "chargingSystemStatus"])),
                 .init("无钥匙系统", Self.stateText(status.raw, ["keylessEntryStartSystemStatus", "keylessSystemStatus"])),
                 .init("转向助力", Self.stateText(status.raw, ["assistantSteeringStatus", "steeringAssistStatus"])),
-                .init("燃油压力", Self.stateText(status.raw, ["fuelPressureStatus", "fuelPressure"])),
+                .init("燃油压力", Self.stateText(status.raw, ["fulePressureLowFlag", "fuelPressureStatus", "fuelPressure"])),
             ])
         }
     }
@@ -198,10 +198,10 @@ struct VehicleStatusPage: View {
     private func doorsGroup(status: CarStatus) -> some View {
         StatusGroup(title: "门窗", symbol: "door.left.hand.open", tint: WebTheme.blue) {
             StatusPairGrid(items: [
-                .init("左前门", Self.lockText(Self.val(status.raw, ["leftFrontDoorStatus"]))),
-                .init("右前门", Self.lockText(Self.val(status.raw, ["rightFrontDoorStatus"]))),
-                .init("左后门", Self.lockText(Self.val(status.raw, ["leftRearDoorStatus"]))),
-                .init("右后门", Self.lockText(Self.val(status.raw, ["rightRearDoorStatus"]))),
+                .init("左前门", Self.openCloseText(Self.val(status.raw, ["leftFrontDoorStatus"]))),
+                .init("右前门", Self.openCloseText(Self.val(status.raw, ["rightFrontDoorStatus"]))),
+                .init("左后门", Self.openCloseText(Self.val(status.raw, ["leftRearDoorStatus"]))),
+                .init("右后门", Self.openCloseText(Self.val(status.raw, ["rightRearDoorStatus"]))),
                 .init("左前车窗", Self.closeText(Self.val(status.raw, ["diverWindow", "driverWindow", "leftFrontDoorrWindow", "leftFrontDoorWindow"]))),
                 .init("右前车窗", Self.closeText(Self.val(status.raw, ["passengerWindow"]))),
                 .init("左后车窗", Self.closeText(Self.val(status.raw, ["leftRearWindow"]))),
@@ -231,8 +231,8 @@ struct VehicleStatusPage: View {
     private func climateGroup(status: CarStatus) -> some View {
         StatusGroup(title: "空调环境", symbol: "snowflake", tint: WebTheme.blue) {
             StatusPairGrid(items: [
-                .init("车外温度", Self.fmt(status.raw, ["vehicleTemperature", "outsideTemp", "ambientTemperature"], "℃", 0)),
-                .init("车内温度", Self.fmt(status.raw, ["vehicleTempIn", "insideTemp", "interiorTemperature", "inCarTemperature"], "℃", 0)),
+                .init("车外温度", Self.fmt(status.raw, ["environmentalTemp", "outsideTemp", "ambientTemperature"], "℃", 0)),
+                .init("车内温度", Self.fmt(status.raw, ["vehicleTemperature", "vehicleTempIn", "insideTemp", "interiorTemperature"], "℃", 0)),
                 .init("设定温度", Self.acSetText(status.raw)),
                 .init("空气循环", Self.recycleText(Self.val(status.raw, ["airRecycleStatus", "airCirculationStatus"]))),
                 .init("PM2.5", Self.fmt(status.raw, ["pm25", "pm2_5", "pm25Value"], "", 0)),
@@ -263,9 +263,9 @@ struct VehicleStatusPage: View {
         StatusGroup(title: "车辆概况", symbol: "car.fill", tint: WebTheme.purple) {
             StatusPairGrid(items: [
                 .init("总里程", (CarStatus.format(status.totalOdometerKm)) + " km"),
-                .init("钥匙电量", Self.stateText(status.raw, ["keyBatteryStatus", "remoteKeyBatteryStatus"])),
-                .init("GPS", Self.val(status.raw, ["gpsStatus"]) == 1 ? "有效" : "--"),
-                .init("信号强度", Self.fmt(status.raw, ["signalStrength", "gpsSignalStrength"], "%", 0)),
+                .init("钥匙电量", Self.keyPowerText(Self.val(status.raw, ["keyLowPower", "keyBatteryStatus", "remoteKeyBatteryStatus"]))),
+                .init("GPS", Self.gpsText(Self.val(status.raw, ["isValidGps", "gpsStatus"]))),
+                .init("信号强度", Self.fmt(status.raw, ["signaIntensity", "signalStrength", "gpsSignalStrength"], "%", 0)),
                 .init("上次点火", Self.timeStampText(status.raw, ["ignitionTime", "lastIgnitionTime", "startTime"])),
             ])
         }
@@ -300,42 +300,58 @@ struct VehicleStatusPage: View {
         return num + unit
     }
 
-    /// 正常 / 异常（1=正常，0=异常，缺失=--）
+    /// 系统状态：0=正常，非0=异常（对齐网页 setText：`=== 0 ? '正常' : '异常'`）
     private static func stateText(_ dict: [String: Any], _ keys: [String]) -> String {
         guard let v = val(dict, keys) else { return "--" }
-        return v == 1 ? "正常" : "异常"
+        return v == 0 ? "正常" : "异常"
     }
 
-    /// 门锁：1=已解锁，0=已上锁，缺失=--
-    private static func lockText(_ v: Double?) -> String {
-        guard let v else { return "--" }
-        return v == 1 ? "已解锁" : "已上锁"
-    }
-
-    /// 门窗/天窗：1=关闭，0=打开（网页版 isOpen 语义 1=已关闭），缺失=--
-    private static func closeText(_ v: Double?) -> String {
-        guard let v else { return "--" }
-        return v == 1 ? "关闭" : "打开"
-    }
-
-    private static func onOffText(_ v: Double?) -> String {
+    /// 门窗/灯光/天窗：1=开启，0=关闭（对齐网页 setStatusText：`=== 1 ? '开启' : '关闭'`）
+    private static func openCloseText(_ v: Double?) -> String {
         guard let v else { return "--" }
         return v == 1 ? "开启" : "关闭"
     }
 
+    private static func onOffText(_ v: Double?) -> String { openCloseText(v) }
+    private static func closeText(_ v: Double?) -> String { openCloseText(v) }
+
+    /// 循环：1=内循环，其余(含0/2)=外循环（网页 `==1 ? 内循环 : 外循环`）
     private static func recycleText(_ v: Double?) -> String {
         guard let v else { return "--" }
         return v == 1 ? "内循环" : "外循环"
     }
 
+    /// 钥匙电量：0=正常，非0=低电量（网页 `==0 ? 正常 : 低电量`）
+    private static func keyPowerText(_ v: Double?) -> String {
+        guard let v else { return "--" }
+        return v == 0 ? "正常" : "低电量"
+    }
+
+    /// GPS 有效性：0=无效，非0=有效（网页 `===0 ? 无效 : 有效`）
+    private static func gpsText(_ v: Double?) -> String {
+        guard let v else { return "--" }
+        return v == 0 ? "无效" : "有效"
+    }
+
     private static func acSetText(_ dict: [String: Any]) -> String {
-        guard let v = val(dict, ["airConditioningSetTemperature", "acTemp"]) else { return "--" }
-        return String(format: "设定 %.0f℃", v)
+        // 网页优先取 air.temperature，缺失再退回顶层 airConditioningSetTemperature
+        var v = nestedVal(dict, "air", ["temperature", "setTemperature"])
+        if v == nil { v = val(dict, ["airConditioningSetTemperature", "acTemp"]) }
+        guard let v else { return "--" }
+        return String(format: "%.0f ℃", v)
     }
 
     private static func fanText(_ dict: [String: Any]) -> String {
-        guard let v = val(dict, ["windSpeed", "fanSpeed", "airVolume", "wind"]) else { return "--" }
+        var v = nestedVal(dict, "air", ["wind", "windSpeed", "fanSpeed"])
+        if v == nil { v = val(dict, ["windSpeed", "fanSpeed", "airVolume"]) }
+        guard let v else { return "--" }
         return String(format: "%.0f 档", v)
+    }
+
+    /// 从嵌套字典取值（如 air.temperature）
+    private static func nestedVal(_ dict: [String: Any], _ parent: String, _ keys: [String]) -> Double? {
+        guard let sub = dict[parent] as? [String: Any] else { return nil }
+        return val(sub, keys)
     }
 
     private static func lastTripText(_ status: CarStatus) -> String {

@@ -471,10 +471,10 @@ struct DashboardView: View {
                             .font(.system(size: 10))
                             .foregroundStyle(WebTheme.faint)
                     }
-                    // 1.11.7：油量条改为网页同款点阵 + 充电式脉冲，点击可换颜色
+                    // 1.11.8：油量/电压点阵统一为 2 行、同列数同宽、按列填充左对齐（对齐网页版），点击可换色
                     WebDotMatrix(
                         fraction: (status.fuelLeftLiters ?? 0) / SharedStore.loadSettings().tankCapacityL,
-                        rows: 3, cols: 36, height: 20,
+                        rows: 2, cols: 38, height: 15,
                         colorHex: DotMatrixColorStore.hex
                     )
                     // 总里程
@@ -537,9 +537,10 @@ struct DashboardView: View {
                         }
                     }
                     // 1.11.7：电压条改为网页同款点阵 + 充电式脉冲，点击可换颜色
+                    // 1.11.8：与油量点阵同为 2 行、同列数同宽、左对齐（对齐网页版）
                     WebDotMatrix(
                         fraction: ((status.batteryVoltage ?? 11) - 10.5) / 4.5,
-                        rows: 2, cols: 22, height: 14,
+                        rows: 2, cols: 38, height: 15,
                         colorHex: DotMatrixColorStore.hex
                     )
                     // 空调设定
@@ -1174,9 +1175,9 @@ struct CompactControlButton: View {
         .disabled(isExecuting)
     }
 
-    /// 1.11.7：更多控车网格按钮统一用闭锁绿（主题下已由渐变+白图标接管）
+    /// 1.11.8：控车按键改黑/灰（撤销统一绿）；主题下已由渐变+白图标接管
     private var iconColor: Color {
-        WebTheme.green
+        WebTheme.txt
     }
 }
 

@@ -593,13 +593,13 @@ struct CarVisual3DStage: View {
                         #endif
                     }
                 }
-                // 1.11.7：正式版对标网页版，车模区整体缩小并上移 —— 车外舞台
-                // 200 → 148pt、座舱 288 → 236pt，给下方车况卡留出更多空间。
+                // 1.11.8：用户反馈车模太小，正式版车外舞台放大回接近网页版占比
+                // 148 → 216pt、座舱 236 → 292pt；仍去掉俯视/重置按钮保持纯净。
                 // CAKOCHE 维持原尺寸不动。
                 #if CAKOCHE
                 .frame(height: stageHeight ?? (cockpitInterior || cockpitOverride ? 288 : 200))
                 #else
-                .frame(height: stageHeight ?? (cockpitInterior || cockpitOverride ? 236 : 148))
+                .frame(height: stageHeight ?? (cockpitInterior || cockpitOverride ? 292 : 216))
                 #endif
 
                 HStack(alignment: .top) {

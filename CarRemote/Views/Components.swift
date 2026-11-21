@@ -190,18 +190,18 @@ struct ControlButtonView: View {
         #endif
     }
 
-    /// 1.11.7：全部控车按钮统一用「闭锁」绿，靠图标与文字区分功能，不再五颜六色。
-    /// 主题（QQ 式换肤）下按键仍走主题渐变+白图标，保持全局换肤一致。
+    /// 1.11.8：用户要求控车按键改黑/灰（撤销 1.11.7 的统一绿）。
+    /// 经典模式用中性灰描边+灰图标；主题（QQ 式换肤）下仍走主题渐变+白图标。
     private var borderColor: Color {
-        WebTheme.green
+        WebTheme.muted
     }
 
     private var shadowColor: Color {
-        WebTheme.green.opacity(0.22)
+        Color(red: 15/255, green: 23/255, blue: 42/255).opacity(0.12)
     }
 
     private var iconColor: Color {
-        WebTheme.green
+        WebTheme.txt
     }
 }
 

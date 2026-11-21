@@ -152,10 +152,22 @@ private struct QuickControlButtons: View {
         }
     }
 
-    /// 1.11.7：全部控车按钮统一用「闭锁」的绿色，不再五颜六色（靠图标区分功能）。
+    /// 1.11.8：用户要求小组件按键恢复之前的配色（撤销 1.11.7 的统一绿）。
     /// 待确认态仍是橙色（防误触提示），不受此改色影响。
     private func buttonTint(_ command: CarCommand?) -> Color {
-        return .green
+        switch command {
+        case .flashLight: return .blue
+        case .unlockDoor: return .orange
+        case .lockDoor: return .green
+        case .oneKeyLock: return .mint
+        case .whistle: return .purple
+        case .remoteSearchCar: return .cyan
+        case .openEngine: return .red
+        case .closeEngine: return .gray
+        case .openAir: return .teal
+        case .closeAir: return .indigo
+        default: return .blue
+        }
     }
 }
 
