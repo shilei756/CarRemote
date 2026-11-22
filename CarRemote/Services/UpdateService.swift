@@ -16,7 +16,9 @@ import CarCore
 
 // MARK: 数据模型
 
-struct AppRelease: Codable, Equatable {
+struct AppRelease: Codable, Equatable, Identifiable {
+    /// .sheet(item:) 需要 Identifiable，用版本号做稳定 id
+    var id: String { version }
     /// 语义版本号，如 "1.12.0"
     var version: String
     /// 构建号（可选，仅展示）
