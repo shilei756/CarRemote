@@ -8,6 +8,8 @@ struct CarRemoteApp: App {
     @StateObject private var themeManager = ThemeManager.shared
     // 1.6.0 站主公告：全局单例，沿视图树下发；普通用户只读到弹窗，读不到发布入口
     @StateObject private var announcementCenter = AnnouncementCenter()
+    // 1.12.0 在线版本自检：发现新版弹窗引导更新，免逐个分发安装包
+    @StateObject private var updateCenter = UpdateCenter()
 
     init() {
         // 本地通知代理：App 在前台时也让「车辆异常持续提醒」横幅可见，
@@ -28,6 +30,7 @@ struct CarRemoteApp: App {
                 .environmentObject(appState)
                 .environmentObject(themeManager)
                 .environmentObject(announcementCenter)
+                .environmentObject(updateCenter)
                 .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
                     // 1.9.0 #4：通知划掉后回前台立即清角标，桌面图标不再残留小红点
                     VehicleAlertService.clearAppBadge()
@@ -35,6 +38,8 @@ struct CarRemoteApp: App {
                         await appState.handleForeground()
                         // 站主刚发过公告时，用户切回前台就能看到（内部 20 秒节流）
                         await announcementCenter.check()
+                        // 1.12.0：回前台检查新版本（内部 30 分钟节流）
+                        await updateCenter.check()
                     }
                 }
                 // 系统偶尔会重置 window.bounds（旋转 / 状态栏变化 / 键盘弹出），
@@ -102,6 +107,8 @@ struct RootView: View {
     @EnvironmentObject private var appState: AppState
     // 1.6.0 公告中心：只在进入主界面后呈现弹窗，登录 / 卡密网关阶段不打扰
     @EnvironmentObject private var announcementCenter: AnnouncementCenter
+    // 1.12.0 更新中心：进入主界面后检查新版本
+    @EnvironmentObject private var updateCenter: UpdateCenter
 
     var body: some View {
         Group {
@@ -114,7 +121,10 @@ struct RootView: View {
                 CardGateView()
             case .ready:
                 MainTabView()
-                    .onAppear { Task { await announcementCenter.check() } }
+                    .onAppear { Task {
+                        await announcementCenter.check()
+                        await updateCenter.check()
+                    } }
                     // 公告弹窗挂在主界面分支：所有已登录用户可见，且没有任何入口
                     .sheet(item: Binding(
                         get: { announcementCenter.pending },
@@ -127,6 +137,17 @@ struct RootView: View {
                     )) { notice in
                         AnnouncementSheet(notice: notice) {
                             announcementCenter.markRead(notice.id)
+                        }
+                    }
+                    // 1.12.0：新版本弹窗（发现线上版本高于本地时弹出）
+                    .sheet(item: Binding(
+                        get: { updateCenter.pending },
+                        set: { item in
+                            if item == nil { updateCenter.dismiss() }
+                        }
+                    )) { release in
+                        AppUpdateSheet(release: release) {
+                            updateCenter.skip(release.version)
                         }
                     }
             }

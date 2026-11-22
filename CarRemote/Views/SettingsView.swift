@@ -362,6 +362,12 @@ struct SettingsView: View {
                     OwnerAnnouncementPage()
                 }
                 rowDivider
+                // 1.12.0 发布新版本（仅站主）：改版本号/说明/下载链接，用户打开 App 自动提示
+                linkRow(symbol: "arrow.up.circle.fill", tint: WebTheme.green,
+                        title: "发布新版本", subtitle: "在线更新提示，免逐个分发安装包") {
+                    OwnerReleasePage()
+                }
+                rowDivider
             }
             // 车辆异常持续提醒（门未锁/窗未关等 10 分钟后本地通知）
             actionRow(symbol: "bell.badge.fill", tint: WebTheme.red,
